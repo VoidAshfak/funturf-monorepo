@@ -1,19 +1,17 @@
-// import FeaturedTurfs from "@/sections/FeaturedTurfs";
-// import FeaturedEvents from "@/sections/FeaturedEvents";
-// import Hero from "@/sections/Hero";
-// import Banner from "@/sections/Banner";
-// import Turfmates from "@/components/Turfmates";
+import Banner from "@/sections/Banner";
+import FeaturedEvents from "@/sections/FeaturedEvents";
+import FeaturedTurfs from "@/sections/FeaturedTurfs";
+import Hero from "@/sections/Hero";
 
 
 export default function Home() {
     return (
         <>
-        <p>ollah</p>
-            {/* <Hero />
-            <Turfmates />
+            <Hero />
+            {/* <Turfmates /> */}
             <FeaturedTurfs />
             <FeaturedEvents />
-            <Banner /> */}
+            <Banner />
         </>
     );
 }
