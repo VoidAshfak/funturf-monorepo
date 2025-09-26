@@ -1,11 +1,13 @@
-[
+export const users = [
     {
         "_id": "u1",
         "username": "hoopmaster21",
         "email": "hoopmaster21@example.com",
-        "fullName": "Jordan Miles",
+        "password": "123456",
+        "fullName": "Jordan ",
         "bio": "Love pickup games and 3v3 tournaments.",
         "profilePicture": "/assets/avatars/player-1.jpg",
+        "role": "admin",
         "sports": [
             "Football",
             "Badminton"
@@ -26,9 +28,11 @@
         "_id": "u2",
         "username": "goalieQueen",
         "email": "goalieq@example.com",
+        "password": "123456",
         "fullName": "Lisa Chen",
         "bio": "Soccer goalie & weekend warrior.",
         "profilePicture": "/assets/avatars/player-2.jpg",
+        "role": "player",
         "sports": [
             "Football"
         ],

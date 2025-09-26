@@ -8,10 +8,12 @@ import {
     NavigationMenuList,
 } from "@/components/ui/navigation-menu"
 import ProfileMenu from "./ProfileMenu"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
-export default function Navbar({ className }) {
+export default async function Navbar({ className }) {
 
-    const user = true
+    const session = await getServerSession(authOptions);
 
     return (
         <>
@@ -49,7 +51,7 @@ export default function Navbar({ className }) {
 
 
             <div className="mr-10">
-                {!user ? (
+                {!session ? (
                     <>
                         <div>
                             <Button
@@ -71,7 +73,7 @@ export default function Navbar({ className }) {
                     <>
                         <div className="flex gap-8 items-center">
                             {/* <Notification /> */}
-                            <ProfileMenu />
+                            <ProfileMenu session={session} />
                         </div>
                     </>
                 )}

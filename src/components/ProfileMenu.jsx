@@ -1,15 +1,19 @@
-import { LogOut, Settings, User, Users } from "lucide-react";
+import { Settings, User, Users } from "lucide-react";
+import LogoutButton from "./LogoutButton";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "./ui/dropdown-menu";
 
-export default function ProfileMenu() {
+export default function ProfileMenu({ session }) {
+
+    const { user } = session;
+    const [firstName, secondName] = user.fullName.split(' ');
 
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Avatar className={"cursor-pointer h-10 w-10"}>
-                    <AvatarImage src="https://github.com/shadcn.png" alt="@profile" />
-                    <AvatarFallback>PF</AvatarFallback>
+                    <AvatarImage src={user.image} alt="@profile" />
+                    <AvatarFallback>{firstName[0] + (secondName[0] ?? '')}</AvatarFallback>
                 </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 mr-6">
@@ -38,12 +42,9 @@ export default function ProfileMenu() {
                     </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                >
-                    <LogOut className="text-red-400" />
-                    <span className="text-red-400" >Log out</span>
-                    <DropdownMenuShortcut className="text-red-400">⇧⌘Q</DropdownMenuShortcut>
-                </DropdownMenuItem>
+
+                <LogoutButton />
+
             </DropdownMenuContent>
         </DropdownMenu>
     )
