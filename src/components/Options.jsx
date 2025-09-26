@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select"
 import { useState } from "react"
 
-export function RoleOptions({ placeholder, className, options, name, id }) {
+export function Options({ placeholder, className, options, name, id }) {
     const [value, setValue] = useState("")
     return (
         <>

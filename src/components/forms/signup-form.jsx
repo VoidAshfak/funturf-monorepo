@@ -1,14 +1,14 @@
 "use client"
 
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
+import { Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useActionState } from "react"
-import { Loader2 } from "lucide-react"
-import { RoleOptions } from "../RoleOptions"
+import { Options } from "../Options"
 
 const roleOpts = [
     { id: 1, name: "User", value: "USER" },
@@ -141,7 +141,7 @@ export function SignupForm({
                         <Label htmlFor="skillLevel">
                             Role <span className="text-red-500">*</span>
                         </Label>
-                        <RoleOptions
+                        <Options
                             label="Role"
                             name="role"
                             placeholder="Select your role"
