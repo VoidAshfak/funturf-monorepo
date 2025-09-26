@@ -10,6 +10,7 @@ import {
 import ProfileMenu from "./ProfileMenu"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+import Image from "next/image"
 
 export default async function Navbar({ className }) {
 
@@ -17,8 +18,13 @@ export default async function Navbar({ className }) {
 
     return (
         <>
-            <Link href={"/"} className="w-10 ml-14">
-                <img src="/assets/icons/logo.svg" alt="Logo" />
+            <Link href="/">
+                <Image
+                    src="/assets/icons/logo.svg"
+                    alt="Logo"
+                    width={40}
+                    height={40}
+                />
             </Link>
 
             <NavigationMenu className={` ${className}`}>
@@ -30,7 +36,13 @@ export default async function Navbar({ className }) {
                         // className={`${(pathName === "/events" || (pathName.startsWith("/events") && pathName !== "/")) ? "backdrop-blur-sm bg-green-700/10" : ""}`}
                         >
                             <div className="flex gap-2 items-center">
-                                <img className="w-8" src="/assets/icons/play.png" alt="play" /><span className="text-xl"> Play </span>
+                                <Image
+                                    src="/assets/icons/play.png"
+                                    alt="play"
+                                    width={30}
+                                    height={20}
+                                />
+                                <span className="text-xl"> Play </span>
                             </div>
                         </NavigationMenuLink>
                     </NavigationMenuItem>
@@ -41,7 +53,12 @@ export default async function Navbar({ className }) {
                         // className={`${(pathName === "/venues" || (pathName.startsWith("/venues") && pathName !== "/")) ? "backdrop-blur-sm bg-green-700/10" : ""}`}
                         >
                             <div className="flex gap-2 items-center">
-                                <img className="w-8" src="/assets/icons/book.png" alt="book" /><span className="text-xl"> Book </span>
+                                <Image
+                                    src="/assets/icons/book.png"
+                                    alt="book"
+                                    width={30}
+                                    height={20}
+                                /><span className="text-xl"> Book </span>
                             </div>
                         </NavigationMenuLink>
                     </NavigationMenuItem>
@@ -50,7 +67,7 @@ export default async function Navbar({ className }) {
             </NavigationMenu>
 
 
-            <div className="mr-10">
+            <div>
                 {!session ? (
                     <>
                         <div>
