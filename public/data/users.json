@@ -1,0 +1,45 @@
+[
+    {
+        "_id": "u1",
+        "username": "hoopmaster21",
+        "email": "hoopmaster21@example.com",
+        "fullName": "Jordan Miles",
+        "bio": "Love pickup games and 3v3 tournaments.",
+        "profilePicture": "/assets/avatars/player-1.jpg",
+        "sports": [
+            "Football",
+            "Badminton"
+        ],
+        "teams": [
+            "t1",
+            "t2"
+        ],
+        "eventsJoined": [
+            "e1",
+            "e3"
+        ],
+        "friends": [
+            "u2"
+        ]
+    },
+    {
+        "_id": "u2",
+        "username": "goalieQueen",
+        "email": "goalieq@example.com",
+        "fullName": "Lisa Chen",
+        "bio": "Soccer goalie & weekend warrior.",
+        "profilePicture": "/assets/avatars/player-2.jpg",
+        "sports": [
+            "Football"
+        ],
+        "teams": [
+            "t2"
+        ],
+        "eventsJoined": [
+            "e2"
+        ],
+        "friends": [
+            "u1"
+        ]
+    }
+]
