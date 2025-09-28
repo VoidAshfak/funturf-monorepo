@@ -7,10 +7,11 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import Image from "next/image"
 
 export function VenueCard({ className, venue }) {
     return (
-        <Card className={`w-[340px] transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-2 hover:z-10 cursor-pointer ${className}`}>
+        <Card className={`transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-2 hover:z-10 cursor-pointer ${className}`}>
             <CardHeader>
                 <CardTitle className="min-h-6 w-8/12 bg-gradient-to-r from-black via-blue-500 to-green-500 inline-block text-transparent bg-clip-text"> {venue?.name} </CardTitle>
                 <CardDescription className="flex justify-start">
@@ -19,10 +20,11 @@ export function VenueCard({ className, venue }) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-
-                <img
+                <Image
                     src={venue?.venueImages[0]}
                     alt="Venue Image"
+                    width={300}
+                    height={300}
                     className="w-full h-[180px] object-cover rounded-2xl"
                 />
             </CardContent>
@@ -37,7 +39,6 @@ export function VenueCard({ className, venue }) {
                 </div>
             </CardFooter>
 
-            {/* <p> {JSON.stringify(venue)} </p> */}
         </Card>
     )
 }
