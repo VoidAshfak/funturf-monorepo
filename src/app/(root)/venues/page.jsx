@@ -1,70 +1,36 @@
-"use client"
+import FilterVenueInput from "@/components/FilterVanueInput";
+import { VenueCard } from "@/components/VenueCard";
+import Image from "next/image";
+import Link from "next/link";
 
-import Link from "next/link"
-import {VenueCard} from "@/components/VenueCard"
-import { useState } from "react"
-import { Select, Input, DatePicker } from "@/components/CustomInputComponents"
-import { Button } from "@/components/ui/button"
-import { Search } from "lucide-react"
-import venues from "../../../../public/data/venues.json"
-
-
-const AllVenues = () => {
-
-    const [filters, setFilters] = useState({ date: "", sport: '', playersRequired: '' });
-
-    const handleChange = (e) => {
-        setFilters({ ...filters, [e.target.name]: e.target.value });
-    };
-    // Use this query to fetch filtered data from the server
-    const query = new URLSearchParams(filters);
+export default async function AllVenues() {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/data/venues.json`);
+    const venues = await response.json();
 
     return (
-        <div className=" px-20 pt-10 ">
-
-            <div className="p-10 border-2 border-gray-300 rounded-3xl bg-gradient-to-tr from-gray-100 via-white to-gray-100">
-                <form 
-                    action={() => {
-                        console.log(filters, "Query: ", query);
-                    }}
-                    className="flex gap-6 items-center justify-around"    
-                >
-
-
-                    <Select
-                        name={"sport"}
-                        value={filters.sport}
-                        onResetHandler={() => setFilters({ ...filters, sport: "" })}
-                        onChange={handleChange}
-                    />
-
-                    <Input
-                        name="playersRequired"
-                        value={filters.playersRequired}
-                        onChange={handleChange}
-                        placeholder={"Required Players"}
-                    />
-
-                    <DatePicker
-                        date={filters.date}
-                        onSelect={(val) => setFilters({ ...filters, date: val })}
-                    />
-
-                    <Button
-                        className="w-32 p-6 cursor-pointer bg-green-200"
-                        variant={"outline"}
-                        type="submit"
-                    >
-                        <Search/> Search
-                    </Button>
-
-                </form>
+        <div className="relative">
+            <div className="relative w-full h-72 md:h-80 lg:h-96 md:mb-16">
+                <Image
+                    src="/assets/images/bg2.jpg"
+                    alt="venue-banner"
+                    fill
+                    priority
+                    className="object-cover rounded-b-4xl"
+                />
+                <div className="absolute inset-0 bg-black/50 rounded-b-4xl"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <h1 className="text-white text-4xl font-bold">Choose Your Venue</h1>
+                </div>
             </div>
 
-            <div className='grid md:grid-cols-3 sm:grid-cols-2 gap-5 p-8'>
-                {venues?.map((venue) => (
+            <FilterVenueInput />
 
-                    <Link href={`/venues/${venue._id}`} key={venue._id}>
+            <div className='grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 p-3 md:p-8'>
+                {venues?.map((venue) => (
+                    <Link
+                        key={venue._id}
+                        href={`/venues/${venue._id}`}
+                    >
                         <VenueCard venue={venue} />
                     </Link>
                 ))}
@@ -72,5 +38,3 @@ const AllVenues = () => {
         </div>
     )
 }
-
-export default AllVenues
