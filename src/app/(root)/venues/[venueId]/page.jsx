@@ -7,6 +7,7 @@ import Link from "next/link"
 import { VenueCard } from "@/components/VenueCard"
 import RatingText from "@/components/RatingText"
 import venues from "../../../../../public/data/venues.json"
+import BookVenue from "@/components/BookVenue"
 
 
 const VenueDetails = async ({ params }) => {
@@ -35,13 +36,11 @@ const VenueDetails = async ({ params }) => {
                     <div className="shadow-sm shadow-gray-300 rounded-lg p-4 ">
                         <div className="grid grid-cols-2 grid-rows-2 gap-4">
                             <div className="col-span-2 ">
-                                <Button
-                                    className={`w-full bg-green-600 hover:bg-green-700 cursor-pointer`}
-                                >
-                                    <CalendarCheck2 />
-                                    Book Now
-                                </Button>
+                                <BookVenue venue={venue} />
                             </div>
+
+
+
                             <div className="row-start-2">
                                 <Button
                                     className={`w-full hover:bg-green-200 cursor-pointer`}
