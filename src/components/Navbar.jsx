@@ -1,5 +1,5 @@
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 import {
     NavigationMenu,
@@ -7,14 +7,10 @@ import {
     NavigationMenuLink,
     NavigationMenuList,
 } from "@/components/ui/navigation-menu"
-import ProfileMenu from "./ProfileMenu"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import Image from "next/image"
+import ProfileMenu from "./ProfileMenu"
 
-export default async function Navbar({ className }) {
-
-    const session = await getServerSession(authOptions);
+export default function Navbar({ className, session }) {
 
     return (
         <>
@@ -70,21 +66,19 @@ export default async function Navbar({ className }) {
             <div>
                 {!session ? (
                     <>
-                        <div>
-                            <Button
-                                className="mx-2"
-                                asChild
-                            >
-                                <Link href="/login">Login</Link>
-                            </Button>
-                            <Button
-                                className="mx-2"
-                                variant='outline'
-                                asChild
-                            >
-                                <Link href="/signup">Signup</Link>
-                            </Button>
-                        </div>
+                        <Button
+                            className="mx-2"
+                            asChild
+                        >
+                            <Link href="/login">Login</Link>
+                        </Button>
+                        <Button
+                            className="mx-2"
+                            variant='outline'
+                            asChild
+                        >
+                            <Link href="/signup">Signup</Link>
+                        </Button>
                     </>
                 ) : (
                     <>

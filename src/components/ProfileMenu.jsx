@@ -43,7 +43,9 @@ export default function ProfileMenu({ session }) {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
 
-                <LogoutButton />
+                <DropdownMenuItem asChild>
+                    <LogoutButton />
+                </DropdownMenuItem>
 
             </DropdownMenuContent>
         </DropdownMenu>
