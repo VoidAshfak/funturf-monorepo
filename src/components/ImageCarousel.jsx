@@ -11,7 +11,7 @@ import {
 
 export function ImageCarousel({images}) {
     return (
-        <Carousel className="w-[88%]">
+        <Carousel className="w-[88%] mx-auto">
             <CarouselContent>
                 {images.map((_, index) => (
                     <CarouselItem key={index}>
