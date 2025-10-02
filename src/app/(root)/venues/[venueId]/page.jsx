@@ -8,7 +8,7 @@ import { VenueCard } from "@/components/VenueCard"
 import RatingText from "@/components/RatingText"
 import venues from "../../../../../public/data/venues.json"
 import BookVenue from "@/components/BookVenue"
-import { getIndividualVenue } from "@/utils/getData"
+// import { getIndividualVenue } from "@/utils/getData"
 
 
 const VenueDetails = async ({ params }) => {

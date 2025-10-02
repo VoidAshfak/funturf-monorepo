@@ -3,7 +3,7 @@ import Link from 'next/link'
 import EventCard from '@/components/EventCard'
 import events from "../../../../../public/data/events.json"
 import { users } from '@/lib/users'
-import { getIndividualUser } from '@/utils/getData'
+// import { getIndividualUser } from '@/utils/getData'
 import ProfileCard from '@/components/ProfileCard'
 import Image from 'next/image'
 
