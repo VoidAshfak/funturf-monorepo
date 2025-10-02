@@ -10,14 +10,14 @@ const FeaturedEvents = async () => {
         <>
             <HeaderText title="Discover Games" subtitle="Pick a game to play" center={true} className="" />
             <div className=' flex justify-end items-center gap-2 px-10'>
-                <Link 
+                <Link
                     className='text-gray-700 underline hover:text-green-600 cursor-pointer font-bold'
                     href="/events"
                 >
                     See all Matches →
                 </Link>
             </div>
-            <div className='grid md:grid-cols-4 sm:grid-cols-2 gap-5 p-10 '>
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'>
                 {events.map((event) => (
 
                     <Link href={`/events/${event._id}`} key={event._id}>

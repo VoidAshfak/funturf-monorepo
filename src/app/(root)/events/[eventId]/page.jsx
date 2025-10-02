@@ -1,160 +1,110 @@
 import { Clock, MapPin, ArrowUpRight, User2, Plus } from "lucide-react"
-import { formatDate } from "@/utils/date-formatter"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Link from "next/link"
 import EventCard from "@/components/EventCard"
-import CommentsSection from "@/components/CommentsSection"
 import events from "../../../../../public/data/events.json"
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "@/components/ui/tabs"
+import { getIndividualEvent } from "@/utils/getData"
+import RulesAndComments from "@/components/RulesAndComments"
+import PlayerItem from "@/components/PlayerItem"
+import { format } from "date-fns"
+import { Separator } from "@/components/ui/separator"
 
 const EventDetails = async ({ params }) => {
 
     const { eventId } = await params
 
     const event = events.find(e => e._id === eventId)
+    // const event = await getIndividualEvent(eventId);
+
+    const { _id, name, sport, description, location, slot, organizer, participants, teams, venue, isBooked, booking, playersRequired, isPublic, rules } = event;
 
     return (
-        <>
-            <div className="relative">
-                <div className="flex w-full  gap-10 px-26 pt-10">
-
-                    <div className="flex flex-col gap-4 w-2/3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-white scrollbar-thumb-rounded-full  scrollbar-corner-rounded-full">
-                        <div className="border border-gray-300 p-10 rounded-xl">
-
-                            <div className="pb-8 flex items-center justify-between">
-                                <div>
-                                    <h1 className="text-3xl md:text-4xl font-extrabold text-gray-700 pb-2"> {event?.name} </h1>
-                                    <div className="flex items-center justify-start gap-2">
-                                        <User2 className="text-gray-600" />
-                                        <p className=" text-gray-600"> Organized By {event?.organizer}</p>
-                                    </div>
-                                </div>
-                                <Link href={`/profile/${event?.organizer}`}>
-                                    <Avatar className={"cursor-pointer h-14 w-14"}>
-                                        <AvatarImage src="https://github.com/shadcn.png" alt="@profile" />
-                                        <AvatarFallback>PF</AvatarFallback>
-                                    </Avatar>
-                                </Link>
-                            </div>
-
-                            <div className="flex items-center justify-start gap-6 pb-4">
-                                <Clock className="mr-2 font-bold w-10 h-10" />
-                                <div>
-                                    <p className="font-bold text-2xl text-gray-700 pb-2"> {formatDate(event?.slot.date)} </p>
-                                    <p> {event?.slot.startTime} - {event?.slot.endTime} </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between gap-6">
-
-                                <div className="flex items-center justify-start gap-2 ">
-                                    <MapPin className="mr-2 font-bold w-10 h-10" />
-
-                                    <p> {event?.location} </p>
-                                    <Button className={"cursor-pointer"} variant={"outline"}>
-                                        View Map
-                                        <ArrowUpRight />
-                                    </Button>
-                                </div>
-
-                                <div>
-                                    <Button
-                                        className={"bg-green-500 hover:bg-green-600 p-5 font-bold text-xl cursor-pointer"}
-                                        variant={"outline"}
-                                    >
-                                        <Plus /> Request
-                                    </Button>
-                                </div>
+        <div className="w-4/5 mx-auto mt-10">
+            <div className="lg:grid grid-cols-3 gap-10">
+                <div className="col-span-2 border border-gray-300 p-5 md:p-10 rounded-xl">
+                    {/* EVENT INFO */}
+                    <div className="flex items-center justify-between mb-10">
+                        <div className="space-y-2">
+                            <h1 className="text-xl md:text-3xl font-bold md:font-extrabold text-gray-700">{name}</h1>
+                            <div className="flex items-center gap-2">
+                                <User2 className="w-5 text-gray-600" />
+                                <p className="text-gray-600">Organized by {organizer}</p>
                             </div>
                         </div>
 
-                        <div className="border border-gray-300 p-10 rounded-xl">
-                            <Tab event={event} />
+                        <Link href="#">
+                            <Avatar className="cursor-pointer h-14 w-14" >
+                                <AvatarImage src="https://github.com/shadcn.png" alt="@profile" />
+                                <AvatarFallback>PF</AvatarFallback>
+                            </Avatar>
+                        </Link>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-5">
+                        <Clock className="w-5 text-gray-600" />
+                        <div>
+                            <p className="font-semibold md:font-bold md:text-2xl text-gray-700"> {format(slot.date, "EEEE, d MMMM yyyy")} </p>
+                            <p> {slot.startTime} - {slot.endTime} </p>
                         </div>
                     </div>
 
-
-                    <div className="w-1/3 h-[600px] border border-gray-300 p-8 rounded-xl overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-white scrollbar-thumb-rounded-full  scrollbar-corner-rounded-full">
-                        <h1 className="font-bold text-2xl text-gray-700 pb-4"> {`Players (${event?.participants?.length} / ${event?.playersRequired})`} </h1>
-                        <PlayerItem />
-                        <PlayerItem />
-                        <PlayerItem />
-                        <PlayerItem />
-                        <PlayerItem />
-                        <PlayerItem />
-                        <PlayerItem />
+                    <div className="md:flex items-center justify-between">
+                        <div className="md:flex items-center gap-2">
+                            <div className="flex gap-2">
+                                <MapPin className="w-5 text-gray-600" />
+                                <p>{location}</p>
+                            </div>
+                            <Button
+                                variant="outline"
+                                className="cursor-pointer ml-7 mt-3 md:m-0"
+                            >
+                                View Map
+                                <ArrowUpRight />
+                            </Button>
+                        </div>
+                        <Button className="w-full md:w-40 lg:w-32 xl:w-40 mt-5 md:m-0">Join Request</Button>
                     </div>
+
+                    <Separator className="my-10" />
+
+                    {/* RULES AND COMMENTS */}
+                    <RulesAndComments rules={rules} />
                 </div>
 
-                <div className="px-26 pt-10">
-                    <div className="flex items-center justify-between">
-                        <h1 className="font-bold text-3xl text-gray-700 pb-4"> Similar Events </h1>
-                        <p className="text-gray-500 underline hover:text-green-500 cursor-pointer">See All Events</p>
-                    </div>
-                    <div className='grid md:grid-cols-3 sm:grid-cols-2 gap-5 p-10'>
-                        {events.map((event) => (
-
-                            <Link href={`/events/${event._id}`} key={event._id}>
-                                <EventCard event={event} />
-                            </Link>
+                <div className="border rounded-2xl p-5 mt-10 lg:m-0">
+                    <h1 className="text-2xl font-bold">Players {participants.length} / {playersRequired}</h1>
+                    <div className="mt-7">
+                        {participants.map((participant, index) => (
+                            <PlayerItem key={participant} userId={participant} />
                         ))}
                     </div>
                 </div>
             </div>
-        </>
-    )
-}
 
-export default EventDetails
-
-
-
-const Tab = ({ event }) => {
-    const currentUser = {
-        id: "u1",
-        name: "Alice",
-        avatar: "https://i.pravatar.cc/150?img=1",
-    }
-    return (
-        <Tabs defaultValue="rules" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="rules">Rules</TabsTrigger>
-                <TabsTrigger value="comments">Comments</TabsTrigger>
-            </TabsList>
-            <TabsContent value="rules">
-                <div className="p-4 flex items-center bg-gray-50 rounded-2xl">
-                    <p className="text-left">{event?.rules}</p>
+            {/* SIMILAR EVENTS */}
+            <div className="mt-10">
+                <div className="flex items-center justify-between">
+                    <h1 className="font-bold text-3xl text-gray-700 pb-4"> Similar Events </h1>
+                    <Link
+                        href="/events"
+                        className="text-gray-500 underline hover:text-green-500 cursor-pointer"
+                    >See All Events
+                    </Link>
                 </div>
-            </TabsContent>
-            <TabsContent value="comments">
-                <div className="">
-                    <CommentsSection currentUser={currentUser} />
+                <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'>
+                    {events.map((event) => (
+                        <Link
+                            key={event._id}
+                            href={`/events/${event._id}`}
+                        >
+                            <EventCard event={event} />
+                        </Link>
+                    ))}
                 </div>
-            </TabsContent>
-        </Tabs>
-    )
-}
-
-
-const PlayerItem = () => {
-    return (
-        <div className="flex items-center justify-start gap-6 pl-3 border border-gray-300 p-4 rounded-xl mb-2 hover:bg-gray-100 cursor-pointer">
-            <div >
-                <Avatar className={"cursor-pointer h-10 w-10"}>
-                    <AvatarImage src="https://github.com/shadcn.png" alt="@profile" />
-                    <AvatarFallback>PF</AvatarFallback>
-                </Avatar>
-            </div>
-            <div>
-                <h1 className="font-bold text-gray-700">Player Name</h1>
-                <p className="text-gray-500">Player Role</p>
             </div>
         </div>
     )
 }
+
+export default EventDetails

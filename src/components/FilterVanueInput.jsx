@@ -7,14 +7,14 @@ import { ChevronDownIcon } from "lucide-react";
 import { useState } from "react";
 import { Calendar } from "./ui/calendar";
 
-export default function FilterVenueInput() {
+export default function FilterVenueInput({title}) {
 
-     const [date, setDate] = useState();
-     const [open, setOpen] = useState(false)
+    const [date, setDate] = useState();
+    const [open, setOpen] = useState(false)
 
     return (
-        <div className="bg-white md:absolute md:w-4/5 border rounded-2xl p-5 mx-2 md:m-0 md:top-68 lg:top-84 md:left-18 lg:left-28 xl:left-36 shadow-2xl">
-            <p className="font-semibold mb-1">Find Venue</p>
+        <div className=" bg-white p-5 border rounded-2xl">
+            <p className="font-semibold mb-1">{title}</p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <Select>
                     <SelectTrigger className="w-full">

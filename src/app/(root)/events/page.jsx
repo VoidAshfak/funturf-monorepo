@@ -1,71 +1,23 @@
-"use client"
+import EventCard from "@/components/EventCard";
+import FilterVenueInput from "@/components/FilterVanueInput";
+import { getAllEvents } from "@/utils/getData";
+import Link from "next/link";
 
-import Link from "next/link"
-import EventCard from "@/components/EventCard"
-import { useState } from "react"
-import { Select, Input, DatePicker } from "@/components/CustomInputComponents"
-import { Button } from "@/components/ui/button"
-import { Search } from "lucide-react"
-import events from "../../../../public/data/events.json"
-
-
-const AllEvents = () => {
-
-    const [filters, setFilters] = useState({ date: "", sport: '', playersRequired: '' });
-
-    const handleChange = (e) => {
-        setFilters({ ...filters, [e.target.name]: e.target.value });
-    };
-
-    // Use this query to fetch filtered data from the server
-    const query = new URLSearchParams(filters);
+const AllEvents = async () => {
+    const events = await getAllEvents();
 
     return (
-        <div className=" px-40 pt-10 ">
-
-            <div className="p-10 border-2 border-gray-300 rounded-3xl bg-gradient-to-tr from-gray-100 via-white to-gray-100">
-                <form 
-                    action={() => {
-                        console.log(filters, "Query: ", query);
-                    }}
-                    className="flex gap-6 items-center justify-around"    
-                >
-
-
-                    <Select
-                        name={"sport"}
-                        value={filters.sport}
-                        onResetHandler={() => setFilters({ ...filters, sport: "" })}
-                        onChange={handleChange}
-                    />
-
-                    <Input
-                        name="playersRequired"
-                        value={filters.playersRequired}
-                        onChange={handleChange}
-                        placeholder={"Required Players"}
-                    />
-
-                    <DatePicker
-                        date={filters.date}
-                        onSelect={(val) => setFilters({ ...filters, date: val })}
-                    />
-
-                    <Button
-                        className="w-32 p-6 cursor-pointer bg-green-200"
-                        variant={"outline"}
-                        type="submit"
-                    >
-                        <Search/> Search
-                    </Button>
-
-                </form>
+        <div className="w-4/5 mx-auto">
+            <div className="my-10">
+                <FilterVenueInput title="Find Events" />
             </div>
 
-            <div className='grid md:grid-cols-3 sm:grid-cols-2 gap-5 p-8 '>
-                {events?.map((event) => (
-
-                    <Link href={`/events/${event._id}`} key={event._id}>
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'>
+                {events?.map(event => (
+                    <Link
+                        key={event._id}
+                        href={`/events/${event._id}`}
+                    >
                         <EventCard event={event} />
                     </Link>
                 ))}

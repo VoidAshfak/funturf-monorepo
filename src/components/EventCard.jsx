@@ -1,50 +1,51 @@
-import { Clock, CalendarDays, MapPin } from "lucide-react"
 import {
     Card,
     CardContent,
     CardDescription,
     CardFooter,
     CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import AvatarGroup from "./AvatarGroup"
-import { formatDate } from "@/utils/date-formatter"
+    CardTitle
+} from "@/components/ui/card";
+import { format } from "date-fns";
+import { CalendarDays, Clock } from "lucide-react";
+import Image from "next/image";
+import AvatarGroup from "./AvatarGroup";
 
-const EventCard = ({ className, event }) => {
+export default function EventCard({ event }) {
+
+    const { name, description, location, slot, participants, playersRequired } = event;
+
+    const isParticipantsFull = playersRequired === participants.length;
+
     return (
-        <Card className={`w-[340px] transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-2 hover:z-10 cursor-pointer ${className}`}>
+        <Card className="transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-2">
             <CardHeader>
-                <CardTitle className="min-h-6 bg-gradient-to-r from-black via-blue-500 to-green-500 inline-block text-transparent bg-clip-text"> {event?.name} </CardTitle>
+                <CardTitle className="bg-gradient-to-r from-black via-blue-500 to-green-500 text-transparent bg-clip-text">{name}</CardTitle>
+                <CardDescription>{location}</CardDescription>
                 <div className="flex justify-between items-center">
-                    <AvatarGroup />
-                    <h2 className={`font-bold text-gray-700 text-[17px] ${event?.playersRequired === event?.participants?.length ? 'text-red-500' : ''}`}>{`${event?.participants?.length}/`}<span className="font-normal text-[14px]">{`${event?.playersRequired}`} </span> Joined </h2>
+                    <AvatarGroup people={participants} />
+                    <p className={`font-bold ${isParticipantsFull && 'text-red-500'}`}>{participants.length}/<span className="font-normal">{playersRequired} </span>Joined</p>
                 </div>
-                <CardDescription> {event?.location} </CardDescription>
             </CardHeader>
-            <CardContent className={`h-24`}>
-                <div>
-                    <h1 className="font-bold text-[18px] text-gray-700 min-h-16"> {event?.description} </h1>
-
-                    <div className="flex items-center border-2 px-7 py-2 rounded-xl backdrop-blur-sm bg-gray-200/30">
-                        <Clock className="mr-2 w-5 h-5" />
-                        <h1 className=""> {`${event?.slot.startTime} - ${event?.slot.endTime}`} </h1>   
-                    </div>
+            <CardContent className="h-24 lg:h-32 flex flex-col justify-between">
+                <p className="font-bold text-lg text-gray-700">{description}</p>
+                <div className="flex gap-2 border-2 px-7 lg:px-4 py-2 rounded-xl backdrop-blur-sm bg-gray-200/30">
+                    <Clock className="w-4" />
+                    <p>{slot.startTime} - {slot.endTime}</p>
                 </div>
             </CardContent>
             <CardFooter className="flex justify-between">
-                <div>
-                    <img src={`/assets/icons/${event?.sport.toLowerCase()}.png`} alt="football" className="w-6 h-6" />
-                </div>
-                <div className="flex items-center">
-                    <CalendarDays className="mr-2 w-5 h-5" />
-                    {/* <p className="text-gray-700 font-bold"> {`${event?.slot.startTime}-${event?.slot.endTime} | `} </p> */}
-                    <p> {` ${formatDate(event?.slot.date)}`} </p>
+                <Image
+                    src={`/assets/icons/${event?.sport.toLowerCase()}.png`}
+                    alt="football"
+                    width={24}
+                    height={24}
+                />
+                <div className="flex items-center gap-2">
+                    <CalendarDays className="w-5" />
+                    <p> {format(slot.date, "MMMM dd, yyyy")} </p>
                 </div>
             </CardFooter>
-
-            {/* <p> {JSON.stringify(event)} </p> */}
         </Card>
     )
 }
-
-export default EventCard

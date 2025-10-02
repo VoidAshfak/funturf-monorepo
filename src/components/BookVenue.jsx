@@ -33,8 +33,6 @@ export default function BookVenue({ venue }) {
 
     const isDesktop = useMediaQuery("(min-width: 768px)");
 
-    console.log(venue)
-
     return (
         <Drawer direction={isDesktop ? "right" : "bottom"}>
             <DrawerTrigger className="w-full" asChild>

@@ -1,21 +1,19 @@
-"use client";
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { getAllUser } from "@/utils/getData";
 
-export default function AvatarGroup() {
-    const users = [
-        { name: "Fede", image: "/assets/avatars/player-1.jpg" },
-        { name: "Luca", image: "/assets/avatars/player-2.jpg" },
-        { name: "Jude", image: "/assets/avatars/player-3.jpg" },
-        { name: "Dani", image: "/assets/avatars/player-4.jpg" },
-        { name: "Brahim", image: "/assets/avatars/player-5.jpg" },
-    ];
+export default async function AvatarGroup({ people = [] }) {
+
+    const allUser = await getAllUser();
+
+    const participantsInfo = allUser
+        .filter(eachUser => people.includes(eachUser._id))
+        .map(eachParticipant => ({ id: eachParticipant._id, name: eachParticipant.fullName, image: eachParticipant.profilePicture }));
 
     return (
         <div className="flex items-center -space-x-2 *:ring-3 *:ring-background">
-            {users.slice(0, 3).map((user, index) => (
+            {participantsInfo.slice(0, 3).map(user => (
                 <Avatar
-                    key={index}
+                    key={user.id}
                 >
                     <AvatarImage src={user.image} alt={user.name} />
                     <AvatarFallback>
@@ -26,10 +24,10 @@ export default function AvatarGroup() {
                     </AvatarFallback>
                 </Avatar>
             ))}
-            {users.length > 3 && (
+            {participantsInfo.length > 3 && (
                 <Avatar className="z-10 text-sm font-medium text-muted-foreground">
                     <AvatarFallback>
-                        +{users.slice(3).reduce((acc) => acc + 1, 0)}
+                        +{participantsInfo.slice(3).reduce((acc) => acc + 1, 0)}
                     </AvatarFallback>
                 </Avatar>
             )}

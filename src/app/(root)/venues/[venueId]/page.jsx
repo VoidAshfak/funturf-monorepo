@@ -8,12 +8,14 @@ import { VenueCard } from "@/components/VenueCard"
 import RatingText from "@/components/RatingText"
 import venues from "../../../../../public/data/venues.json"
 import BookVenue from "@/components/BookVenue"
+import { getIndividualVenue } from "@/utils/getData"
 
 
 const VenueDetails = async ({ params }) => {
     const { venueId } = await params
 
     const venue = venues.find(venue => venue._id === venueId)
+    // const venue = await getIndividualVenue(venueId); 
 
     return (
 
