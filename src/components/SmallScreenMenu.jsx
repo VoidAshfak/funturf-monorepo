@@ -7,12 +7,14 @@ import {
     DrawerTitle,
     DrawerTrigger,
 } from "@/components/ui/drawer";
-import { Menu } from "lucide-react";
+import { House, Menu, Settings, User, Users } from "lucide-react";
 import { Button } from "./ui/button";
 import Link from "next/link";
 import LogoutButton from "./LogoutButton";
+import Image from "next/image";
 
 export default function SmallScreenMenu({ session }) {
+    const { user } = session ?? {};
     return (
         <Drawer direction="left">
             <DrawerTrigger>
@@ -29,55 +31,95 @@ export default function SmallScreenMenu({ session }) {
                         asChild
                         className="px-5 py-2 hover:bg-white"
                     >
-                        <Link href="/">Home</Link>
+                        <Link
+                            href="/"
+                            className="flex items-center gap-3"
+                        >
+                            <House className="w-5" />
+                            Home</Link>
                     </DrawerClose>
                     <DrawerClose
                         asChild
                         className="px-5 py-2 hover:bg-white"
                     >
-                        <Link href="/events">Play</Link>
+                        <Link
+                            href="/events"
+                            className="flex items-center gap-3"
+                        >
+                            <Image
+                                src="/assets/icons/play.png"
+                                alt="play"
+                                width={20}
+                                height={20}
+                            />
+                            Play</Link>
                     </DrawerClose>
                     <DrawerClose
                         asChild
                         className="px-5 py-2 hover:bg-white"
                     >
-                        <Link href="/venues">Book</Link>
+                        <Link
+                            href="/venues"
+                            className="flex items-center gap-3"
+                        >
+                            <Image
+                                src="/assets/icons/book.png"
+                                alt="book"
+                                width={20}
+                                height={20}
+                            />
+                            Book</Link>
                     </DrawerClose>
 
                 </div>
 
-                <DrawerFooter>
+                <DrawerFooter className="px-0">
                     {session ? (
                         <>
                             <DrawerClose
                                 asChild
                                 className="px-5 py-2 hover:bg-white"
                             >
-                                <Link href="#">Profile</Link>
+                                <Link
+                                    href={`/profile/${user?.id}`}
+                                    className="flex items-center gap-3"
+                                >
+                                    <User className="w-4" />
+                                    Profile
+                                </Link>
                             </DrawerClose>
                             <DrawerClose
                                 asChild
                                 className="px-5 py-2 hover:bg-white"
                             >
-                                <Link href="#">Settings</Link>
+                                <Link
+                                    href="#"
+                                    className="flex items-center gap-3"
+                                >
+                                    <Settings className="w-4" />
+                                    Settings</Link>
                             </DrawerClose>
                             <DrawerClose
                                 asChild
                                 className="px-5 py-2 hover:bg-white"
                             >
-                                <Link href="#">Team</Link>
+                                <Link
+                                    href="#"
+                                    className="flex items-center gap-3"
+                                >
+                                    <Users className="w-4" />
+                                    Team</Link>
                             </DrawerClose>
                             <DrawerClose
                                 asChild
                                 className="px-5 py-2 hover:bg-white"
                             >
-                                {/* <Link href="#">Team</Link> */}
-                               <LogoutButton/>
+                                <LogoutButton />
                             </DrawerClose>
                         </>
                     )
                         : (
-                            <>
+                            <div className="flex flex-col gap-3 px-5">
                                 <DrawerClose asChild>
                                     <Link href="/login">
                                         <Button className="w-full">
@@ -92,7 +134,7 @@ export default function SmallScreenMenu({ session }) {
                                         </Button>
                                     </Link>
                                 </DrawerClose>
-                            </>
+                            </div>
                         )
                     }
 
@@ -101,75 +143,3 @@ export default function SmallScreenMenu({ session }) {
         </Drawer>
     );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// import {
-//     Drawer,
-//     DrawerClose,
-//     DrawerContent,
-//     DrawerDescription,
-//     DrawerFooter,
-//     DrawerHeader,
-//     DrawerTitle,
-//     DrawerTrigger,
-// } from "@/components/ui/drawer";
-// import { Menu } from "lucide-react";
-// import { Button } from "./ui/button";
-// import { Label } from "./ui/label";
-// import Link from "next/link";
-
-// export default function SmallScreenMenu() {
-//     return (
-//         <Drawer direction="left">
-//             <DrawerTrigger>
-//                 <Menu className="text-7xl" />
-//             </DrawerTrigger>
-
-//             <DrawerContent className="backdrop-blur-lg bg-green-200/30" width="1/2">
-//                 <DrawerHeader>
-//                     <DrawerTitle>Menu</DrawerTitle>
-//                     {/* <DrawerDescription>{address}</DrawerDescription> */}
-//                 </DrawerHeader>
-
-//                 {/* <div>
-//                     <div className="px-5 py-2 hover:bg-white">
-//                         <Link href="/">Home</Link>
-//                     </div>
-//                     <div className="px-5 py-2 hover:bg-white">
-//                         <Link href="/events">Play</Link>
-//                     </div>
-//                     <div className="px-5 py-2 hover:bg-white">
-//                         <Link href="/venues">Book</Link>
-//                     </div>
-//                 </div> */}
-
-
-
-
-
-//                 <DrawerFooter>
-//                     <Button>Login</Button>
-//                     <Button>Register</Button>
-//                     {/* <DrawerClose asChild>
-//                         <Button variant="outline">Cancel</Button>
-//                     </DrawerClose> */}
-//                 </DrawerFooter>
-//             </DrawerContent>
-//         </Drawer>
-//     )
-// }
