@@ -13,26 +13,37 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react"
+import { Calendar as CalendarIcon } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
-
-const signIn = (formData) => {
-    console.log(formData)
-}
+import { Controller, useForm } from "react-hook-form"
+import InputField from "../InputField"
+import RequiredSign from "../RequiredSign"
 
 export function SignupForm({
     className,
     ...props
 }) {
 
-    const [date, setDate] = useState()
+    const {
+        register,
+        control,
+        handleSubmit,
+        watch,
+        formState: { errors },
+    } = useForm({
+        defaultValues: {
+            gender: "male",
+            date_of_birth: null,
+        },
+    });
+
+    const onSubmit = (data) => console.log(data)
 
     return (
         <form
-            action={formAction}
             className={cn("flex flex-col gap-6", className)}
             {...props}
+            onSubmit={handleSubmit(onSubmit)}
         >
             {/* Heading */}
             <div className="flex flex-col items-center gap-2 text-center">
@@ -45,153 +56,238 @@ export function SignupForm({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 shadow-md">
                 <div className="space-y-2">
                     <Label
-                        htmlFor="firstName"
+                        htmlFor="first_name"
                     >
                         First Name
+                        <RequiredSign />
                     </Label>
-                    <Input
-                        type="text"
-                        id="firstName"
-                        name="firstName"
-                        placeholder="Enter First Name"
-                        required
-                    />
+                    <InputField errors={errors}>
+                        <Input
+                            type="text"
+                            id="first_name"
+                            name="first_name"
+                            placeholder="Enter First Name"
+                            className={`${errors?.first_name ? 'border-2 border-red-500' : ''}`}
+                            {...register("first_name", {
+                                required: "First name is required"
+                            })}
+                        />
+                    </InputField>
                 </div>
 
-                <div className="space-y-2">
+                <div className="relative space-y-2">
                     <Label
-                        htmlFor="lastName"
+                        htmlFor="last_name"
                     >
                         Last Name
+                        <RequiredSign />
                     </Label>
-                    <Input
-                        type="text"
-                        id="lastName"
-                        name="lastName"
-                        placeholder="Enter Last Name"
-                        required
-                    />
+                    <InputField errors={errors}>
+                        <Input
+                            type="text"
+                            id="last_name"
+                            name="last_name"
+                            placeholder="Enter Last Name"
+                            className={`${errors?.last_name ? 'border-2 border-red-500' : ''}`}
+                            {...register("last_name", {
+                                required: "Last name is required"
+                            })}
+                        />
+                    </InputField>
                 </div>
 
-                <div className="space-y-2">
+                <div className="relative space-y-2">
                     <Label
                         htmlFor="phone"
                     >
                         Phone
+                        <RequiredSign />
                     </Label>
-                    <Input
-                        type="phone"
-                        id="phone"
-                        name="phone"
-                        placeholder="Enter Phone  Number"
-                        required
-                    />
+                    <InputField errors={errors}>
+                        <Input
+                            type="phone"
+                            id="phone"
+                            name="phone"
+                            placeholder="Enter Phone Number"
+                            className={`${errors?.phone ? 'border-2 border-red-500' : ''}`}
+                            {...register("phone", {
+                                required: "Phone number is required"
+                            })}
+                        />
+                    </InputField>
+
                 </div>
 
-                <div className="space-y-2">
+                <div className="relative space-y-2">
                     <Label
                         htmlFor="email"
                     >
                         Email
+                        <RequiredSign />
                     </Label>
-                    <Input
-                        type="email"
-                        id="email"
-                        name="email"
-                        placeholder="Enter Email Address"
-                        required
-                    />
+                    <InputField errors={errors}>
+                        <Input
+                            type="text"
+                            id="email"
+                            name="email"
+                            placeholder="Enter Email Address"
+                            className={`${errors?.email ? 'border-2 border-red-500' : ''}`}
+                            {...register("email", {
+                                required: "Email is required",
+                                pattern: {
+                                    value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, // basic email regex
+                                    message: "Please enter a valid email address",
+                                },
+                            })}
+                        />
+                    </InputField>
                 </div>
 
                 <div className="space-y-2">
                     <Label
                     >
                         Gender
+                        <RequiredSign />
                     </Label>
-                    <RadioGroup defaultValue="male" className="flex">
-                        <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="male" id="male" />
-                            <Label htmlFor="male">Male</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="female" id="female" />
-                            <Label htmlFor="female">Female</Label>
-                        </div>
-                    </RadioGroup>
+                    <Controller
+                        name="gender"
+                        control={control}
+                        rules={{ required: "Gender is required" }}
+                        render={({ field }) => (
+                            <RadioGroup
+                                onValueChange={field.onChange}
+                                value={field.value}
+                                className="flex"
+                            >
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="male" id="male" />
+                                    <Label htmlFor="male">Male</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="female" id="female" />
+                                    <Label htmlFor="female">Female</Label>
+                                </div>
+                            </RadioGroup>
+                        )}
+                    />
+
                 </div>
 
                 <div className="space-y-2">
                     <Label
                     >
                         Date of Birth
+                        <RequiredSign />
                     </Label>
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant="outline"
-                                data-empty={!date}
-                                className="data-[empty=true]:text-muted-foreground w-[280px] justify-start text-left font-normal"
-                            >
-                                <CalendarIcon />
-                                {date ? format(date, "PPP") : <span>Pick a date</span>}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar mode="single" selected={date} onSelect={setDate} />
-                        </PopoverContent>
-                    </Popover>
+                    <InputField errors={errors}>
+                        <Controller
+                            name="date_of_birth"
+                            control={control}
+                            rules={{ required: "Please give date of birth" }}
+                            render={({ field }) => (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            data-empty={!field.value}
+                                            className={`data-[empty=true]:text-muted-foreground w-full justify-start text-left font-normal ${errors?.date_of_birth ? 'border-2 border-red-500' : ''}`}
+                                        >
+                                            <CalendarIcon />
+                                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0">
+                                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} />
+                                    </PopoverContent>
+                                </Popover>
+                            )}
+                        />
+
+                    </InputField>
                 </div>
 
                 <div className="space-y-2">
                     <Label htmlFor="bio">Bio</Label>
-                    <Textarea
-                        id="bio"
-                        name="bio"
-                        rows="4"
-                        placeholder="Tell us about yourself..."
-                    />
+                    <InputField errors={errors}>
+                        <Textarea
+                            id="bio"
+                            name="bio"
+                            rows="4"
+                            placeholder="Tell us about yourself..."
+                            {...register("bio")}
+                        />
+                    </InputField>
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Textarea
-                        id="address"
-                        name="address"
-                        rows="4"
-                        placeholder="Tell us about yourself..."
-                    />
+                    <Label htmlFor="address">
+                        Address
+                        <RequiredSign />
+                    </Label>
+                    <InputField errors={errors}>
+                        <Textarea
+                            id="address"
+                            name="address"
+                            rows="4"
+                            placeholder="Tell us about yourself..."
+                            className={`${errors?.address ? 'border-2 border-red-500' : ''}`}
+                            {...register("address", {
+                                required: "Address is required"
+                            })}
+                        />
+                    </InputField>
                 </div>
 
                 <div className="space-y-2">
                     <Label htmlFor="password">
-                        Password <span className="text-red-500">*</span>
+                        Password
+                        <RequiredSign />
                     </Label>
-                    <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        required
-                        className="w-full border rounded-md px-4 py-2"
-                    />
+                    <InputField errors={errors}>
+                        <Input
+                            id="password"
+                            name="password"
+                            type="password"
+                            className={`${errors?.password ? 'border-2 border-red-500' : ''}`}
+                            {...register("password", {
+                                required: "Password is required",
+                                minLength: {
+                                    value: 6,
+                                    message: "Password must be at least 6 characters."
+                                }
+                            })}
+                        />
+                    </InputField>
                 </div>
 
                 <div className="space-y-2">
                     <Label htmlFor="confirmPassword">
-                        Confirm Password <span className="text-red-500">*</span>
+                        Confirm Password
+                        <RequiredSign />
                     </Label>
-                    <Input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        type="pssword"
-                        required
-                        className="w-full border rounded-md px-4 py-2"
-                    />
+                    <InputField errors={errors}>
+                        <Input
+                            id="confirmPassword"
+                            name="confirmPassword"
+                            type="pssword"
+                            className={`${errors?.confirmPassword ? 'border-2 border-red-500' : ''}`}
+                            {...register("confirmPassword", {
+                                required: "Confirm your password",
+                                validate: (value) => value === watch("password") || "Passwords do not match"
+
+                            })}
+                        />
+                    </InputField>
                 </div>
             </div>
 
             <div className="flex flex-col items-center justify-center gap-4 text-center text-sm">
-                <Button type="submit" className="w-1/3" disabled={loading}>
-                    {loading && <Loader2 className="animate-spin" />}
+                <Button
+                    type="submit"
+                    className="w-1/3"
+                // disabled={loading}
+                >
+                    {/* {loading && <Loader2 className="animate-spin" />} */}
                     Sign Up
                 </Button>
                 <div>
