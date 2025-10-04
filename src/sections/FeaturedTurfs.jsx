@@ -1,17 +1,14 @@
-import { VenueCard } from '@/components/VenueCard'
-import React from 'react'
-import Link from 'next/link'
 import HeaderText from '@/components/HeaderText'
-import { ArrowRight } from 'lucide-react'
+import { VenueCard } from '@/components/VenueCard'
+import Link from 'next/link'
 import venues from "../../public/data/venues.json"
 
-const FeaturedTurfs = async () => {
-
+const FeaturedTurfs =  () => {
 
     return (
-        <>
+        <div>
             <HeaderText title="Featured Turfs" subtitle="Check out our featured turfs" center={true} className="" />
-            <div className=' flex justify-end items-center gap-2 px-10'>
+            <div className='flex justify-end items-center my-5'>
                 <Link
                     className='text-gray-700 underline hover:text-green-600 cursor-pointer font-bold'
                     href="/venues"
@@ -19,15 +16,14 @@ const FeaturedTurfs = async () => {
                     See all Turfs →
                 </Link>
             </div>
-            <div className='grid md:grid-cols-4 sm:grid-cols-2 gap-5 p-10 '>
+            <div className='grid sm:grid-cols-2 lg:grid-cols-3 gap-5'>
                 {venues.map((venue) => (
-
                     <Link href={`/venues/${venue._id}`} key={venue._id}>
                         <VenueCard venue={venue} />
                     </Link>
                 ))}
             </div>
-        </>
+        </div>
     )
 }
 

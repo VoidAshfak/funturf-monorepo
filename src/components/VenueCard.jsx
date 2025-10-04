@@ -11,12 +11,14 @@ import Image from "next/image"
 
 export function VenueCard({ className, venue }) {
     return (
-        <Card className={`transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-2 hover:z-10 cursor-pointer ${className}`}>
+        <Card className={`border-0 transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-2 hover:z-10 cursor-pointer ${className}`}>
             <CardHeader>
                 <CardTitle className="min-h-6 w-8/12 bg-gradient-to-r from-black via-blue-500 to-green-500 inline-block text-transparent bg-clip-text"> {venue?.name} </CardTitle>
-                <CardDescription className="flex justify-start">
-                    <MapPin className="mr-1 w-5 h-5" />
-                    {venue?.address}
+                <CardDescription className="flex gap-1 items-center">
+                    <MapPin className="w-4 shrink-0" />
+                    <span className="line-clamp-1">
+                        {venue?.address}
+                    </span>
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -29,13 +31,13 @@ export function VenueCard({ className, venue }) {
                 />
             </CardContent>
             <CardFooter className="flex justify-between">
-                <div className="flex items-center">
-                    <Clock className="mr-2 w-5 h-5" />
-                    <p> {venue?.availability} </p>
+                <div className="flex items-center gap-1">
+                    <Clock className="w-4" />
+                    <p className="text-sm font-semibold"> {venue?.availability} </p>
                 </div>
-                <div className="flex items-center">
-                    <Star className="mr-2 text-yellow-500" />
-                    <p> {venue?.rating} </p>
+                <div className="flex items-center gap-1">
+                    <Star className="w-4 text-yellow-500" />
+                    <p className="text-sm font-semibold"> {venue?.rating} </p>
                 </div>
             </CardFooter>
 

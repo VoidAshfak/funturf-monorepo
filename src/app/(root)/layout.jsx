@@ -11,7 +11,7 @@ export const metadata = {
 export default async function AppLayout({ children }) {
     const session = await getServerSession(authOptions);
     return (
-        <div>
+        <div className="bg-[#F1F3F2]">
             <div className="hidden md:block sticky top-0 z-50">
                 <nav className={"navbar"}>
                     <Navbar session={session} />

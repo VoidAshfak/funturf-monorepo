@@ -20,9 +20,9 @@ const EventDetails = async ({ params }) => {
     const { _id, name, sport, description, location, slot, organizer, participants, teams, venue, isBooked, booking, playersRequired, isPublic, rules } = event;
 
     return (
-        <div className="w-4/5 mx-auto mt-10">
+        <div className="w-[90%] mx-auto mt-10">
             <div className="lg:grid grid-cols-3 gap-10">
-                <div className="col-span-2 border border-gray-300 p-5 md:p-10 rounded-xl">
+                <div className="bg-white col-span-2 border border-gray-300 p-5 md:p-10 rounded-xl">
                     {/* EVENT INFO */}
                     <div className="flex items-center justify-between mb-10">
                         <div className="space-y-2">
@@ -72,7 +72,7 @@ const EventDetails = async ({ params }) => {
                     <RulesAndComments rules={rules} />
                 </div>
 
-                <div className="border rounded-2xl p-5 mt-10 lg:m-0">
+                <div className="bg-white border rounded-2xl p-5 mt-10 lg:m-0">
                     <h1 className="text-2xl font-bold">Players {participants.length} / {playersRequired}</h1>
                     <div className="mt-7">
                         {participants.map((participant, index) => (

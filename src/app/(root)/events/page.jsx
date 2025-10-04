@@ -7,7 +7,7 @@ const AllEvents = async () => {
     const events = await getAllEvents();
 
     return (
-        <div className="w-4/5 mx-auto">
+        <div className="w-[90%] mx-auto">
             <div className="my-10">
                 <FilterVenueInput title="Find Events" />
             </div>

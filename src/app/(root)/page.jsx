@@ -9,8 +9,10 @@ export default function Home() {
         <>
             <Hero />
             {/* <Turfmates /> */}
-            <FeaturedTurfs />
-            <FeaturedEvents />
+            <div className="bg-white m-10 md:m-20 rounded-2xl p-5 md:p-10 space-y-20">
+                <FeaturedTurfs />
+                <FeaturedEvents />
+            </div>
             <Banner />
         </>
     );

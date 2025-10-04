@@ -6,7 +6,7 @@ export default function Hero() {
 
     return (
 
-        <div className="bg-gradient-to-r from-green-100 via-yellow-50 to-green-100 mb-10 rounded-b-[50px] md:grid grid-cols-2 gap-5 p-10 items-center">
+        <div className="bg-gradient-to-r from-green-100 via-yellow-50 to-green-100 rounded-b-[50px] md:grid grid-cols-2 gap-5 p-10 items-center">
             <div className="lg:w-2/3 mx-auto">
                 <div className="flex items-center gap-2" >
                     <h1 className="text-gray-900 font-bold text-2xl lg:text-3xl">Built for players</h1>
