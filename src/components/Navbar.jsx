@@ -1,16 +1,10 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-
-import {
-    NavigationMenu,
-    NavigationMenuItem,
-    NavigationMenuLink,
-    NavigationMenuList,
-} from "@/components/ui/navigation-menu"
 import Image from "next/image"
+import NavLink from "./NavLink"
 import ProfileMenu from "./ProfileMenu"
 
-export default function Navbar({ className, session }) {
+export default function Navbar({ session }) {
 
     return (
         <>
@@ -23,45 +17,7 @@ export default function Navbar({ className, session }) {
                 />
             </Link>
 
-            <NavigationMenu className={` ${className}`}>
-                <NavigationMenuList>
-
-                    <NavigationMenuItem>
-                        <NavigationMenuLink
-                            href="/events"
-                        // className={`${(pathName === "/events" || (pathName.startsWith("/events") && pathName !== "/")) ? "backdrop-blur-sm bg-green-700/10" : ""}`}
-                        >
-                            <div className="flex gap-2 items-center">
-                                <Image
-                                    src="/assets/icons/play.png"
-                                    alt="play"
-                                    width={30}
-                                    height={20}
-                                />
-                                <span className="text-xl"> Play </span>
-                            </div>
-                        </NavigationMenuLink>
-                    </NavigationMenuItem>
-
-                    <NavigationMenuItem>
-                        <NavigationMenuLink
-                            href="/venues"
-                        // className={`${(pathName === "/venues" || (pathName.startsWith("/venues") && pathName !== "/")) ? "backdrop-blur-sm bg-green-700/10" : ""}`}
-                        >
-                            <div className="flex gap-2 items-center">
-                                <Image
-                                    src="/assets/icons/book.png"
-                                    alt="book"
-                                    width={30}
-                                    height={20}
-                                /><span className="text-xl"> Book </span>
-                            </div>
-                        </NavigationMenuLink>
-                    </NavigationMenuItem>
-
-                </NavigationMenuList>
-            </NavigationMenu>
-
+            <NavLink />
 
             <div>
                 {!session ? (
