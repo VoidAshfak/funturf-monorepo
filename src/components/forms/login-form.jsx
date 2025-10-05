@@ -7,64 +7,105 @@ import { cn } from "@/lib/utils"
 import { LogIn } from "lucide-react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
-import { useActionState, useState } from "react"
+import { useState } from "react"
+import { useForm } from "react-hook-form"
+import InputField from "../InputField"
+import RequiredSign from "../RequiredSign"
 
 export function LoginForm({ className }) {
 
-    const [errorOccured, setErrorOccured] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const login = async (prevState, formData) => {
+    const {
+        register,
+        handleSubmit,
+        formState: { errors },
+        setError
+    } = useForm();
+
+    const login = async (formData) => {
+
+        setIsSubmitting(true);
 
         const result = await signIn('credentials', {
-            email: formData.get("email"),
-            password: formData.get("password"),
+            email: formData.email,
+            password: formData.password,
             redirect: false
         });
 
         if (!result.ok) {
-            setErrorOccured(true);
+            setError('root.response', {
+                message: 'Invalid Email/Password'
+            });
+            setIsSubmitting(false);
         } else {
             window.location.href = '/';
         }
     };
 
-    const [state, formAction, isPending] = useActionState(login, {});
-
     return (
-        <form action={formAction} className={cn("flex flex-col gap-6", className)}>
+        <form
+            className={cn("flex flex-col gap-6", className)}
+            onSubmit={handleSubmit(login)}
+        >
             <div className="flex flex-col items-center gap-2 text-center">
                 <h1 className="text-2xl font-bold">Login to your account</h1>
                 <p className="text-muted-foreground text-sm text-balance">
                     Enter your email below to login to your account
                 </p>
-                {errorOccured && <p className="text-red-500">Invalid Email/Password</p>}
+                <p className="text-red-500">{errors?.root?.response?.message}</p>
             </div>
             <div className="grid gap-6">
                 <div className="grid gap-3">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        placeholder="me@google.com"
-                        required
-                    />
+                    <Label htmlFor="email">
+                        Email
+                        <RequiredSign />
+                    </Label>
+                    <InputField errors={errors}>
+                        <Input
+                            id="email"
+                            name="email"
+                            placeholder="Enter Your Email"
+                            className={`${errors?.email ? 'border-2 border-red-500' : ''}`}
+                            {...register("email", {
+                                required: "Email is required",
+                                pattern: {
+                                    value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, // basic email regex
+                                    message: "Please enter a valid email address",
+                                },
+                            })}
+                        />
+                    </InputField>
                 </div>
                 <div className="grid gap-3">
                     <div className="flex items-center">
-                        <Label htmlFor="password">Password</Label>
+                        <Label htmlFor="password">
+                            Password
+                            <RequiredSign />
+                        </Label>
+
                         <Link href="#" className="ml-auto text-sm underline-offset-4 hover:underline">
                             Forgot your password?
                         </Link>
                     </div>
-                    <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        required
-                    />
+                    <InputField errors={errors}>
+                        <Input
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="Enter Password"
+                            className={`${errors?.password ? 'border-2 border-red-500' : ''}`}
+                            {...register("password", {
+                                required: "Password is required"
+                            })}
+                        />
+                    </InputField>
                 </div>
-                <Button type="submit" className="w-full bg-green-600">
+                <Button
+                    type="submit"
+                    className="w-full bg-green-600"
+                    disabled={isSubmitting}
+                >
                     <LogIn className="mr-2 h-4 w-4" />
                     Login
                 </Button>
