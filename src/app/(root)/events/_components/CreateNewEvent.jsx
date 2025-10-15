@@ -1,6 +1,7 @@
 "use client"
 
 import InputField from "@/components/InputField";
+import MultiSelect from "@/components/MultiSelect";
 import RequiredSign from "@/components/RequiredSign";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -13,6 +14,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
+
+const players = [
+    { id: 1, label: "Rizwan", value: "RIZWAN" },
+    { id: 2, label: "Asif", value: "ASIF" },
+    { id: 3, label: "Bappi", value: "BAPPI" },
+];
 
 export default function CreateNewEvent() {
 
@@ -34,6 +41,7 @@ export default function CreateNewEvent() {
             end_time: '',
             number_of_players_required: '',
             skill_level_required: 'any',
+            current_players: []
         }
     });
 
@@ -267,6 +275,22 @@ export default function CreateNewEvent() {
                                 />
                             </InputField>
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="addPlayers">Add Players</Label>
+                        <Controller
+                            name="current_players"
+                            control={control}
+                            render={({ field }) => (
+                                <MultiSelect
+                                    options={players}
+                                    values={field.value}
+                                    onChange={field.onChange}
+                                    placeholder="Search and select names..."
+                                />
+                            )}
+                        />
                     </div>
 
                     <Button type="submit" className="w-full">Submit</Button>
