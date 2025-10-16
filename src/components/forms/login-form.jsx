@@ -7,26 +7,20 @@ import { cn } from "@/lib/utils"
 import { LogIn } from "lucide-react"
 import { signIn } from "next-auth/react"
 import Link from "next/link"
-import { useState } from "react"
 import { useForm } from "react-hook-form"
 import InputField from "../InputField"
 import RequiredSign from "../RequiredSign"
 
 export function LoginForm({ className }) {
 
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
     const {
         register,
         handleSubmit,
-        formState: { errors },
+        formState: { errors , isSubmitting},
         setError
     } = useForm();
 
     const login = async (formData) => {
-
-        setIsSubmitting(true);
-
         const result = await signIn('credentials', {
             email: formData.email,
             password: formData.password,
@@ -37,7 +31,6 @@ export function LoginForm({ className }) {
             setError('root.response', {
                 message: 'Invalid Email/Password'
             });
-            setIsSubmitting(false);
         } else {
             window.location.href = '/';
         }
