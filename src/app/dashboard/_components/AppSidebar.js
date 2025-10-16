@@ -14,12 +14,23 @@ import {
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
+import Image from "next/image"
 
 export default function AppSidebar() {
     return (
         <Sidebar>
-            <SidebarHeader className="bg-red-300">
-                <p>FUNTURF</p>
+            <SidebarHeader className="border-b ">
+                <Link
+                    href="/"
+                    className="flex gap-3 items-center justify-center">
+                    <Image
+                        src="/assets/icons/logo.svg"
+                        alt="Logo"
+                        width={30}
+                        height={30}
+                    />
+                    <p className="font-serif text-2xl">FUNTURF</p>
+                </Link>
             </SidebarHeader>
 
             <SidebarContent>
@@ -29,9 +40,27 @@ export default function AppSidebar() {
                         <SidebarMenu>
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild>
-                                    <Link href="/">
+                                    <Link href="/dashboard">
                                         <House />
                                         Home
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild>
+                                    <Link href="/dashboard/bookings">
+                                        <House />
+                                        Bookings
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild>
+                                    <Link href="/dashboard/turfs">
+                                        <House />
+                                        Manage Turf
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
