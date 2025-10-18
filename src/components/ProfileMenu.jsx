@@ -1,4 +1,4 @@
-import { Settings, User, Users } from "lucide-react";
+import { LayoutDashboard, Settings, User, Users } from "lucide-react";
 import LogoutButton from "./LogoutButton";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -22,6 +22,16 @@ export default function ProfileMenu({ session }) {
             <DropdownMenuContent className="w-56 mr-6">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+
+                <DropdownMenuGroup>
+                    <DropdownMenuItem asChild>
+                        <Link href="/dashboard">
+                            <LayoutDashboard />
+                            <span>Dashboard</span>
+                        </Link>
+                    </DropdownMenuItem>
+                </DropdownMenuGroup>
+
                 <DropdownMenuGroup>
                     <DropdownMenuItem asChild
                     >
