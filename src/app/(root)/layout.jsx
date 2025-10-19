@@ -3,11 +3,6 @@ import SmallScreenMenu from "@/components/SmallScreenMenu";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../api/auth/[...nextauth]/route";
 
-export const metadata = {
-    title: "Funturf",
-    description: "Your go-to app for managing turf",
-};
-
 export default async function AppLayout({ children }) {
     const session = await getServerSession(authOptions);
     return (
