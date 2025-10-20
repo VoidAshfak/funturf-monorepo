@@ -1,6 +1,5 @@
-import { users } from "@/lib/users";
-import NextAuth from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
+import NextAuth from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
 
 export const authOptions = {
     secret: process.env.NEXTAUTH_SECRET,
@@ -20,9 +19,18 @@ export const authOptions = {
                     return null;
                 }
 
-                const userFound = users.find(user => user.email === email);
-                if (userFound && userFound.password === password) {
-                    return userFound;
+                const res = await fetch('https://app4-osju.onrender.com/api/v1/users/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    return data.data.user
                 }
 
                 return null;
@@ -32,30 +40,34 @@ export const authOptions = {
     callbacks: {
         async jwt({ token, user, account, profile, isNewUser }) {
             if (user) {
-                token.id = user._id;
-                token.name = user.username;
-                token.fullName = user.fullName;
+                token.id = user.id;
+                token.username = user.username ?? user.email.split('@')[0];
+                token.first_name = user.first_name;
+                token.last_name = user.last_name;
+                token.phone = user.phone;
+                token.date_of_birth = user.date_of_birth;
+                token.gender = user.gender;
+                token.image = user.profile_picture_url;
                 token.bio = user.bio;
-                token.image = user.profilePicture;
-                token.role = user.role;
-                token.sports = user.sports;
-                token.teams = user.teams;
-                token.eventsJoined = user.eventsJoined;
-                token.friends = user.friends;
-
+                token.user_type = user.user_type;
+                token.status = user.status;
+                token.access_token = user.refresh_token;  // refresh_token should be changed to access_token
             }
             return token
         },
         async session({ session, user, token }) {
             session.user.id = token.id;
-            session.user.fullName = token.fullName;
+            session.user.username = token.username;
+            session.user.first_name = token.first_name;
+            session.user.last_name = token.last_name;
+            session.user.phone = token.phone;
+            session.user.date_of_birth = token.date_of_birth;
+            session.user.gender = token.gender;
             session.user.image = token.image;
             session.user.bio = token.bio;
-            session.user.role = token.role;
-            session.user.sports = token.sports;
-            session.user.teams = token.teams;
-            session.user.eventsJoined = token.eventsJoined;
-            session.user.friends = token.friends;
+            session.user.user_type = token.user_type;
+            session.user.status = token.status;
+            session.user.access_token = token.access_token;
             return session
         },
     }
@@ -63,4 +75,4 @@ export const authOptions = {
 
 const handler = NextAuth(authOptions)
 
-export { handler as GET, handler as POST }
+export { handler as GET, handler as POST };
