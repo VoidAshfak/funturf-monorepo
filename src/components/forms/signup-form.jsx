@@ -17,7 +17,15 @@ import { Calendar as CalendarIcon } from "lucide-react"
 import Link from "next/link"
 import { Controller, useForm } from "react-hook-form"
 import InputField from "../InputField"
+import MultiSelect from "../MultiSelect"
 import RequiredSign from "../RequiredSign"
+import Image from "next/image"
+
+const sportsOptions = [
+    { id: 1, value: 'football', label: 'Football' },
+    { id: 2, value: 'cricket', label: 'Cricket' },
+    { id: 3, value: 'badminton', label: 'Badminton' },
+]
 
 export function SignupForm({
     className,
@@ -29,15 +37,45 @@ export function SignupForm({
         control,
         handleSubmit,
         watch,
-        formState: { errors },
+        formState: { errors, isSubmitting },
     } = useForm({
         defaultValues: {
             gender: "male",
             date_of_birth: null,
+            sports: []
         },
     });
 
-    const onSubmit = (data) => console.log(data)
+    const onSubmit = async (data) => {
+        const { picture, confirmPassword, ...rest } = data;
+
+        const formdata = new FormData();
+        formdata.append('userInfo', new Blob([JSON.stringify(rest)], { type: "application/json" }));
+        formdata.append("picture", picture[0]);
+
+        try {
+            const response = await fetch("https://app4-osju.onrender.com/api/v1/users/register", {
+                method: "POST",
+                body: formdata,
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log("✅ Successfully submitted:", result);
+            alert("User registered successfully!");
+        } catch (error) {
+            console.error("❌ Error submitting form:", error);
+            alert("Something went wrong while submitting the form.");
+        }
+    }
+
+    const picture = watch("picture");
+    const previewUrl = picture?.length
+        ? URL.createObjectURL(picture[0])
+        : null;
 
     return (
         <form
@@ -193,11 +231,16 @@ export function SignupForm({
                                             className={`data-[empty=true]:text-muted-foreground w-full justify-start text-left font-normal ${errors?.date_of_birth ? 'border-2 border-red-500' : ''}`}
                                         >
                                             <CalendarIcon />
-                                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                                            {field.value ? format(field.value, "PPP") : <span>Enter your birth date</span>}
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0">
-                                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} />
+                                        <Calendar
+                                            mode="single"
+                                            captionLayout="dropdown"
+                                            selected={field.value}
+                                            onSelect={field.onChange}
+                                        />
                                     </PopoverContent>
                                 </Popover>
                             )}
@@ -229,13 +272,61 @@ export function SignupForm({
                             id="address"
                             name="address"
                             rows="4"
-                            placeholder="Tell us about yourself..."
+                            placeholder="Enter your address"
                             className={`${errors?.address ? 'border-2 border-red-500' : ''}`}
                             {...register("address", {
                                 required: "Address is required"
                             })}
                         />
                     </InputField>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="Sports">
+                        Sports
+                    </Label>
+                    <InputField errors={errors}>
+                        <Controller
+                            name="sports"
+                            control={control}
+                            rules={{}}
+                            render={({ field }) => (
+                                <MultiSelect
+                                    options={sportsOptions}
+                                    values={field.value}
+                                    onChange={field.onChange}
+                                    placeholder="Interested Sports"
+                                />
+                            )}
+                        />
+                    </InputField>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="picture">
+                        Picture
+                        <RequiredSign />
+                    </Label>
+                    <InputField errors={errors}>
+                        <Input
+                            id="picture"
+                            type="file"
+                            className={`${errors?.picture ? 'border-2 border-red-500' : ''}`}
+                            accept="image/*"
+                            {...register("picture", {
+                                required: 'Please enter an image'
+                            })}
+                        />
+                    </InputField>
+                    {previewUrl && (
+                        <Image
+                            src={previewUrl}
+                            alt="Preview"
+                            width={120}
+                            height={120}
+                            className="w-32 h-32 object-cover rounded-md"
+                        />
+                    )}
                 </div>
 
                 <div className="space-y-2">
@@ -269,7 +360,7 @@ export function SignupForm({
                         <Input
                             id="confirmPassword"
                             name="confirmPassword"
-                            type="pssword"
+                            type="password"
                             className={`${errors?.confirmPassword ? 'border-2 border-red-500' : ''}`}
                             {...register("confirmPassword", {
                                 required: "Confirm your password",
@@ -285,7 +376,7 @@ export function SignupForm({
                 <Button
                     type="submit"
                     className="w-1/3"
-                // disabled={loading}
+                    disabled={isSubmitting}
                 >
                     {/* {loading && <Loader2 className="animate-spin" />} */}
                     Sign Up
