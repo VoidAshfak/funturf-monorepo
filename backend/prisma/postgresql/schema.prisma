@@ -80,9 +80,6 @@ model bookings {
   user_id                            String               @db.Uuid
   event_id                           String?              @db.Uuid
   booking_date                       DateTime             @db.Date
-  start_time                         DateTime             @db.Time(6)
-  end_time                           DateTime             @db.Time(6)
-  duration_hours                     Decimal              @db.Decimal(3, 1)
   total_amount                       Decimal              @db.Decimal(10, 2)
   discount_amount                    Decimal?             @default(0) @db.Decimal(10, 2)
   final_amount                       Decimal              @db.Decimal(10, 2)
@@ -100,6 +97,7 @@ model bookings {
   check_out_time                     DateTime?            @db.Timestamp(6)
   created_at                         DateTime?            @default(now()) @db.Timestamp(6)
   updated_at                         DateTime?            @default(now()) @db.Timestamp(6)
+  slot                               Json
   users_bookings_cancelled_byTousers users?               @relation("bookings_cancelled_byTousers", fields: [cancelled_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   events_bookings_event_idToevents   events?              @relation("bookings_event_idToevents", fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   grounds                            grounds              @relation(fields: [ground_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -109,7 +107,6 @@ model bookings {
   promotion_usage                    promotion_usage[]
   reviews                            reviews[]
 
-  @@unique([ground_id, booking_date, start_time, end_time, booking_status], map: "unique_booking")
   @@index([booking_date], map: "idx_bookings_booking_date")
   @@index([event_id], map: "idx_bookings_event_id")
   @@index([ground_id], map: "idx_bookings_ground_id")
@@ -303,6 +300,7 @@ model grounds {
   bookings              bookings[]
   events                events[]
   turfs                 turfs               @relation(fields: [turf_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  slots                 slots?
 
   @@index([sport_type], map: "idx_grounds_sport_type")
   @@index([status], map: "idx_grounds_status")
@@ -629,6 +627,28 @@ model wallets {
   users               users                 @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([user_id], map: "idx_wallets_user_id")
+}
+
+model slots {
+  ground_id String   @id @db.Uuid
+  t0000     Boolean? @default(true)
+  t0130     Boolean? @default(true)
+  t0300     Boolean? @default(true)
+  t0430     Boolean? @default(true)
+  t0600     Boolean? @default(true)
+  t0730     Boolean? @default(true)
+  t0900     Boolean? @default(true)
+  t1030     Boolean? @default(true)
+  t1200     Boolean? @default(true)
+  t1330     Boolean? @default(true)
+  t1500     Boolean? @default(true)
+  t1630     Boolean? @default(true)
+  t1800     Boolean? @default(true)
+  t1930     Boolean? @default(true)
+  t2100     Boolean? @default(true)
+  t2230     Boolean? @default(true)
+  date      DateTime @default(dbgenerated("'1999-01-01'::date")) @db.Date
+  grounds   grounds  @relation(fields: [ground_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_grounds")
 }
 
 enum age_group_type {
