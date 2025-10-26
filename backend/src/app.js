@@ -28,6 +28,7 @@ import userRoute from "./routes/user.route.js";
 import turfmateRoute from "./routes/turfmate.route.js";
 import eventRoute from "./routes/event.route.js";
 import venueRoute from "./routes/venue.route.js";
+import bookingRoute from "./routes/booking.route.js"
 
 
 // routes declare
@@ -35,5 +36,6 @@ app.use("/api/v1/users", userRoute);
 app.use("/api/v1/turfmates", turfmateRoute);
 app.use("/api/v1/event", eventRoute);
 app.use("/api/v1/venue", venueRoute);
+app.use("/api/v1/booking", bookingRoute)
 
 export {app};
