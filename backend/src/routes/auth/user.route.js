@@ -6,12 +6,12 @@ import {
     tokenRefresh, 
     varifyLogin ,
     getUserById
-} from "../controllers/user.controller.js";
-import {upload} from "../middlewares/multer.middleware.js";
+} from "../../controllers/auth/user.controller.js"
+import {upload} from "../../middlewares/file-upload/multer.middleware.js";
 import { 
     verifyJWT, 
     encryptPassword 
-} from "../middlewares/auth.middleware.js";
+} from "../../middlewares/auth/auth.middleware.js";
 
 const router = Router();
 

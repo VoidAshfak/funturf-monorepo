@@ -1,7 +1,7 @@
-import { pgClient } from "../prisma.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/apiError.js";
-import { ApiResponse } from "../utils/apiResponse.js";
+import { pgClient } from "../../prisma.js";
+import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ApiError } from "../../utils/apiError.js";
+import { ApiResponse } from "../../utils/apiResponse.js";
 
 
 const getAvailableSlots = asyncHandler(async (req, res) => {

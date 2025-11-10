@@ -1,7 +1,7 @@
-import { pgClient } from "../prisma.js";
-import { ApiError } from "../utils/apiError.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiResponse } from "../utils/apiResponse.js";
+import { pgClient } from "../../prisma.js";
+import { ApiError } from "../../utils/apiError.js";
+import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ApiResponse } from "../../utils/apiResponse.js";
 
 
 const checkAvailability = asyncHandler(async (req, res, next) => {    

@@ -1,11 +1,11 @@
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/apiError.js";
-import { ApiResponse } from "../utils/apiResponse.js";
-import { uploadMedia } from "../utils/mediaUpload.js"
+import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ApiError } from "../../utils/apiError.js";
+import { ApiResponse } from "../../utils/apiResponse.js";
+import { uploadMedia } from "../../utils/mediaUpload.js"
 import jwt from "jsonwebtoken"
-import { mongoClient, pgClient } from "../prisma.js"
+import { mongoClient, pgClient } from "../../prisma.js"
 import bcrypt from "bcrypt"
-import userCache from "../utils/cache.js";
+import userCache from "../../utils/cache.js";
 
 
 const generateAccessToken = (user) => {

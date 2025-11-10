@@ -24,11 +24,11 @@ app.use(cookieParser()); // cookie parser setup
 
 
 // routes import
-import userRoute from "./routes/user.route.js";
-import turfmateRoute from "./routes/turfmate.route.js";
-import eventRoute from "./routes/event.route.js";
-import venueRoute from "./routes/venue.route.js";
-import bookingRoute from "./routes/booking.route.js"
+import userRoute from "./routes/auth/user.route.js";
+import turfmateRoute from "./routes/user/turfmate.route.js";
+import eventRoute from "./routes/event/event.route.js";
+import venueRoute from "./routes/venue/venue.route.js";
+import bookingRoute from "./routes/venue/booking.route.js"
 
 
 // routes declare

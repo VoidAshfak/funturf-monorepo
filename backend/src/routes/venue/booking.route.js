@@ -2,9 +2,8 @@ import { Router } from "express";
 import {
     createBooking,
     getAvailableSlots
-} from "../controllers/booking.controller.js"
-import { verifyJWT } from "../middlewares/auth.middleware.js";
-import { checkAvailability } from "../middlewares/booking.middleware.js";
+} from "../../controllers/venue/booking.controller.js"
+import { verifyJWT } from "../../middlewares/auth/auth.middleware.js";
 
 const router = Router();
 

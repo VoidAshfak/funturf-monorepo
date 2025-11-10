@@ -1,9 +1,9 @@
-import { ApiError } from "../utils/apiError.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
+import { ApiError } from "../../utils/apiError.js";
+import { asyncHandler } from "../../utils/asyncHandler.js";
 import jwt from "jsonwebtoken"
-import { mongoClient, pgClient } from "../prisma.js";
+import { mongoClient, pgClient } from "../../prisma.js";
 import bcrypt from "bcrypt";
-import userCache from "../utils/cache.js";
+import userCache from "../../utils/cache.js";
 
 
 export const verifyJWT = asyncHandler(async (req, _, next) => {

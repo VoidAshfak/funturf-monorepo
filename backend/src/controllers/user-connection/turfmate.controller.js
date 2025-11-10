@@ -1,7 +1,7 @@
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiError } from "../utils/apiError.js";
-import { ApiResponse } from "../utils/apiResponse.js";
-import {mongoClient} from "../prisma.js"
+import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ApiError } from "../../utils/apiError.js";
+import { ApiResponse } from "../../utils/apiResponse.js";
+import {mongoClient} from "../../prisma.js"
 
 const sendTurfmateRequest = asyncHandler(async (req, res) => {
     const { receiverId } = req.body
