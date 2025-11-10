@@ -194,12 +194,27 @@ const loginUser = asyncHandler(async (req, res) => {
     const user = await pgClient.users.findUnique({
         where: {
             email: email
+        },
+        select: {
+            id: true,
+            email: true,
+            password_hash: true,
+            first_name: true,
+            last_name: true,
+            status: true,
+            user_type: true,
+            bio: true,
+            email_verified: true,
+            phone_verified: true,
+            profile_picture_url: true
         }
     })
         
     if (!user) {
         throw new ApiError(404, "User not found");
     }
+
+    const {password_hash, ...response} = user
 
     const isPasswordValid = await isPasswordCorrect(password, user.password_hash);
 
@@ -215,7 +230,7 @@ const loginUser = asyncHandler(async (req, res) => {
     // }
 
     const userResponse = {
-        ...user,
+        ...response,
         accessToken: accessToken,
         refreshToken: refreshToken,
         tokenExpiresIn: process.env.ACCESS_TOKEN_EXPIRY
