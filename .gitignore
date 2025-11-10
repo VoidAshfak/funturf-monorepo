@@ -142,4 +142,4 @@ backend/src/generated/
 docker_commands.txt
 postgresql-turf-schema*
 request-handling*
-git.sync_brabches.sh
+sync_github_branches_with_test-api.sh
