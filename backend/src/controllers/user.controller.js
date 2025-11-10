@@ -170,7 +170,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(newlyCreatedUser.id);
 
     const serverResponse = {
-        user: newlyCreatedUser,
+        ...newlyCreatedUser,
         accessToken: accessToken,
         refreshToken: refreshToken,
         tokenExpiresIn: process.env.ACCESS_TOKEN_EXPIRY
@@ -196,7 +196,7 @@ const loginUser = asyncHandler(async (req, res) => {
             email: email
         }
     })
-
+        
     if (!user) {
         throw new ApiError(404, "User not found");
     }
@@ -214,6 +214,13 @@ const loginUser = asyncHandler(async (req, res) => {
     //     secure: true
     // }
 
+    const userResponse = {
+        ...user,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        tokenExpiresIn: process.env.ACCESS_TOKEN_EXPIRY
+    }
+
     return res
         .status(200)
         // .cookie("accessToken", accessToken, options)
@@ -223,11 +230,8 @@ const loginUser = asyncHandler(async (req, res) => {
                 200,
                 "User Logged In Successfully.",
                 {
-                    user: user,
-                    accessToken: accessToken,
-                    refreshToken: refreshToken,
-                    tokenExpiresIn: process.env.ACCESS_TOKEN_EXPIRY
-                },
+                    user: userResponse
+                }
             )
         )
 })
