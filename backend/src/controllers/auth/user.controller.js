@@ -157,18 +157,21 @@ const registerUser = asyncHandler(async (req, res) => {
         },
         select: {
             id: true,
+            email: true,
+            password_hash: true,
             first_name: true,
             last_name: true,
-            email: true,
-            phone: true,
             status: true,
+            user_type: true,
+            bio: true,
             email_verified: true,
-            phone_verified: true
+            phone_verified: true,
+            profile_picture_url: true
         }
     })
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(newlyCreatedUser.id);
-
+    
     const serverResponse = {
         ...newlyCreatedUser,
         accessToken: accessToken,
@@ -209,12 +212,12 @@ const loginUser = asyncHandler(async (req, res) => {
             profile_picture_url: true
         }
     })
-        
+
     if (!user) {
         throw new ApiError(404, "User not found");
     }
 
-    const {password_hash, ...response} = user
+    const { password_hash, ...response } = user
 
     const isPasswordValid = await isPasswordCorrect(password, user.password_hash);
 
@@ -361,11 +364,11 @@ const getUserById = asyncHandler(async (req, res) => {
                 preferred_language: true,
                 last_login_at: true,
                 created_at: true,
-                updated_at: true                
+                updated_at: true
             }
         });
 
-        if(!user) {
+        if (!user) {
             res.status(404).json({ error: "User not found" });
         }
 
