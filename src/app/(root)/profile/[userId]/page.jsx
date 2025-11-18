@@ -1,18 +1,14 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import Link from 'next/link'
 import EventCard from '@/components/EventCard'
 import events from "../../../../../public/data/events.json"
-import { users } from '@/lib/users'
-// import { getIndividualUser } from '@/utils/getData'
+import ProfileCardSkeleton from '@/components/ProfileCardSkeleton'
 import ProfileCard from '@/components/ProfileCard'
 import Image from 'next/image'
 
 const UserProfile = async ({ params }) => {
 
-    const { userId } = await params
-    const user = users.find(user => user._id === userId)
-
-    // const user = await getIndividualUser(userId);
+    const { userId } = await params;
 
     return (
         <>
@@ -28,8 +24,10 @@ const UserProfile = async ({ params }) => {
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent rounded-b-2xl"></div>
                 </div>
 
-                <div className='bg-white w-4/5 md:w-2/3 absolute left-[11%] -bottom-[35%] md:left-[17%] md:-bottom-[20%] rounded-2xl'>
-                    <ProfileCard user={user} />
+                <div className='bg-white w-4/5 md:w-2/3 min-h-48 absolute left-[11%] -bottom-[35%] md:left-[17%] md:-bottom-[20%] rounded-2xl'>
+                    <Suspense fallback={<ProfileCardSkeleton />}>
+                        <ProfileCard userId={userId} />
+                    </Suspense>
                 </div>
             </div>
 

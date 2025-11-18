@@ -1,17 +1,14 @@
-import Image from "next/image";
 import ProfileSummary from "./ProfileSummary";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 
 export default function PlayerProfileImage({ user }) {
-    const { profilePicture, eventsJoined, teams, friends } = user;
+    const { profile_picture_url, first_name, last_name } = user;
     return (
         <>
-            <Image
-                src={profilePicture}
-                alt="User Image"
-                width={150}
-                height={150}
-                className="shadow-2xl shadow-gray-400 rounded-full"
-            />
+            <Avatar className="w-36 h-36">
+                <AvatarImage src={profile_picture_url} alt="@profile" />
+                <AvatarFallback>{first_name?.[0] + last_name?.[0]}</AvatarFallback>
+            </Avatar>
 
             <ProfileSummary user={user} />
         </>

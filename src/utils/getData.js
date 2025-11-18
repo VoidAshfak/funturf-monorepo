@@ -8,6 +8,25 @@ export async function getAllUser() {
     return users;
 };
 
+export async function getUserByUserId(userId) {
+    const res = await fetch(`https://app4-osju.onrender.com/api/v1/users/${userId}`);
+
+    if (!res.ok) {
+        return {
+            ok: false,
+            status: res.status,
+            message: "No user found",
+        };
+    }
+
+    const data = await res.json();
+    return {
+        ok: true,
+        data: data.data,
+    };
+};
+
+
 export async function getAllVenues() {
     // const venueResponse = await fetch(`/data/venues.json`);
     // return venueResponse.json();
