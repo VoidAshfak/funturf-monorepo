@@ -92,7 +92,6 @@ const registerUser = asyncHandler(async (req, res) => {
         gender,
         profile_picture_url,
         bio,
-        user_type,
         status,
         email_verified,
         phone_verified,
@@ -101,7 +100,7 @@ const registerUser = asyncHandler(async (req, res) => {
     } = req.body;
 
 
-    if (!first_name || !last_name || !email || !password_hash || !user_type) {
+    if (!first_name || !last_name || !email || !password_hash) {
         throw new ApiError(400, "All fields are required");
     }
 
@@ -111,6 +110,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const eventsJoined = 0;
     const friends = 0;
     const username = email.split("@")[0];
+    const user_type = "player";
 
     const existingUser = await pgClient.users.findUnique({
         where: {
