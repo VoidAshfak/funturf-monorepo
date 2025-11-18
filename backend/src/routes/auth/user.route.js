@@ -5,8 +5,9 @@ import {
     logoutUser, 
     tokenRefresh, 
     varifyLogin ,
-    getUserById
+    getUserById,
 } from "../../controllers/auth/user.controller.js"
+import {signMedia} from "../../controllers/auth/media.controller.js"
 import {upload} from "../../middlewares/file-upload/multer.middleware.js";
 import { 
     verifyJWT, 
@@ -29,6 +30,7 @@ router.route("/register").post(
 router.route("/login").post(loginUser);
 router.route("/refresh").post(tokenRefresh);
 router.route("/:user_id").get(getUserById);
+router.route("/media/signature").post(signMedia)
 
 
 // protected routes

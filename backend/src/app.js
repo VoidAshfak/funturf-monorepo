@@ -7,8 +7,8 @@ const app = express();
 
 // Cross Origin Resource Sharing (CORS) setup for APIs
 app.use(cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials: true,
+    origin: 'http://localhost:3000',
+    credentials: false,
 }))
 // json data setup
 app.use(express.json({

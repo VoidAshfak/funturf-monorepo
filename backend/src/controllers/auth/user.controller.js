@@ -106,8 +106,11 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     console.log("Request Body: ", req.body);
-
-
+    const sports = req.body.sports || [];
+    const teamsJoined = 0;
+    const eventsJoined = 0;
+    const friends = 0;
+    const username = email.split("@")[0];
 
     const existingUser = await pgClient.users.findUnique({
         where: {
@@ -120,12 +123,13 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(409, "User already exists");
     }
 
-    // const profilePictureLocalPath = req.files?.profilePicture[0].path;
-    // const profilePictureUrl = await uploadMedia(profilePictureLocalPath);
+    const profilePictureLocalPath = req.files?.profilePicture[0].path;
 
-    // if (!profilePictureUrl) {
-    //     throw new ApiError(400, "Profile picture upload failed");
-    // }
+    const profilePictureUrl = await uploadMedia(profilePictureLocalPath);
+
+    if (!profilePictureUrl) {
+        throw new ApiError(400, "Profile picture upload failed");
+    }
 
     const user = await pgClient.users.create({
         data: {
@@ -171,7 +175,7 @@ const registerUser = asyncHandler(async (req, res) => {
     })
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(newlyCreatedUser.id);
-    
+
     const serverResponse = {
         ...newlyCreatedUser,
         accessToken: accessToken,
@@ -225,6 +229,12 @@ const loginUser = asyncHandler(async (req, res) => {
         throw new ApiError(401, "Invalid user credentials");
     }
 
+    const sports = req.body.sports || [];
+    const teamsJoined = 0;
+    const eventsJoined = 0;
+    const friends = 0;
+    const username = user.email.split("@")[0];
+
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user.id)
 
     // const options = {
@@ -234,6 +244,11 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const userResponse = {
         ...response,
+        sports,
+        teamsJoined,
+        eventsJoined,
+        friends,
+        username,
         accessToken: accessToken,
         refreshToken: refreshToken,
         tokenExpiresIn: process.env.ACCESS_TOKEN_EXPIRY
@@ -372,12 +387,28 @@ const getUserById = asyncHandler(async (req, res) => {
             res.status(404).json({ error: "User not found" });
         }
 
+        const sports = [];
+        const teamsJoined = 0;
+        const eventsJoined = 0;
+        const friends = 0;
+        const username = user.email.split("@")[0];
+
+        const userResponse = {
+            ...user,
+            sports,
+            teamsJoined,
+            eventsJoined,
+            friends,
+            username,
+        }
+        
+
         return res
             .status(200)
             .json(new ApiResponse(
                 200,
                 "User found",
-                user
+                userResponse
             ));
 
     } catch (error) {
