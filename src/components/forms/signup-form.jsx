@@ -212,6 +212,19 @@ export function SignupForm({
                 </div>
 
                 <div className="space-y-2">
+                    <Label htmlFor="bio">Bio</Label>
+                    <InputField errors={errors}>
+                        <Textarea
+                            id="bio"
+                            name="bio"
+                            rows="4"
+                            placeholder="Tell us about yourself..."
+                            {...register("bio")}
+                        />
+                    </InputField>
+                </div>
+
+                <div className="space-y-2">
                     <Label
                     >
                         Date of Birth
@@ -250,38 +263,6 @@ export function SignupForm({
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    <InputField errors={errors}>
-                        <Textarea
-                            id="bio"
-                            name="bio"
-                            rows="4"
-                            placeholder="Tell us about yourself..."
-                            {...register("bio")}
-                        />
-                    </InputField>
-                </div>
-
-                <div className="space-y-2">
-                    <Label htmlFor="address">
-                        Address
-                        <RequiredSign />
-                    </Label>
-                    <InputField errors={errors}>
-                        <Textarea
-                            id="address"
-                            name="address"
-                            rows="4"
-                            placeholder="Enter your address"
-                            className={`${errors?.address ? 'border-2 border-red-500' : ''}`}
-                            {...register("address", {
-                                required: "Address is required"
-                            })}
-                        />
-                    </InputField>
-                </div>
-
-                <div className="space-y-2">
                     <Label htmlFor="Sports">
                         Sports
                     </Label>
@@ -293,8 +274,13 @@ export function SignupForm({
                             render={({ field }) => (
                                 <MultiSelect
                                     options={sportsOptions}
-                                    values={field.value}
-                                    onChange={field.onChange}
+                                    values={sportsOptions.filter(opt =>
+                                        field.value?.includes(opt.value)
+                                    )}
+                                    onChange={(selected) => {
+                                        const valuesOnly = selected.map(item => item.value);
+                                        field.onChange(valuesOnly);
+                                    }}
                                     placeholder="Interested Sports"
                                 />
                             )}
@@ -318,6 +304,9 @@ export function SignupForm({
                             })}
                         />
                     </InputField>
+                </div>
+
+                <div>
                     {previewUrl && (
                         <Image
                             src={previewUrl}

@@ -7,13 +7,13 @@ const SignupPage = () => {
             <div className="col-span-3 p-6 md:p-10">
                 <SignupForm />
             </div>
-            <div className="col-span-2 bg-muted relative hidden lg:block">
+            <div className="col-span-2 bg-muted relative hidden lg:block lg:sticky lg:top-0 lg:h-screen">
                 <Image
                     src="/assets/images/login.png"
                     alt="Image"
-                    fill   // replaces absolute + inset-0 + w-full + h-full
+                    fill
                     className="object-cover dark:brightness-[0.2] dark:grayscale"
-                    priority // optional: preload since it’s on login page
+                    priority
                 />
             </div>
         </div>
