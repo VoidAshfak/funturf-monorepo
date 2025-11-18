@@ -4,8 +4,7 @@ import {
     getEvents,
     deleteEvent,
     getEventById
-} from '../controllers/event.controller.js'
-import { verifyJWT } from "../middlewares/auth.middleware.js";
+} from '../../controllers/event/event.controller.js'
 
 const router = Router();
 

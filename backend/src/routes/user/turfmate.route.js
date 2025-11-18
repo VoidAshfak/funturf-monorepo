@@ -5,8 +5,8 @@ import {
     getPendingRequests,
     getMutualTurfmates,
     getTurfmates
-} from '../controllers/turfmate.controller.js'
-import {verifyJWT} from '../middlewares/auth.middleware.js'
+} from '../../controllers/user-connection/turfmate.controller.js'
+import {verifyJWT} from '../../middlewares/auth/auth.middleware.js'
 
 const router = Router();
 

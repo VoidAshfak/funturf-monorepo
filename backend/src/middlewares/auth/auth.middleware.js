@@ -1,19 +1,26 @@
-import { ApiError } from "../utils/apiError.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
+import { ApiError } from "../../utils/apiError.js";
+import { asyncHandler } from "../../utils/asyncHandler.js";
 import jwt from "jsonwebtoken"
-import { mongoClient, pgClient } from "../prisma.js";
+import { mongoClient, pgClient } from "../../prisma.js";
 import bcrypt from "bcrypt";
-import userCache from "../utils/cache.js";
+import userCache from "../../utils/cache.js";
 
 
 export const verifyJWT = asyncHandler(async (req, _, next) => {
+
+
     try {
         const authHeader = req.headers.authorization || "";
         const token = authHeader.replace("Bearer ", "");
-        
-        if (!token) throw new ApiError(401, "Missing token");
 
-        const decodedInfo = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET)
+        // console.log("Header", authHeader);
+        // console.log("Token", token);
+
+        if (!token || !authHeader) throw new ApiError(401, "Missing token");
+
+        const decodedInfo = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+
+        console.log("Decoded info:", decodedInfo);
 
         // const user = await pgClient.users.findUnique({
         //     where: {

@@ -2,8 +2,7 @@ import { Router } from "express";
 import { 
     getVenues,
     getVenueById 
-} from "../controllers/venue.controller.js";
-import { verifyJWT } from "../middlewares/auth.middleware.js";
+} from "../../controllers/venue/venue.controller.js";
 
 
 const router = Router();
