@@ -218,7 +218,7 @@ const loginUser = asyncHandler(async (req, res) => {
     })
 
     if (!user) {
-        throw new ApiError(404, "User not found");
+        throw new ApiError(404, "User not found. Talking from user controller");
     }
 
     const { password_hash, ...response } = user

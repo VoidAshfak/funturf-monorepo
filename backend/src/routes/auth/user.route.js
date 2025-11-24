@@ -1,18 +1,19 @@
 import { Router } from "express";
-import { 
-    registerUser, 
-    loginUser, 
-    logoutUser, 
-    tokenRefresh, 
-    varifyLogin ,
+import {
+    registerUser,
+    loginUser,
+    logoutUser,
+    tokenRefresh,
+    varifyLogin,
     getUserById,
 } from "../../controllers/auth/user.controller.js"
-import {signMedia} from "../../controllers/auth/media.controller.js"
-import {upload} from "../../middlewares/file-upload/multer.middleware.js";
-import { 
-    verifyJWT, 
-    encryptPassword 
+import { signMedia } from "../../controllers/auth/media.controller.js"
+import { upload } from "../../middlewares/file-upload/multer.middleware.js";
+import {
+    verifyJWT,
+    encryptPassword
 } from "../../middlewares/auth/auth.middleware.js";
+import { asyncHandler } from "../../utils/asyncHandler.js";
 
 const router = Router();
 

@@ -3,11 +3,12 @@ import {
     getVenues,
     getVenueById 
 } from "../../controllers/venue/venue.controller.js";
+import {verifyJWT} from "../../middlewares/auth/auth.middleware.js"
 
 
 const router = Router();
 
-router.route("/all").get(getVenues);
+router.route("/").get(verifyJWT, getVenues);
 router.route('/:venue_id').get(getVenueById);
 
 
