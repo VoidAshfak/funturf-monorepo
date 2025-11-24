@@ -8,7 +8,7 @@ import {verifyJWT} from "../../middlewares/auth/auth.middleware.js"
 
 const router = Router();
 
-router.route("/").get(verifyJWT, getVenues);
+router.route("/").get(getVenues);
 router.route('/:venue_id').get(getVenueById);
 
 
