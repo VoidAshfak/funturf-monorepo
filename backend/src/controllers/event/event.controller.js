@@ -6,20 +6,33 @@ import { mongoClient, pgClient } from "../../prisma.js";
 
 const createEvent = asyncHandler(async (req, res) => {
     const {
+        organizer_id,
+        booking_id,
         title,
         description,
-        sport,
-        date,
-        playersRequired,
-        playersJoined,
-        status,
-        venueId,
-        rules
+        sport_type,
+        event_type,
+        event_date,
+        start_time,
+        end_time,
+        ground_id,
+        venue_id,
+        max_palyers,
+        min_Players,
+        skill_level_required,
+        age_group,
+        gender_preference,
+        entry_fee,
+        total_cost,
+        cost_split_type,
+        visibility,
+        join_approval_required,
+        ruels
     } = req.body
 
-    if (!title || !sport || !date || !venueId || !playersRequired) {
-        throw new ApiError(400, "A required field is missing");
-    }
+    // if (!title || !sport || !date || !venueId || !playersRequired) {
+    //     throw new ApiError(400, "A required field is missing");
+    // }
 
     const createdEvent = await mongoClient.event.create({
         data: {
@@ -30,9 +43,6 @@ const createEvent = asyncHandler(async (req, res) => {
             date,
             playersRequired,
             playersJoined,
-            status,
-            venueId,
-            rules
         }
     })
 

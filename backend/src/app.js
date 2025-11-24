@@ -29,13 +29,17 @@ import turfmateRoute from "./routes/user/turfmate.route.js";
 import eventRoute from "./routes/event/event.route.js";
 import venueRoute from "./routes/venue/venue.route.js";
 import bookingRoute from "./routes/venue/booking.route.js"
+import { errorHandler } from "./utils/errorHandler.js";
 
 
 // routes declare
 app.use("/api/v1/users", userRoute);
 app.use("/api/v1/turfmates", turfmateRoute);
-app.use("/api/v1/event", eventRoute);
-app.use("/api/v1/venue", venueRoute);
-app.use("/api/v1/booking", bookingRoute)
+app.use("/api/v1/events", eventRoute);
+app.use("/api/v1/venues", venueRoute);
+app.use("/api/v1/bookings", bookingRoute);
+
+app.use(errorHandler);
+
 
 export {app};
