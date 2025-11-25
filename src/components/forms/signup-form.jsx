@@ -20,6 +20,7 @@ import InputField from "../InputField"
 import MultiSelect from "../MultiSelect"
 import RequiredSign from "../RequiredSign"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 
 const sportsOptions = [
     { id: 1, value: 'football', label: 'Football' },
@@ -31,6 +32,7 @@ export function SignupForm({
     className,
     ...props
 }) {
+    const router = useRouter();
 
     const {
         register,
@@ -47,30 +49,60 @@ export function SignupForm({
     });
 
     const onSubmit = async (data) => {
-        const { picture, confirmPassword, ...rest } = data;
+        const { picture, password, confirmPassword, ...rest } = data;
 
         const formdata = new FormData();
-        formdata.append('userInfo', new Blob([JSON.stringify(rest)], { type: "application/json" }));
-        formdata.append("picture", picture[0]);
+        formdata.append("image", picture[0]);
 
         try {
-            const response = await fetch("https://app4-osju.onrender.com/api/v1/users/register", {
+            // Upload to your Next.js backend (NOT IMGBB directly)
+            const uploadRes = await fetch("/api/upload", {
                 method: "POST",
                 body: formdata,
             });
+
+            const uploadData = await uploadRes.json();
+
+            if (!uploadRes.ok) {
+                throw new Error(uploadData.error || "Image upload failed!");
+            }
+
+            const imageUrl = uploadData.url;
+            if (!imageUrl) {
+                throw new Error("Image URL not found");
+            }
+
+            // Now register user
+            const response = await fetch(
+                "https://app4-osju.onrender.com/api/v1/users/register",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        ...rest,
+                        password_hash: password,
+                        profile_picture_url: imageUrl,
+                    }),
+                }
+            );
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const result = await response.json();
-            console.log("✅ Successfully submitted:", result);
+            
             alert("User registered successfully!");
+            router.push("/login");
         } catch (error) {
-            console.error("❌ Error submitting form:", error);
-            alert("Something went wrong while submitting the form.");
+            console.error("Error submitting:", error);
+            alert("Something went wrong.");
         }
-    }
+    };
+
+
 
     const picture = watch("picture");
     const previewUrl = picture?.length
