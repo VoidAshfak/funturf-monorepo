@@ -28,11 +28,8 @@ export async function getUserByUserId(userId) {
 
 
 export async function getAllVenues() {
-    // const venueResponse = await fetch(`/data/venues.json`);
-    // return venueResponse.json();
     const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues`);
-    const venues = await res.json();
-    return venues;
+    return res.json();
 };
 
 export async function getAllEvents() {

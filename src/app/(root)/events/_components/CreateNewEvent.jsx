@@ -11,8 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { getAllVenues } from "@/utils/getData";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 const players = [
@@ -23,24 +25,33 @@ const players = [
 
 export default function CreateNewEvent() {
 
+    const [venues, setVenues] = useState([]);
+    const [grounds, setGrounds] = useState([]);
+    const [sports, setSports] = useState([]);
+
     const {
         register,
         control,
         handleSubmit,
         formState: { errors },
-        watch
+        watch,
+        setValue
     } = useForm({
         defaultValues: {
-            sport_type: 'football',
-            event_type: '',
             title: '',
-            description: '',
-            venue_name: '',
+            venue_id: '',
+            ground_id: '',
+            sport_type: '',
             event_date: '',
             start_time: '',
             end_time: '',
-            number_of_players_required: '',
+            description: '',
+            max_palyers: 1,
+            min_Players: 1,
+            event_type: 'friendly',
             skill_level_required: 'any',
+            total_cost: '',
+            cost_split_type: 'equal',
             current_players: []
         }
     });
@@ -49,6 +60,19 @@ export default function CreateNewEvent() {
         console.log(values)
     };
 
+    const fetchVenues = async () => {
+        try {
+            const { data: allVenues } = await getAllVenues();
+            setVenues(allVenues);
+        } catch (error) {
+            setVenues([]);
+        }
+    };
+
+    useEffect(() => {
+        fetchVenues();
+    }, []);
+
     return (
         <Dialog className="w-[500px]">
             <DialogTrigger asChild>
@@ -56,9 +80,10 @@ export default function CreateNewEvent() {
                     Create New Event
                 </Button>
             </DialogTrigger>
+
             <DialogContent className="max-h-11/12 overflow-auto ">
                 <DialogHeader className="sm:text-center">
-                    <DialogTitle>Create Your Event</DialogTitle>
+                    <DialogTitle>Create Your Event </DialogTitle>
                     <DialogDescription>
                         Enter your information below to create your event
                     </DialogDescription>
@@ -68,67 +93,86 @@ export default function CreateNewEvent() {
                     className="space-y-5"
                     onSubmit={handleSubmit(onSubmit)}
                 >
-                    <InputField errors={errors}>
-                        <Controller
-                            name="sport_type"
-                            control={control}
-                            rules={{ required: "First Select a sport" }}
-                            render={({ field }) => (
-                                <Select
-                                    defaultValue={field.value}
-                                    onValueChange={field.onChange}
-                                >
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Select Sport" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="cricket">Cricket</SelectItem>
-                                        <SelectItem value="football">Football</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        />
-                    </InputField>
 
+                    {/* title */}
+                    <div className="space-y-2">
+                        <Label>Event Title <RequiredSign /> </Label>
+                        <InputField errors={errors}>
+                            <Input
+                                type="text"
+                                id="title"
+                                placeholder="Enter Event Title"
+                                className={`${errors?.title ? 'border-2 border-red-500' : ''}`}
+                                {...register("title", {
+                                    required: "Event title is required"
+                                })}
+                            />
+                        </InputField>
+                    </div>
+
+                    {/* venue and ground */}
                     <div className="grid grid-cols-2 gap-5">
                         <div className="space-y-2">
-                            <Label>Event Title <RequiredSign /> </Label>
+                            <Label>Venue <RequiredSign /></Label>
                             <InputField errors={errors}>
-                                <Input
-                                    type="text"
-                                    id="title"
-                                    placeholder="Enter Event Title"
-                                    className={`${errors?.title ? 'border-2 border-red-500' : ''}`}
-                                    {...register("title", {
-                                        required: "Event title is required"
-                                    })}
+                                <Controller
+                                    name="venue_id"
+                                    control={control}
+                                    rules={{ required: "Select a venue" }}
+                                    render={({ field }) => (
+                                        <Select
+                                            value={field.value}
+                                            onValueChange={(value) => {
+                                                field.onChange(value);
+                                                const grounds = venues.find(venue => venue.id === value)?.grounds;
+                                                setGrounds(grounds);
+                                                setValue("ground_id", "");
+                                                setValue("sport_type", "");
+                                                setSports([]);
+                                            }}
+                                        >
+                                            <SelectTrigger className={`w-full ${errors?.venue_id ? 'border-2 border-red-500' : ''}`}>
+                                                <SelectValue placeholder="Select Venue" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {venues.map((venue) => (
+                                                    <SelectItem key={venue.id} value={venue.id}>
+                                                        {venue.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
                                 />
                             </InputField>
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Event Type <RequiredSign /> </Label>
+                            <Label>Ground <RequiredSign /> </Label>
                             <InputField errors={errors}>
                                 <Controller
-                                    name="event_type"
+                                    name="ground_id"
                                     control={control}
-                                    rules={{ required: "Select a type" }}
+                                    rules={{ required: "Select a ground" }}
                                     render={({ field }) => (
                                         <Select
-                                            defaultValue={field.value}
-                                            onValueChange={field.onChange}
+                                            value={field.value}
+                                            onValueChange={(value) => {
+                                                field.onChange(value);
+                                                const sports = grounds.find(ground => ground.id === value).sport_type;
+                                                setSports(Array.isArray(sports) ? sports : [sports]);
+                                                setValue("sport_type", "");
+                                            }}
                                         >
                                             <SelectTrigger
-                                                className={`w-full ${errors?.event_type ? 'border-2 border-red-500' : ''}`}
+                                                className={`w-full ${errors?.ground_id ? 'border-2 border-red-500' : ''}`}
                                             >
-                                                <SelectValue placeholder="Select Event Type" />
+                                                <SelectValue placeholder="Select Ground" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="friendly">Friendly</SelectItem>
-                                                <SelectItem value="tournament">Tournament</SelectItem>
-                                                <SelectItem value="practice">Practice</SelectItem>
-                                                <SelectItem value="league">League</SelectItem>
-                                                <SelectItem value="pickup">Pickup</SelectItem>
+                                                {grounds.map((ground) => (
+                                                    <SelectItem key={ground.id} value={ground.id}>{ground.name}</SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     )}
@@ -137,40 +181,32 @@ export default function CreateNewEvent() {
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <Label>Event Details  </Label>
-                        <InputField errors={errors}>
-                            <Textarea
-                                type="text"
-                                id="description"
-                                placeholder="Enter Event Details Here"
-                                className={`${errors?.description ? 'border-2 border-red-500' : ''}`}
-                                {...register("description")}
-                            />
-                        </InputField>
-                    </div>
-
+                    {/* sport and date */}
                     <div className="grid grid-cols-2 gap-5">
                         <div className="space-y-2">
-                            <Label>Venue </Label>
-                            <Controller
-                                name="venue_name"
-                                control={control}
-                                render={({ field }) => (
-                                    <Select
-                                        defaultValue={field.value}
-                                        onValueChange={field.onChange}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Select Venue" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="venue1">Venue 1</SelectItem>
-                                            <SelectItem value="venue2">Venue 2</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                            />
+                            <Label>Sport<RequiredSign /> </Label>
+                            <InputField errors={errors}>
+                                <Controller
+                                    name="sport_type"
+                                    control={control}
+                                    rules={{ required: "First Select a sport" }}
+                                    render={({ field }) => (
+                                        <Select
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                        >
+                                            <SelectTrigger className={`w-full ${errors?.sport_type ? 'border-2 border-red-500' : ''}`}>
+                                                <SelectValue placeholder="Select Sport" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {sports.map((sport) => (
+                                                    <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                />
+                            </InputField>
                         </div>
 
                         <div className="space-y-2">
@@ -205,6 +241,7 @@ export default function CreateNewEvent() {
                         </div>
                     </div>
 
+                    {/* Start and End time */}
                     <fieldset className="border border-gray-300 rounded-xl p-4">
                         <legend className="px-2 text-sm  text-gray-700">Select Slot</legend>
                         <div className="grid grid-cols-2 gap-5">
@@ -235,21 +272,93 @@ export default function CreateNewEvent() {
                         </div>
                     </fieldset>
 
+                    {/* event details */}
+                    <div className="space-y-2">
+                        <Label>Event Details  </Label>
+                        <InputField errors={errors}>
+                            <Textarea
+                                type="text"
+                                id="description"
+                                placeholder="Enter Event Details Here"
+                                className={`${errors?.description ? 'border-2 border-red-500' : ''}`}
+                                {...register("description")}
+                            />
+                        </InputField>
+                    </div>
+
+                    {/* max player, min player, event type, skill level */}
                     <div className="grid grid-cols-2 gap-5">
                         <div className="space-y-2">
-                            <Label>Number of Players Required <RequiredSign /></Label>
+                            <Label>Minimum Players Required <RequiredSign /></Label>
                             <InputField errors={errors}>
                                 <Input
                                     type="number"
-                                    className={`${errors?.number_of_players_required ? 'border-2 border-red-500' : ''}`}
-                                    {...register('number_of_players_required', {
-                                        required: "Enter number of players required"
+                                    className={`${errors?.min_Players ? 'border-2 border-red-500' : ''}`}
+                                    {...register('min_Players', {
+                                        required: "Enter minimum number of players required",
+                                        min: {
+                                            value: 1,
+                                            message: "Minimum players must be at least 1"
+                                        }
                                     })}
                                 />
                             </InputField>
                         </div>
                         <div className="space-y-2">
-                            <Label>Skill Level</Label>
+                            <Label>Maximum Players Required <RequiredSign /></Label>
+                            <InputField errors={errors}>
+                                <Input
+                                    type="number"
+                                    className={`${errors?.max_palyers ? 'border-2 border-red-500' : ''}`}
+                                    {...register('max_palyers', {
+                                        required: "Enter maximum number of players can join",
+                                        min: {
+                                            value: 1,
+                                            message: "Maximum players must be at least 1"
+                                        },
+                                        validate: (value) => {
+                                            const minPlayers = Number(watch("min_Players"));
+                                            return (
+                                                Number(value) >= minPlayers ||
+                                                `Maximum players cannot be less than minimum players (${minPlayers})`
+                                            );
+                                        }
+                                    })}
+                                />
+                            </InputField>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Event Type <RequiredSign /> </Label>
+                            <InputField errors={errors}>
+                                <Controller
+                                    name="event_type"
+                                    control={control}
+                                    rules={{ required: "Select a type" }}
+                                    render={({ field }) => (
+                                        <Select
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                        >
+                                            <SelectTrigger
+                                                className={`w-full ${errors?.event_type ? 'border-2 border-red-500' : ''}`}
+                                            >
+                                                <SelectValue placeholder="Select Event Type" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="friendly">Friendly</SelectItem>
+                                                <SelectItem value="tournament">Tournament</SelectItem>
+                                                <SelectItem value="practice">Practice</SelectItem>
+                                                <SelectItem value="league">League</SelectItem>
+                                                <SelectItem value="pickup">Pickup</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                />
+                            </InputField>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Skill Level <RequiredSign /></Label>
                             <InputField errors={errors}>
                                 <Controller
                                     name="skill_level_required"
@@ -277,6 +386,55 @@ export default function CreateNewEvent() {
                         </div>
                     </div>
 
+                    {/* event fee and cost split type */}
+                    <div className="grid grid-cols-2 gap-5">
+                        <div className="space-y-2">
+                            <Label>Total Cost (BDT)  <RequiredSign /></Label>
+                            <InputField errors={errors}>
+                                <Input
+                                    type="number"
+                                    className={`${errors?.total_cost ? 'border-2 border-red-500' : ''}`}
+                                    {...register('total_cost', {
+                                        required: "Enter event cost",
+                                        min: {
+                                            value: 1,
+                                            message: "Cost must be greater than 0"
+                                        },
+                                    })}
+                                />
+                            </InputField>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Cost Split <RequiredSign /> </Label>
+                            <InputField errors={errors}>
+                                <Controller
+                                    name="cost_split_type"
+                                    control={control}
+                                    rules={{ required: "Select a ground" }}
+                                    render={({ field }) => (
+                                        <Select
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                        >
+                                            <SelectTrigger
+                                                className={`w-full ${errors?.cost_split_type ? 'border-2 border-red-500' : ''}`}
+                                            >
+                                                <SelectValue placeholder="Select Ground" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="equal">Equal</SelectItem>
+                                                <SelectItem value="organizer_pays">Organizer Pays</SelectItem>
+                                                <SelectItem value="custom">Custom</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                />
+                            </InputField>
+                        </div>
+                    </div>
+
+                    {/* add players */}
                     <div className="space-y-2">
                         <Label htmlFor="addPlayers">Add Players</Label>
                         <Controller
