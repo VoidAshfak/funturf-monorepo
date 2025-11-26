@@ -141,9 +141,7 @@ import { ApiResponse } from "../../utils/apiResponse.js";
 
 // })
 
-const getVenues = asyncHandler(async (req, res) => {
-
-
+const getVenueList = asyncHandler(async (req, res) => {
     const venues = await pgClient.turfs.findMany({
         select: {
             id: true,
@@ -163,7 +161,19 @@ const getVenues = asyncHandler(async (req, res) => {
     return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, venues));
 })
 
+const getVenues = asyncHandler(async (req, res) => {
 
+    const venues = await pgClient.turfs.findMany({
+        omit: {
+            advance_booking_days: true,
+            holiday_dates: true,
+        }
+    })
+
+    if (!venues) throw new ApiError(404, "Not found");
+
+    return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, venues));
+})
 
 const getVenueById = asyncHandler(async (req, res) => {
     const { venue_id } = req.params;
@@ -193,5 +203,6 @@ const getVenueById = asyncHandler(async (req, res) => {
 
 export {
     getVenues,
-    getVenueById
+    getVenueList,
+    getVenueById,
 }
