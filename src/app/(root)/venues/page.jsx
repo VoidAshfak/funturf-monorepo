@@ -28,10 +28,10 @@ export default async function AllVenues() {
             </div>
 
             <div className='grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 p-3 md:p-8'>
-                {venues?.map((venue) => (
+                {venues.data?.map((venue) => (
                     <Link
-                        key={venue._id}
-                        href={`/venues/${venue._id}`}
+                        key={venue.id}
+                        href={`/venues/${venue.id}`}
                     >
                         <VenueCard venue={venue} />
                     </Link>
