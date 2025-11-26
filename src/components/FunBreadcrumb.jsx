@@ -13,5 +13,7 @@ export default function FunBreadcrumb() {
             return <p className="text-gray-600 font-sans">Bookings</p>
         case '/dashboard/turfs':
             return <p className="text-gray-600 font-sans">Manage Turfs</p>
+        case '/dashboard/turfs/add-new-turf':
+            return <p className="text-gray-600 font-sans">Manage Turfs / Add</p>
     }
 }

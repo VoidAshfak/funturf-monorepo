@@ -1,7 +1,9 @@
+import AddButton from "./_components/AddButton";
+
 export default function DashboardTurfsPage() {
     return (
         <>
-            <p>Turfs page</p>
+            <AddButton />
         </>
     )
 }
