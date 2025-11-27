@@ -88,7 +88,7 @@ export const venuedata = {
         opening_time: '',
         closing_time: '',
     },
-    images: [],
+    images: null,
 
     total_grounds: '',
     grounds: [

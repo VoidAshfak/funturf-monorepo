@@ -1,10 +1,12 @@
 import InputField from "@/components/InputField";
 import RequiredSign from "@/components/RequiredSign";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FACILITIES, SPORTS } from "@/utils/constants";
+import { Upload, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import ButtonContainer from "./ButtonContainer";
 
@@ -22,6 +24,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
 
     const selectedSports = watch('sports_available') || [];
     const selectedAmenities = watch('facilities') || [];
+    const inputImage = watch('images');
 
     const submitHandler = (values) => {
         setFormdata(prev => ({ ...prev, ...values }));
@@ -42,6 +45,19 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
             ? current.filter(a => a !== amenity)
             : [...current, amenity];
         setValue('facilities', updated);
+    };
+
+    const handleImageUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const imageObj = {
+            file,
+            preview: URL.createObjectURL(file),
+            name: file.name,
+        };
+
+        setValue("images", imageObj);
     };
 
     return (
@@ -157,6 +173,59 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                         {...register('rules_and_regulations')}
                     />
                 </InputField>
+            </div>
+
+            <div>
+                <h4 className="font-semibold text-gray-900 mb-4">Venue Image</h4>
+
+                <div className="mb-4">
+                    <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e)}
+                        className="hidden"
+                        id={`image-upload`}
+                    />
+                    <Label
+                        htmlFor={`image-upload`}
+                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
+                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                        <span className="text-sm text-gray-600">Click to upload images</span>
+                        <span className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB</span>
+                    </Label>
+                </div>
+
+                {inputImage ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="relative group">
+                            <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                                <img
+                                    src={inputImage.preview || inputImage}
+                                    alt={inputImage.name || "Image"}
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+
+                            <Button
+                                type="button"
+                                onClick={() => setValue("images", null)}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-600"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                                {inputImage.name}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center py-4 text-gray-500 text-sm">
+                        No image uploaded yet
+                    </div>
+                )}
+
             </div>
 
             <ButtonContainer
