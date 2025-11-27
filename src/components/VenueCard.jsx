@@ -10,20 +10,21 @@ import {
 import Image from "next/image"
 
 export function VenueCard({ className, venue }) {
+    const { name, address_line_1, images, operating_hours, rating } = venue;
     return (
         <Card className={`border-0 transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-2 hover:z-10 cursor-pointer ${className}`}>
             <CardHeader>
-                <CardTitle className="min-h-6 w-8/12 bg-gradient-to-r from-black via-blue-500 to-green-500 inline-block text-transparent bg-clip-text"> {venue?.name} </CardTitle>
+                <CardTitle className="min-h-6 w-10/12 bg-gradient-to-r from-black via-blue-500 to-green-500 inline-block text-transparent bg-clip-text"> {name} </CardTitle>
                 <CardDescription className="flex gap-1 items-center">
                     <MapPin className="w-4 shrink-0" />
                     <span className="line-clamp-1">
-                        {venue?.address}
+                        {address_line_1} {/* SHOLUD BE CHANGED */}
                     </span>
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 <Image
-                    src={venue?.venueImages[0]}
+                    src={images?.cover || "/assets/images/venue-v1"}  // SHOLUD BE CHANGED 
                     alt="Venue Image"
                     width={300}
                     height={300}
@@ -33,11 +34,11 @@ export function VenueCard({ className, venue }) {
             <CardFooter className="flex justify-between">
                 <div className="flex items-center gap-1">
                     <Clock className="w-4" />
-                    <p className="text-sm font-semibold"> {venue?.availability} </p>
+                    <p className="text-sm font-semibold"> {operating_hours?.open} -  {operating_hours?.close} </p> {/* SHOLUD BE CHANGED */}
                 </div>
                 <div className="flex items-center gap-1">
                     <Star className="w-4 text-yellow-500" />
-                    <p className="text-sm font-semibold"> {venue?.rating} </p>
+                    <p className="text-sm font-semibold"> {rating} </p>
                 </div>
             </CardFooter>
 
