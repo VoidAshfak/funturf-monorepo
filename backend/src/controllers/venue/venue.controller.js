@@ -200,9 +200,237 @@ const getVenueById = asyncHandler(async (req, res) => {
     }
 });
 
+const createVenue = asyncHandler(async (req, res) => {
+    const {
+        name,
+        description,
+        address_line_1,
+        address_line_2,
+        phone,
+        email,
+        website_url,
+        establishment_year,
+        rules_and_regulations,
+        cancellation_policy,
+        advance_booking_days,
+        sports_available,
+        facilities,
+        rating,
+        operating_hours,
+        images,
+        grounds,
+    } = req.body;
+
+    if (
+        !name
+        || !description
+        || !address_line_1
+        || !address_line_2
+        || !phone
+        || !email
+        || !website_url
+        || !establishment_year
+        || !rules_and_regulations
+        || !cancellation_policy
+        || !advance_booking_days
+        || !sports_available
+        || !facilities
+        || !rating
+        || !operating_hours
+        || !images
+        || !grounds
+    ) {
+        throw new ApiError(400, "A required field is missing");
+    }
+
+    const isArray = Array.isArray(grounds);
+    const isGroundsValid = Array.isArray(grounds) && grounds.every(ground => (
+        ground &&
+        typeof ground === "object" &&
+        ground.hasOwnProperty("name") &&
+        ground.hasOwnProperty("ground_type") &&
+        ground.hasOwnProperty("sport_type") &&
+        ground.hasOwnProperty("surface_type") &&
+        ground.hasOwnProperty("dimensions_length_m") &&
+        ground.hasOwnProperty("dimensions_width_m") &&
+        ground.hasOwnProperty("capacity_players") &&
+        ground.hasOwnProperty("hourly_rate") &&
+        ground.hasOwnProperty("weekend_hourly_rate") &&
+        ground.hasOwnProperty("peak_hour_rate") &&
+        ground.hasOwnProperty("off_peak_hour_rate") &&
+        ground.hasOwnProperty("currency") &&
+        ground.hasOwnProperty("minimum_booking_hours") &&
+        ground.hasOwnProperty("maximum_booking_hours") &&
+        ground.hasOwnProperty("amenities") &&
+        ground.hasOwnProperty("images") &&
+        ground.hasOwnProperty("notes")
+    ));
+
+    if (!isArray || !isGroundsValid) {
+        throw new ApiError(400, "Invalid ground data");
+    }
+
+    const venue = {
+        admin_user_id: req.user?.id || "8806583a-1630-4ab3-a93b-94f5f432cc14",
+        name,
+        slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+        description,
+        address_line_1: `${address_line_1.city}, ${address_line_1.state}`,
+        address_line_2,
+        city: address_line_1.city,
+        state: address_line_1.state,
+        country: address_line_1.country,
+        postal_code: address_line_1.postal_code,
+        latitude: Number(address_line_1.latitude),
+        longitude: Number(address_line_1.longitude),
+        phone,
+        email,
+        website_url,
+        establishment_year: Number(establishment_year),
+        total_grounds: grounds.length,
+        facilities,
+        sports_available,
+        rules_and_regulations,
+        cancellation_policy,
+        status: "pending_approval",
+        verified: false,
+        rating: Number(rating),
+        total_bookings: 0,
+        operating_hours: {
+            open: operating_hours.opening_time,
+            close: operating_hours.closing_time
+        },
+        images
+    }
+
+    const venueCreated = await pgClient.turfs.create({
+        data: venue
+    })
+
+    if (!venueCreated) {
+        throw new ApiError(500, "Error creating new venue");
+    }
+
+    const numericFields = [
+        "capacity_players",
+        "hourly_rate",
+        "weekend_hourly_rate",
+        "peak_hour_rate",
+        "off_peak_hour_rate",
+        "minimum_booking_hours",
+        "maximum_booking_hours",
+        "dimensions_length_m",
+        "dimensions_width_m"
+    ];
+
+    function castGroundNumbers(ground) {
+        const result = { ...ground };
+
+        numericFields.forEach((field) => {
+            if (result[field] === "" || result[field] === null || result[field] === undefined) {
+                result[field] = null;
+            } else {
+                const num = Number(result[field]);
+                result[field] = Number.isNaN(num) ? null : num; // or throw error if you want strict
+            }
+        });
+
+        return result;
+    }
+
+    await pgClient.grounds.createMany({
+        data: grounds.map((ground) => ({
+            ...castGroundNumbers(ground),
+            turf_id: venueCreated.id
+        })),
+        skipDuplicates: true
+    });
+
+
+    return res.status(201).json(new ApiResponse(201, "New venue created successfully", venueCreated));
+
+})
+
+
+const createGround = asyncHandler(async (req, res) => {
+    const {
+        name,
+        ground_type,
+        sport_type,
+        surface_type,
+        dimensions_length_m,
+        dimensions_width_m,
+        capacity_players,
+        hourly_rate,
+        weekend_hourly_rate,
+        peak_hour_rate,
+        off_peak_hour_rate,
+        currency,
+        minimum_booking_hours,
+        maximum_booking_hours,
+        amenities,
+        images,
+        notes
+    } = req.body
+
+    if (
+        !name
+        || !ground_type
+        || !sport_type
+        || !surface_type
+        || !dimensions_length_m
+        || !dimensions_width_m
+        || !capacity_players
+        || !hourly_rate
+        || !weekend_hourly_rate
+        || !peak_hour_rate
+        || !off_peak_hour_rate
+        || !currency
+        || !minimum_booking_hours
+        || !maximum_booking_hours
+        || !amenities
+        || !images
+        || !notes
+    ) {
+        throw new ApiError(400, "A required field for ground is missing.");
+    }
+
+    const groundCreated = await pgClient.grounds.create({
+        data: {
+            name,
+            ground_type,
+            sport_type,
+            surface_type,
+            dimensions_length_m,
+            dimensions_width_m,
+            capacity_players,
+            hourly_rate,
+            weekend_hourly_rate,
+            peak_hour_rate,
+            off_peak_hour_rate,
+            currency,
+            minimum_booking_hours,
+            maximum_booking_hours,
+            status: "available",
+            amenities,
+            images,
+            notes
+        }
+    })
+
+    if (!groundCreated) {
+        throw new ApiError(500, "Error creating new ground");
+    }
+
+    return res.status(201).json(
+        new ApiResponse(201, "New ground created successfully", groundCreated)
+    )
+})
 
 export {
     getVenues,
     getVenueList,
     getVenueById,
+    createVenue,
+    createGround
 }
