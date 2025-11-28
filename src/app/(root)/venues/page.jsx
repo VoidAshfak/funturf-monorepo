@@ -1,8 +1,7 @@
 import FilterVenueInput from "@/components/FilterVanueInput";
-import { VenueCard } from "@/components/VenueCard";
+import VenueListWrapper from "@/components/VenueListWrapper";
 import { getAllVenues } from "@/utils/getData";
 import Image from "next/image";
-import Link from "next/link";
 
 export default async function AllVenues() {
     const { data: venues } = await getAllVenues();
@@ -27,16 +26,7 @@ export default async function AllVenues() {
                 <FilterVenueInput title="Find Venue" />
             </div>
 
-            <div className='grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 p-3 md:p-8'>
-                {venues.map((venue) => (
-                    <Link
-                        key={venue.id}
-                        href={`/venues/${venue.id}`}
-                    >
-                        <VenueCard venue={venue} />
-                    </Link>
-                ))}
-            </div>
+            <VenueListWrapper />
         </div>
     )
 }

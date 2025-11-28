@@ -1,9 +1,8 @@
 import HeaderText from '@/components/HeaderText'
-import { VenueCard } from '@/components/VenueCard'
+import VenueListWrapper from '@/components/VenueListWrapper'
 import Link from 'next/link'
-import venues from "../../public/data/venues.json"
 
-const FeaturedTurfs =  () => {
+const FeaturedTurfs = () => {
 
     return (
         <div>
@@ -16,13 +15,8 @@ const FeaturedTurfs =  () => {
                     See all Turfs →
                 </Link>
             </div>
-            <div className='grid sm:grid-cols-2 lg:grid-cols-3 gap-5'>
-                {venues.map((venue) => (
-                    <Link href={`/venues/${venue._id}`} key={venue._id}>
-                        <VenueCard venue={venue} />
-                    </Link>
-                ))}
-            </div>
+
+            <VenueListWrapper max={6} />
         </div>
     )
 }

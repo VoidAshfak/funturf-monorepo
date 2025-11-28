@@ -32,6 +32,11 @@ export async function getAllVenues() {
     return res.json();
 };
 
+export async function getIndividualVenueByVenueId(venueId) {
+    const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues/${venueId}`);
+    return res.json();
+};
+
 export async function getAllEvents() {
     // const eventResponse = await fetch(`/data/events.json`);
     // return eventResponse.json();
