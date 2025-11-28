@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FORM_STEPS, venuedata } from "@/utils/constants";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ProgressSteps from "./_components/ProgressSteps";
 import StepFour from './_components/StepFour';
 import StepOne from './_components/StepOne';
@@ -13,15 +13,22 @@ import { useSession } from 'next-auth/react';
 
 export default function TurfCreationForm() {
 
-    const { data: { user } } = useSession();
+    const { data: session } = useSession();
+    const user = session?.user;
 
     const [step, setStep] = useState(1);
-    const [formdata, setFormdata] = useState(
-        {
-            ...venuedata,
-            admin_user_id: user?.id
+    const [formdata, setFormdata] = useState({
+        ...venuedata,
+    });
+
+    useEffect(() => {
+        if (user?.id) {
+            setFormdata((prev) => ({
+                ...prev,
+                admin_user_id: user.id,
+            }));
         }
-    );
+    }, [user]);
 
     const renderStep = () => {
         switch (step) {
