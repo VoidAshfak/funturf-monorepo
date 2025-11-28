@@ -1,37 +1,36 @@
+import BookVenue from "@/components/BookVenue"
 import HeaderText from "@/components/HeaderText"
 import { ImageCarousel } from "@/components/ImageCarousel"
-import { Button } from "@/components/ui/button"
-import { Share2, CalendarCheck2, CheckSquareIcon, Clock } from 'lucide-react'
-import Map from "@/components/Map"
-import Link from "next/link"
-import { VenueCard } from "@/components/VenueCard"
 import RatingText from "@/components/RatingText"
-import venues from "../../../../../public/data/venues.json"
-import BookVenue from "@/components/BookVenue"
-// import { getIndividualVenue } from "@/utils/getData"
-
+import { Button } from "@/components/ui/button"
+import VenueListWrapper from "@/components/VenueListWrapper"
+import { getIndividualVenueByVenueId } from "@/utils/getData"
+import { Clock, Share2 } from 'lucide-react'
+import AvailableSports from "./_components/AvailableSports"
+import VenueFacilities from "./_components/VenueFacilities"
 
 const VenueDetails = async ({ params }) => {
-    const { venueId } = await params
+    const { venueId } = await params;
+    const { data: venue } = await getIndividualVenueByVenueId(venueId);
 
-    const venue = venues.find(venue => venue._id === venueId)
-    // const venue = await getIndividualVenue(venueId); 
+    const { name, address_line_1, rating, ratingCount = 105, images, sports_available, facilities, operating_hours, description, grounds = [] } = venue;
+    const venueImages = [images.cover, ...grounds.flatMap(ground => ground.images)];
 
     return (
 
         <div className="w-[90%] mx-auto">
             <div className="md:flex justify-between my-10">
                 <HeaderText
-                    title={venue?.name}
-                    subtitle={venue?.address}
+                    title={name}
+                    subtitle={address_line_1}
                     mapIcon={true}
                 />
-                <RatingText rating={venue?.rating} ratingCount={105} />
+                <RatingText rating={rating} ratingCount={ratingCount} />
             </div>
 
             <div className="lg:grid grid-cols-3">
                 <div className="col-span-2">
-                    <ImageCarousel images={venue?.venueImages} />
+                    <ImageCarousel images={venueImages} />
                 </div>
 
                 <div className="space-y-3 mt-5 lg:mt-0">
@@ -40,8 +39,6 @@ const VenueDetails = async ({ params }) => {
                             <div className="col-span-2 ">
                                 <BookVenue venue={venue} />
                             </div>
-
-
 
                             <div className="row-start-2">
                                 <Button
@@ -66,28 +63,25 @@ const VenueDetails = async ({ params }) => {
 
                     <div className="shadow-sm shadow-gray-300 rounded-lg p-4 ">
                         <h1 className="font-bold items-center flex pb-5"> <Clock className="mr-2" /> Open Time</h1>
-                        <p> {venue?.availability} </p>
+                        <p> {operating_hours.opening_time} - {operating_hours.closing_time} </p>
                     </div>
 
                     <div className="shadow-sm shadow-gray-300 rounded-lg p-4 ">
-                        <Map address={venue?.address} />
+                        <h1 className="font-bold">Location</h1>
+                        <p>{address_line_1}</p>
                     </div>
                 </div>
             </div>
 
             <div className="shadow-sm shadow-gray-300 rounded-lg p-4 my-5">
                 <h1 className="font-bold text-2xl">
-                    Available Sports at {venue?.name}
+                    Available Sports at {name}
                 </h1>
                 <p className="text-gray-500">(Click on sports to view price chart)</p>
-                <div className="flex flex-wrap items-center justify-start py-2">
-                    {venue?.sports.map((sport, index) => (
-                        <div key={index} className="flex flex-col items-center justify-evenly h-30 w-30 p-5 m-5 border shadow-sm hover:shadow-green-300 transition-all duration-300 will-change-transform hover:shadow-lg hover:-translate-y-1 hover:z-10 cursor-pointer" >
-                            <img src={`/assets/icons/${sport.toLowerCase()}.png`} alt="football" className="w-6 h-6" />
-                            <p className="font-bold"> {sport} </p>
-                        </div>
-                    ))}
-                </div>
+
+                <AvailableSports
+                    sports_available={sports_available ?? []}
+                />
             </div>
 
             <div className="shadow-sm shadow-gray-300 rounded-lg p-4 my-5">
@@ -95,21 +89,16 @@ const VenueDetails = async ({ params }) => {
                     Facilities
                 </h1>
 
-                <div className="flex flex-wrap items-center justify-start py-2">
-                    {venue?.facilities.map((facility, index) => (
-                        <div key={index} className="flex items-center justify-evenly p-5 m-5 " >
-                            <CheckSquareIcon className="mr-2 text-green-500" />
-                            <p className="font-bold"> {facility} </p>
-                        </div>
-                    ))}
-                </div>
+                <VenueFacilities
+                    facilities={facilities ?? []}
+                />
             </div>
 
             <div className="shadow-sm shadow-gray-300 rounded-lg p-4 my-5">
                 <h1 className="font-bold text-2xl">
-                    About {venue?.name}
+                    About {name}
                 </h1>
-                <pre className="whitespace-pre-wrap text-sm text-gray-800 py-10">{venue.about}</pre>
+                <pre className="whitespace-pre-wrap text-sm text-gray-800 py-10">{description}</pre>
             </div>
 
             <div className="mt-10">
@@ -117,13 +106,7 @@ const VenueDetails = async ({ params }) => {
                     Related Venues
                 </h1>
 
-                <div className="py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {venues.map((venue) => (
-                        <Link href={`/venues/${venue._id}`} key={venue._id}>
-                            <VenueCard venue={venue} />
-                        </Link>
-                    ))}
-                </div>
+                <VenueListWrapper />
             </div>
         </div>
     )

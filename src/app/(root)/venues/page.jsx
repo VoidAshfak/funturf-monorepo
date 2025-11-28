@@ -1,10 +1,8 @@
 import FilterVenueInput from "@/components/FilterVanueInput";
 import VenueListWrapper from "@/components/VenueListWrapper";
-import { getAllVenues } from "@/utils/getData";
 import Image from "next/image";
 
-export default async function AllVenues() {
-    const { data: venues } = await getAllVenues();
+export default function AllVenues() {
 
     return (
         <div className="relative">

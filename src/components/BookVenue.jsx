@@ -28,7 +28,7 @@ import { Label } from "./ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 export default function BookVenue({ venue }) {
-    const { _id, name, address, sports } = venue;
+    const { id, name, address, sports_available } = venue;
 
     const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -41,8 +41,8 @@ export default function BookVenue({ venue }) {
         formState: { errors }
     } = useForm({
         defaultValues: {
-            ground_id: _id,
-            sport_type: sports[0].toLowerCase(),
+            ground_id: id,
+            sport_type: sports_available[0].toLowerCase(),
             user_id: null, // check
             event_id: null, // check
             booking_date: null,
@@ -103,7 +103,7 @@ export default function BookVenue({ venue }) {
                                                 <SelectValue placeholder="Select Sport" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {(sports || []).map((sport, index) => (
+                                                {sports_available.map((sport, index) => (
                                                     <SelectItem
                                                         key={index}
                                                         value={sport.toLowerCase()}
