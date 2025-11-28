@@ -1,13 +1,22 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import AppSidebar from "./_components/AppSidebar";
 import FunBreadcrumb from "@/components/FunBreadcrumb";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../api/auth/[...nextauth]/route";
+import { redirect } from "next/navigation";
 
-export default function DashboardLayout({ children }) {
+export default async function DashboardLayout({ children }) {
+    const session = await getServerSession(authOptions);
+
+    if (!session) {
+        redirect("/login");
+    };
+
     return (
         <SidebarProvider>
             <AppSidebar />
             <main className="w-full">
-                <div className="border-b p-2.5 flex items-center gap-3 sticky top-0 bg-white">
+                <div className="border-b p-2.5 flex items-center gap-3">
                     <SidebarTrigger />
                     <FunBreadcrumb />
                 </div>
