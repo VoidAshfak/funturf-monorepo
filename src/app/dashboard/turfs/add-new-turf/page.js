@@ -9,10 +9,19 @@ import StepOne from './_components/StepOne';
 import StepThree from './_components/StepThree';
 import StepTwo from './_components/StepTwo';
 import StepFive from './_components/StepFive';
+import { useSession } from 'next-auth/react';
 
 export default function TurfCreationForm() {
+
+    const { data: { user } } = useSession();
+
     const [step, setStep] = useState(1);
-    const [formdata, setFormdata] = useState(venuedata);
+    const [formdata, setFormdata] = useState(
+        {
+            ...venuedata,
+            admin_user_id: user?.id
+        }
+    );
 
     const renderStep = () => {
         switch (step) {

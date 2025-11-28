@@ -34,7 +34,7 @@ export default function StepFive({ formdata, setStep }) {
 
             const finalPayload = {
                 ...formdata,
-                images: mainImgUrl ? [mainImgUrl] : [],
+                images: { cover: mainImgUrl ?? null },
                 grounds: updatedGrounds,
             };
 
