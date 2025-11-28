@@ -9,7 +9,7 @@ export default function InputField({ children, errors }) {
         <div className="relative">
             {children}
             {fieldError && (
-                <span className="absolute top-1/2 -translate-y-1/2 right-3">
+                <span className="absolute top-[57%] -translate-y-1/2 right-1.5">
                     <ErrorTooltip message={fieldError?.message} />
                 </span>
             )}
