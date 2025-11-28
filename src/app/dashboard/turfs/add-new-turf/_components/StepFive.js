@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { uploadImageObjArray, uploadSingleImageObj } from "@/utils/image-upload";
 import { getStatusColor } from "@/utils/utility-functions";
 import {
     Building2,
@@ -10,8 +11,49 @@ import {
     Phone,
     Users
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function StepFive({ formdata, setStep }) {
+    const router = useRouter();
+
+    const createVenue = async () => {
+
+        try {
+            const mainImgUrl = await uploadSingleImageObj(formdata.images);
+
+            const updatedGrounds = await Promise.all(
+                formdata.grounds.map(async (ground) => {
+                    const uploadedGroundImages = await uploadImageObjArray(ground.images);
+
+                    return {
+                        ...ground,
+                        images: uploadedGroundImages, // only URLs
+                    };
+                })
+            );
+
+            const finalPayload = {
+                ...formdata,
+                images: { cover: mainImgUrl ?? null },
+                grounds: updatedGrounds,
+            };
+
+            const response = await fetch("https://app4-osju.onrender.com/api/v1/venues/create-venue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(finalPayload),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                router.push('/dashboard/turfs');
+            };
+
+        } catch (error) {
+            console.error("Error submitting:", error);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -281,7 +323,7 @@ export default function StepFive({ formdata, setStep }) {
                 >Previous</Button>
 
                 <Button
-                    onClick={() => console.log(formdata)}
+                    onClick={createVenue}
                 >Submit</Button>
             </div>
         </div>

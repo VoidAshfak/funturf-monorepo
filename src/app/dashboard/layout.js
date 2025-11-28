@@ -16,7 +16,7 @@ export default async function DashboardLayout({ children }) {
         <SidebarProvider>
             <AppSidebar />
             <main className="w-full">
-                <div className="border-b p-2.5 flex items-center gap-3">
+                <div className="border-b p-2.5 flex items-center gap-3 sticky top-0 bg-white">
                     <SidebarTrigger />
                     <FunBreadcrumb />
                 </div>

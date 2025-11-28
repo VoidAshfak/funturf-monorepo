@@ -32,18 +32,11 @@ export const AMENITIES = [
     'WiFi',
 ];
 
-export const GROUND_TYPES = ['Indoor', 'Outdoor', 'Covered'];
+export const GROUND_TYPES = ['v5x5', 'v6x6', 'v7x7', 'v11x11', 'cricket_pitch', 'tennis_court', 'badminton_court', 'custom'];
 
-export const TURF_TYPES = [
-    { value: 'natural_grass', label: 'Natural Grass' },
-    { value: 'artificial_turf', label: 'Artificial Turf' },
-    { value: 'synthetic', label: 'Synthetic' },
-    { value: 'indoor', label: 'Indoor Court' }
-];
+export const SURFACE_TYPES = ['natural_grass', 'artificial_grass', 'clay', 'concrete', 'synthetic', 'other'];
 
-export const SURFACE_TYPES = ['Grass', 'Artificial Turf', 'Concrete', 'Wood', 'Clay'];
-
-export const STATUS_TYPES = ['Active', 'Inactive', 'Under Maintenance'];
+export const STATUS_TYPES = ['available', 'maintenance', 'unavailable'];
 
 export const FORM_STEPS = [
     { number: 1, title: 'Basic Info', icon: Building2 },
@@ -53,16 +46,30 @@ export const FORM_STEPS = [
     { number: 5, title: 'Review', icon: CheckCircle2 }
 ];
 
-export const FIELDS_TO_VALIDATE = {
-    1: ['venueName', 'address', 'city', 'state', 'pincode', 'contactPhone'],
-    2: ['sports', 'turfType', 'width', 'length'],
-    3: ['pricePerHour', 'openingTime', 'closingTime']
+export const groundData = {
+    name: '',
+    ground_type: '',
+    sport_type: '',
+    surface_type: '',
+    dimensions_length_m: '',
+    dimensions_width_m: '',
+    capacity_players: '',
+    hourly_rate: '',
+    weekend_hourly_rate: '',
+    peak_hour_rate: '',
+    off_peak_hour_rate: '',
+    currency: 'BDT',
+    minimum_booking_hours: '',
+    maximum_booking_hours: '',
+    status: '',
+    amenities: [],
+    images: [],
+    notes: '',
 };
 
 export const venuedata = {
     admin_user_id: '',
     name: '',
-    slug: '',
     description: '',
     address_line_1: {
         city: '',
@@ -88,51 +95,12 @@ export const venuedata = {
         opening_time: '',
         closing_time: '',
     },
-    images: [],
+    images: null,
 
-    total_grounds: '',
     grounds: [
         {
-            name: '',
-            ground_type: '',
-            sport_type: '',
-            surface_type: '',
-            dimensions_length_m: '',
-            dimensions_width_m: '',
-            capacity_players: '',
-            hourly_rate: '',
-            weekend_hourly_rate: '',
-            peak_hour_rate: '',
-            off_peak_hour_rate: '',
-            currency: 'BDT',
-            minimum_booking_hours: '',
-            maximum_booking_hours: '',
-            status: '', // ground_status_type
-            amenities: [],
-            images: [],
-            notes: '',
+            ...groundData
         }
     ],
 
-};
-
-export const groundData = {
-    name: '',
-    ground_type: '',
-    sport_type: '',
-    surface_type: '',
-    dimensions_length_m: '',
-    dimensions_width_m: '',
-    capacity_players: '',
-    hourly_rate: '',
-    weekend_hourly_rate: '',
-    peak_hour_rate: '',
-    off_peak_hour_rate: '',
-    currency: 'BDT',
-    minimum_booking_hours: '',
-    maximum_booking_hours: '',
-    status: '',
-    amenities: [],
-    images: [],
-    notes: '',
 };
