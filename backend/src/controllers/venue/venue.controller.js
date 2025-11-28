@@ -221,27 +221,27 @@ const createVenue = asyncHandler(async (req, res) => {
         grounds,
     } = req.body;
 
-    if (
-        !name
-        || !description
-        || !address_line_1
-        || !address_line_2
-        || !phone
-        || !email
-        || !website_url
-        || !establishment_year
-        || !rules_and_regulations
-        || !cancellation_policy
-        || !advance_booking_days
-        || !sports_available
-        || !facilities
-        || !rating
-        || !operating_hours
-        || !images
-        || !grounds
-    ) {
-        throw new ApiError(400, "A required field is missing");
-    }
+    // if (
+    //     !name
+    //     || !description
+    //     || !address_line_1
+    //     || !address_line_2
+    //     || !phone
+    //     || !email
+    //     || !website_url
+    //     || !establishment_year
+    //     || !rules_and_regulations
+    //     || !cancellation_policy
+    //     || !advance_booking_days
+    //     || !sports_available
+    //     || !facilities
+    //     || !rating
+    //     || !operating_hours
+    //     || !images
+    //     || !grounds
+    // ) {
+    //     throw new ApiError(400, "A required field is missing");
+    // }
 
     const isArray = Array.isArray(grounds);
     const isGroundsValid = Array.isArray(grounds) && grounds.every(ground => (
