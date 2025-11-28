@@ -1,19 +1,26 @@
 "use client"
 
-import { usePathname } from "next/navigation"
+import { usePathname } from "next/navigation";
+
+const getBreadCrumbText = (pathname) => {
+    switch (pathname) {
+        case '/dashboard':
+            return "Home"
+        case '/dashboard/bookings':
+            return "Bookings"
+        case '/dashboard/turfs':
+            return "Manage Turfs"
+        case '/dashboard/turfs/add-new-turf':
+            return "Manage Turfs / Add"
+    };
+};
 
 export default function FunBreadcrumb() {
 
     const pathname = usePathname();
-    
-    switch (pathname) {
-        case '/dashboard':
-            return <p className="text-gray-600 font-sans">Home</p>
-        case '/dashboard/bookings':
-            return <p className="text-gray-600 font-sans">Bookings</p>
-        case '/dashboard/turfs':
-            return <p className="text-gray-600 font-sans">Manage Turfs</p>
-        case '/dashboard/turfs/add-new-turf':
-            return <p className="text-gray-600 font-sans">Manage Turfs / Add</p>
-    }
+
+    return (
+        <p className="text-gray-600 font-sans">{getBreadCrumbText(pathname)}</p>
+
+    )
 }
