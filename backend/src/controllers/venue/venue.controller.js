@@ -164,9 +164,17 @@ const getVenueList = asyncHandler(async (req, res) => {
 const getVenues = asyncHandler(async (req, res) => {
 
     const venues = await pgClient.turfs.findMany({
-        omit: {
-            advance_booking_days: true,
-            holiday_dates: true,
+        select: {
+            id: true,
+            name: true,
+            address_line_1: true,
+            grounds: {
+                select: {
+                    id: true,
+                    name: true,
+                    sport_type: true
+                }
+            }
         }
     })
 
@@ -177,28 +185,28 @@ const getVenues = asyncHandler(async (req, res) => {
 
 const getVenueById = asyncHandler(async (req, res) => {
     const { venue_id } = req.params;
-    try {
-        const venue = await pgClient.turfs.findUnique({
-            where: {
-                id: venue_id
-            }
-        });
-
-        if (!venue) {
-            res.status(404).json({ error: "Venue not found" });
+    const venue = await pgClient.turfs.findUnique({
+        where: {
+            id: venue_id
+        },
+        include: {
+            grounds: true
         }
+    });
 
-        return res
-            .status(200)
-            .json(new ApiResponse(
-                200,
-                "Venue found",
-                venue
-            ));
-    } catch (error) {
-        throw new ApiError(500, "Error getting the venue");
+    if (!venue) {
+        res.status(404).json({ error: "Venue not found" });
     }
-});
+
+    return res
+        .status(200)
+        .json(new ApiResponse(
+            200,
+            "Venue found",
+            venue
+        ));
+}
+);
 
 const createVenue = asyncHandler(async (req, res) => {
     const {
@@ -221,27 +229,22 @@ const createVenue = asyncHandler(async (req, res) => {
         grounds,
     } = req.body;
 
-    // if (
-    //     !name
-    //     || !description
-    //     || !address_line_1
-    //     || !address_line_2
-    //     || !phone
-    //     || !email
-    //     || !website_url
-    //     || !establishment_year
-    //     || !rules_and_regulations
-    //     || !cancellation_policy
-    //     || !advance_booking_days
-    //     || !sports_available
-    //     || !facilities
-    //     || !rating
-    //     || !operating_hours
-    //     || !images
-    //     || !grounds
-    // ) {
-    //     throw new ApiError(400, "A required field is missing");
-    // }
+    // ---- validation stays OUTSIDE the transaction ----
+    if (
+        !name
+        || !address_line_1
+        || !address_line_2
+        || !phone
+        || !email
+        || !cancellation_policy
+        || !sports_available
+        || !facilities
+        || !operating_hours
+        || !images
+        || !grounds
+    ) {
+        throw new ApiError(400, "A required field is missing");
+    }
 
     const isArray = Array.isArray(grounds);
     const isGroundsValid = Array.isArray(grounds) && grounds.every(ground => (
@@ -258,57 +261,14 @@ const createVenue = asyncHandler(async (req, res) => {
         ground.hasOwnProperty("weekend_hourly_rate") &&
         ground.hasOwnProperty("peak_hour_rate") &&
         ground.hasOwnProperty("off_peak_hour_rate") &&
-        ground.hasOwnProperty("currency") &&
         ground.hasOwnProperty("minimum_booking_hours") &&
         ground.hasOwnProperty("maximum_booking_hours") &&
         ground.hasOwnProperty("amenities") &&
-        ground.hasOwnProperty("images") &&
-        ground.hasOwnProperty("notes")
+        ground.hasOwnProperty("images")
     ));
 
     if (!isArray || !isGroundsValid) {
         throw new ApiError(400, "Invalid ground data");
-    }
-
-    const venue = {
-        admin_user_id: req.user?.id || "8806583a-1630-4ab3-a93b-94f5f432cc14",
-        name,
-        slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
-        description,
-        address_line_1: `${address_line_1.city}, ${address_line_1.state}`,
-        address_line_2,
-        city: address_line_1.city,
-        state: address_line_1.state,
-        country: address_line_1.country,
-        postal_code: address_line_1.postal_code,
-        latitude: Number(address_line_1.latitude),
-        longitude: Number(address_line_1.longitude),
-        phone,
-        email,
-        website_url,
-        establishment_year: Number(establishment_year),
-        total_grounds: grounds.length,
-        facilities,
-        sports_available,
-        rules_and_regulations,
-        cancellation_policy,
-        status: "pending_approval",
-        verified: false,
-        rating: Number(rating),
-        total_bookings: 0,
-        operating_hours: {
-            open: operating_hours.opening_time,
-            close: operating_hours.closing_time
-        },
-        images
-    }
-
-    const venueCreated = await pgClient.turfs.create({
-        data: venue
-    })
-
-    if (!venueCreated) {
-        throw new ApiError(500, "Error creating new venue");
     }
 
     const numericFields = [
@@ -323,7 +283,7 @@ const createVenue = asyncHandler(async (req, res) => {
         "dimensions_width_m"
     ];
 
-    function castGroundNumbers(ground) {
+    function castNumericStringValues(ground) {
         const result = { ...ground };
 
         numericFields.forEach((field) => {
@@ -331,25 +291,120 @@ const createVenue = asyncHandler(async (req, res) => {
                 result[field] = null;
             } else {
                 const num = Number(result[field]);
-                result[field] = Number.isNaN(num) ? null : num; // or throw error if you want strict
+                result[field] = Number.isNaN(num) ? null : num;
             }
         });
 
         return result;
     }
 
-    await pgClient.grounds.createMany({
-        data: grounds.map((ground) => ({
-            ...castGroundNumbers(ground),
-            turf_id: venueCreated.id
-        })),
-        skipDuplicates: true
+    // ------------- TRANSACTION STARTS HERE -------------
+    const venueCreated = await pgClient.$transaction(async (tx) => {
+        const venueData = {
+            admin_user_id: req.user?.id || "8806583a-1630-4ab3-a93b-94f5f432cc14",
+            name,
+            slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+            description,
+            address_line_1: `${address_line_1.city}, ${address_line_1.state}`,
+            address_line_2,
+            city: address_line_1.city,
+            state: address_line_1.state,
+            country: address_line_1.country,
+            postal_code: address_line_1.postal_code,
+            latitude: Number(address_line_1.latitude),
+            longitude: Number(address_line_1.longitude),
+            phone,
+            email,
+            website_url,
+            establishment_year: Number(establishment_year),
+            total_grounds: grounds.length,
+            facilities,
+            sports_available,
+            rules_and_regulations,
+            cancellation_policy,
+            status: "pending_approval",
+            verified: false,
+            rating: Number(rating),
+            total_bookings: 0,
+            operating_hours: {
+                open: operating_hours.opening_time,
+                close: operating_hours.closing_time,
+            },
+            images,
+        };
+
+        const createdVenue = await tx.turfs.create({
+            data: venueData,
+        });
+
+        if (!createdVenue) {
+            throw new ApiError(500, "Error creating new venue");
+        }
+
+        const groundData = grounds.map((ground) => ({
+            ...castNumericStringValues(ground),
+            turf_id: createdVenue.id,
+        }));
+
+        const groundCreated = await tx.grounds.createMany({
+            data: groundData,
+            skipDuplicates: true,
+        });
+
+
+        if (!groundCreated || groundCreated.count === 0) {
+            throw new ApiError(500, "Error creating new ground");
+        }
+
+        const venueGrounds = await tx.grounds.findMany({
+            where: {
+                turf_id: createdVenue.id
+            }
+        })
+
+        if (!venueGrounds) {
+            throw new ApiError(500, "Error finding grounds");
+        }
+
+        const response = {
+            name: createdVenue.name,
+            slug: createdVenue.slug,
+            description: createdVenue.description,
+            address_line_1: {
+                city: createdVenue.city,
+                state: createdVenue.state,
+                postal_code: createdVenue.postal_code,
+                country: createdVenue.country,
+                latitude: createdVenue.latitude,
+                longitude: createdVenue.longitude
+            },
+            address_line_2: createdVenue.address_line_2,
+            phone: createdVenue.phone,
+            email: createdVenue.email,
+            website_url: createdVenue.website_url,
+            establishment_year: createdVenue.establishment_year,
+            rules_and_regulations: createdVenue.rules_and_regulations,
+            cancellation_policy: createdVenue.cancellation_policy,
+            advance_booking_days: createdVenue.advance_booking_days,
+            sports_available: createdVenue.sports_available,
+            facilities: createdVenue.facilities,
+            rating: createdVenue.rating,
+            operating_hours: {
+                opening_time: createdVenue.operating_hours.open,
+                closing_time: createdVenue.operating_hours.close
+            },
+            images: createdVenue.images,
+            grounds: venueGrounds
+        }
+
+
+        return response;
     });
 
-
-    return res.status(201).json(new ApiResponse(201, "New venue created successfully", venueCreated));
-
-})
+    return res
+        .status(201)
+        .json(new ApiResponse(201, "New venue created successfully", venueCreated));
+});
 
 
 const createGround = asyncHandler(async (req, res) => {
@@ -427,10 +482,29 @@ const createGround = asyncHandler(async (req, res) => {
     )
 })
 
+const getVenueByAdminId = asyncHandler(async (req, res) => {
+    const { admin_id } = req.params;
+    const venues = await pgClient.turfs.findMany({
+        where: {
+            admin_user_id: admin_id
+        },
+        include: {
+            grounds: true
+        }
+    });
+
+    if (!venues) {
+        throw new ApiError(404, "No venues found for this admin");
+    }
+
+    return res.status(200).json(new ApiResponse(200, "Venues found successfully", venues));
+});
+
 export {
     getVenues,
     getVenueList,
     getVenueById,
     createVenue,
-    createGround
+    createGround,
+    getVenueByAdminId
 }
