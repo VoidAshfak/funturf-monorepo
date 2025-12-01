@@ -221,6 +221,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                                     // step="10"
                                                     className={`${errors?.grounds?.[index]?.dimensions_length_m ? 'border-2 border-red-500' : ''}`}
                                                     {...register(`grounds.${index}.dimensions_length_m`, {
+                                                        required: "Length is required",
                                                         min: {
                                                             value: 1,
                                                             message: "Ground length must be a positive number",
@@ -232,13 +233,14 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                         </div>
 
                                         <div>
-                                            <Label htmlFor={`grounds.${index}.dimensions_width_m`}>Length (m)</Label>
+                                            <Label htmlFor={`grounds.${index}.dimensions_width_m`}>Width (m)</Label>
                                             <InputField errors={errors}>
                                                 <Input
                                                     id={`grounds.${index}.dimensions_width_m`}
                                                     type="number"
                                                     className={`${errors?.grounds?.[index]?.dimensions_width_m ? 'border-2 border-red-500' : ''}`}
                                                     {...register(`grounds.${index}.dimensions_width_m`, {
+                                                        required: "Width is required",
                                                         min: {
                                                             value: 1,
                                                             message: "Ground width must be a positive number",
@@ -246,59 +248,6 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                                     })}
                                                     placeholder="100"
                                                 />
-                                            </InputField>
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor={`grounds.${index}.minimum_booking_hours`}>Min Booking Hours</Label>
-                                            <InputField errors={errors}>
-                                                <Input
-                                                    id={`grounds.${index}.minimum_booking_hours`}
-                                                    type="number"
-                                                    step="0.5"
-                                                    className={`${errors?.grounds?.[index]?.minimum_booking_hours ? 'border-2 border-red-500' : ''}`}
-                                                    {...register(`grounds.${index}.minimum_booking_hours`, {
-                                                        min: {
-                                                            value: 0.5,
-                                                            message: "Minimum booking must be atleast half an hour",
-                                                        }
-                                                    })}
-                                                    placeholder="1"
-                                                />
-                                            </InputField>
-                                        </div>
-
-                                        <div>
-                                            <Label htmlFor={`grounds.${index}.maximum_booking_hours`}>Max Booking Hours</Label>
-                                            <InputField errors={errors}>
-                                                <Input
-                                                    id={`grounds.${index}.maximum_booking_hours`}
-                                                    type="number"
-                                                    step="0.5"
-                                                    placeholder="8"
-                                                    className={`${errors?.grounds?.[index]?.maximum_booking_hours ? 'border-2 border-red-500' : ''}`}
-                                                    {...register(`grounds.${index}.maximum_booking_hours`, {
-                                                        validate: (value) => {
-                                                            const minValue = watch(`grounds.${index}.minimum_booking_hours`);
-
-                                                            const min = parseFloat(minValue);
-                                                            const max = parseFloat(value);
-
-                                                            if (value && max < 0) {
-                                                                return "Maximum booking hours cannot be negative";
-                                                            }
-
-                                                            if (!minValue) return true;
-
-                                                            if (max < min) {
-                                                                return "Maximum hours cannot be less than minimum hours";
-                                                            }
-
-                                                            return true;
-                                                        },
-                                                    })}
-                                                />
-
                                             </InputField>
                                         </div>
 
@@ -349,6 +298,19 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                                 </Badge>
                                             ))}
                                         </div>
+                                        <input
+                                            type="hidden"
+                                            {...register(`grounds.${index}.amenities`, {
+                                                validate: (value) =>
+                                                    value && value.length > 0 || "Select at least one amenity"
+                                            })}
+                                        />
+
+                                        {errors?.grounds?.[index]?.amenities && (
+                                            <span className="text-red-500 text-sm">
+                                                {errors.grounds[index].amenities.message}
+                                            </span>
+                                        )}
                                     </div>
 
                                     <div>

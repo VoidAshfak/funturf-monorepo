@@ -69,25 +69,27 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
             <div className="grid grid-cols-2 gap-4">
                 <div>
                     <Label htmlFor="openingTime">Opening Time <RequiredSign /> </Label>
-                    <InputField errors={errors}>
-                        <Input
-                            id="openingTime"
-                            type="time"
-                            className={`${errors?.operating_hours?.opening_time ? 'border-2 border-red-500' : ''}`}
-                            {...register('operating_hours.opening_time', { required: 'Opening time is required' })}
-                        />
-                    </InputField>
+                    <Input
+                        id="openingTime"
+                        type="time"
+                        className={`${errors?.operating_hours?.opening_time ? 'border-2 border-red-500' : ''}`}
+                        {...register('operating_hours.opening_time', { required: 'Opening time is required' })}
+                    />
+                    {errors.operating_hours?.opening_time && (
+                        <span className="text-red-500 text-sm">{errors.operating_hours?.opening_time.message}</span>
+                    )}
                 </div>
                 <div>
                     <Label htmlFor="closingTime">Closing Time <RequiredSign /> </Label>
-                    <InputField errors={errors}>
-                        <Input
-                            id="closingTime"
-                            type="time"
-                            className={`${errors?.operating_hours?.closing_time ? 'border-2 border-red-500' : ''}`}
-                            {...register('operating_hours.closing_time', { required: 'Closing time is required' })}
-                        />
-                    </InputField>
+                    <Input
+                        id="closingTime"
+                        type="time"
+                        className={`${errors?.operating_hours?.closing_time ? 'border-2 border-red-500' : ''}`}
+                        {...register('operating_hours.closing_time', { required: 'Closing time is required' })}
+                    />
+                    {errors.operating_hours?.closing_time && (
+                        <span className="text-red-500 text-sm">{errors.operating_hours?.closing_time.message}</span>
+                    )}
                 </div>
             </div>
 
@@ -119,7 +121,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div>
-                <Label>facilities</Label>
+                <Label>Facilities</Label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                     {FACILITIES.map(amenity => (
                         <div key={amenity} className="flex items-center space-x-2">
@@ -134,7 +136,12 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                         </div>
                     ))}
                 </div>
-                <input type="hidden" {...register('facilities')} />
+                <input type="hidden" {...register('facilities', {
+                    validate: facilities => facilities.length > 0 || 'Select at least one facility'
+                })} />
+                {errors.facilities && (
+                    <span className="text-red-500 text-sm">{errors.facilities.message}</span>
+                )}
             </div>
 
             <div>
@@ -158,7 +165,10 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                         id="cancellation_policy"
                         placeholder="e.g., Free cancellation up to 24 hours before booking time..."
                         rows={3}
-                        {...register('cancellation_policy')}
+                        className={`${errors?.cancellation_policy ? 'border-2 border-red-500' : ''}`}
+                        {...register('cancellation_policy', {
+                            required: ' Enter cancelation policy'
+                        })}
                     />
                 </InputField>
             </div>
@@ -195,6 +205,17 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                         <span className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB</span>
                     </Label>
                 </div>
+
+                <input
+                    type="hidden"
+                    {...register("images", {
+                        required: "Venue image is required",
+                    })}
+                />
+
+                {errors.images && (
+                    <span className="text-red-500 text-sm">{errors.images.message}</span>
+                )}
 
                 {inputImage ? (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -107,7 +107,11 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     className={`py-4.5 pl-12 ${errors?.grounds?.[index]?.hourly_rate ? 'border-2 border-red-500' : ''}`}
                                                     placeholder="1000"
                                                     {...register(`grounds.${index}.hourly_rate`, {
-                                                        required: 'Regular hourly rate is required'
+                                                        required: 'Regular hourly rate is required',
+                                                        min: {
+                                                            value: 1,
+                                                            message: "Regular hourly rate must be greater than 0"
+                                                        }
                                                     })}
                                                 />
                                             </InputField>
@@ -130,6 +134,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     placeholder="1500"
                                                     className={`py-4.5 pl-12 ${errors?.grounds?.[index]?.weekend_hourly_rate ? 'border-2 border-red-500' : ''}`}
                                                     {...register(`grounds.${index}.weekend_hourly_rate`, {
+                                                        required: 'Weekend hourly rate is required',
                                                         min: {
                                                             value: 1,
                                                             message: "Weekend hourly rate must be greater than 0"
@@ -156,6 +161,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     placeholder="2000"
                                                     className={`py-4.5 pl-12 ${errors?.grounds?.[index]?.peak_hour_rate ? 'border-2 border-red-500' : ''}`}
                                                     {...register(`grounds.${index}.peak_hour_rate`, {
+                                                        required: 'Peak hourly rate is required',
                                                         min: {
                                                             value: 1,
                                                             message: "Peak hourly rate must be greater than 0"
@@ -182,6 +188,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     placeholder="800"
                                                     className={`py-4.5 pl-12 ${errors?.grounds?.[index]?.off_peak_hour_rate ? 'border-2 border-red-500' : ''}`}
                                                     {...register(`grounds.${index}.off_peak_hour_rate`, {
+                                                        required: 'Off-peak hourly rate is required',
                                                         min: {
                                                             value: 1,
                                                             message: "Off-Peak hourly rate must be greater than 0"
@@ -231,7 +238,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                 className={`${errors?.grounds?.[index]?.maximum_booking_hours ? 'border-2 border-red-500' : ''}`}
                                                 {...register(`grounds.${index}.maximum_booking_hours`, {
                                                     validate: (value) => {
-                                                        if (!value) return true;
+                                                        if (!value) return "Maximum booking hours is required";
 
                                                         const min = parseFloat(watch(`grounds.${index}.minimum_booking_hours`));
                                                         const max = parseFloat(value);
@@ -276,6 +283,20 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                         <span className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB</span>
                                     </Label>
                                 </div>
+
+                                <input
+                                    type="hidden"
+                                    {...register(`grounds.${index}.images`, {
+                                        validate: (value) =>
+                                            value && value.length > 0 || "At least one image is required"
+                                    })}
+                                />
+
+                                {errors?.grounds?.[index]?.images && (
+                                    <span className="text-red-500 text-sm">
+                                        {errors.grounds[index].images.message}
+                                    </span>
+                                )}
 
                                 {/* Image Preview Grid */}
                                 {(watch(`grounds.${index}.images`) || []).length > 0 && (

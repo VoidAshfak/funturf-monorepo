@@ -123,8 +123,11 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                 <InputField errors={errors}>
                     <Textarea
                         id="address_line_2"
-                        placeholder="Street address"
-                        {...register('address_line_2')}
+                        placeholder="Beside uttara boro miyar bari"
+                        className={`${errors?.address_line_2 ? 'border-2 border-red-500' : ''}`}
+                        {...register('address_line_2', {
+                            required: 'Secondary address is required'
+                        })}
                     />
                 </InputField>
             </div>
@@ -151,7 +154,9 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                             id="email"
                             type="email"
                             placeholder="venue@example.com"
+                            className={`${errors?.email ? 'border-2 border-red-500' : ''}`}
                             {...register('email', {
+                                required: 'Email is required',
                                 pattern: { value: /^\S+@\S+$/i, message: 'Invalid email' }
                             })}
                         />
