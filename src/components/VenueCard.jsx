@@ -8,6 +8,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import Image from "next/image"
+import { getLocationString } from "@/utils/utility-functions";
 
 export function VenueCard({ className, venue }) {
     const { name, address_line_1, images, operating_hours, rating } = venue;
@@ -18,13 +19,13 @@ export function VenueCard({ className, venue }) {
                 <CardDescription className="flex gap-1 items-center">
                     <MapPin className="w-4 shrink-0" />
                     <span className="line-clamp-1">
-                        {address_line_1} {/* SHOLUD BE CHANGED */}
+                        {getLocationString(address_line_1)}
                     </span>
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 <Image
-                    src={images?.cover || "/assets/images/venue-v1"}  // SHOLUD BE CHANGED 
+                    src={images[0] || "/assets/images/venue-v1"}
                     alt="Venue Image"
                     width={300}
                     height={300}
@@ -34,7 +35,7 @@ export function VenueCard({ className, venue }) {
             <CardFooter className="flex justify-between">
                 <div className="flex items-center gap-1">
                     <Clock className="w-4" />
-                    <p className="text-sm font-semibold"> {operating_hours?.open} -  {operating_hours?.close} </p> {/* SHOLUD BE CHANGED */}
+                    <p className="text-sm font-semibold"> {operating_hours?.opening_time} -  {operating_hours?.closing_time} </p>
                 </div>
                 <div className="flex items-center gap-1">
                     <Star className="w-4 text-yellow-500" />

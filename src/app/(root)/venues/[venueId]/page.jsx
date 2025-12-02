@@ -8,13 +8,14 @@ import { getIndividualVenueByVenueId } from "@/utils/getData"
 import { Clock, Share2 } from 'lucide-react'
 import AvailableSports from "./_components/AvailableSports"
 import VenueFacilities from "./_components/VenueFacilities"
+import { getLocationString } from "@/utils/utility-functions"
 
 const VenueDetails = async ({ params }) => {
     const { venueId } = await params;
     const { data: venue } = await getIndividualVenueByVenueId(venueId);
 
-    const { name, address_line_1, rating, ratingCount = 105, images, sports_available, facilities, operating_hours, description, grounds = [] } = venue;
-    const venueImages = [images.cover, ...grounds.flatMap(ground => ground.images)];
+    const { name, address_line_1, address_line_2, rating, ratingCount = 105, images, sports_available, facilities, operating_hours, description, grounds = [] } = venue;
+    const venueImages = [images[0], ...grounds.flatMap(ground => ground.images)];
 
     return (
 
@@ -22,7 +23,7 @@ const VenueDetails = async ({ params }) => {
             <div className="md:flex justify-between my-10">
                 <HeaderText
                     title={name}
-                    subtitle={address_line_1}
+                    subtitle={getLocationString(address_line_1)}
                     mapIcon={true}
                 />
                 <RatingText rating={rating} ratingCount={ratingCount} />
@@ -68,7 +69,8 @@ const VenueDetails = async ({ params }) => {
 
                     <div className="shadow-sm shadow-gray-300 rounded-lg p-4 ">
                         <h1 className="font-bold">Location</h1>
-                        <p>{address_line_1}</p>
+                        <p>{getLocationString(address_line_1)}</p>
+                        <p className=" text-gray-600">({address_line_2})</p>
                     </div>
                 </div>
             </div>
