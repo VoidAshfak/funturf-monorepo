@@ -2,6 +2,7 @@ import { pgClient } from '../../prisma.js';
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
+import { VenueSerializer } from "../../utils/venueSerializer.js"
 
 
 // const getVenues = asyncHandler(async (req, res) => {
@@ -195,7 +196,7 @@ const getVenueById = asyncHandler(async (req, res) => {
     });
 
     if (!venue) {
-        res.status(404).json({ error: "Venue not found" });
+        throw new ApiError(404, "Venue not found");
     }
 
     return res
@@ -203,7 +204,7 @@ const getVenueById = asyncHandler(async (req, res) => {
         .json(new ApiResponse(
             200,
             "Venue found",
-            venue
+            VenueSerializer.toDto(venue)
         ));
 }
 );
@@ -367,39 +368,41 @@ const createVenue = asyncHandler(async (req, res) => {
             throw new ApiError(500, "Error finding grounds");
         }
 
-        const response = {
-            name: createdVenue.name,
-            slug: createdVenue.slug,
-            description: createdVenue.description,
-            address_line_1: {
-                city: createdVenue.city,
-                state: createdVenue.state,
-                postal_code: createdVenue.postal_code,
-                country: createdVenue.country,
-                latitude: createdVenue.latitude,
-                longitude: createdVenue.longitude
-            },
-            address_line_2: createdVenue.address_line_2,
-            phone: createdVenue.phone,
-            email: createdVenue.email,
-            website_url: createdVenue.website_url,
-            establishment_year: createdVenue.establishment_year,
-            rules_and_regulations: createdVenue.rules_and_regulations,
-            cancellation_policy: createdVenue.cancellation_policy,
-            advance_booking_days: createdVenue.advance_booking_days,
-            sports_available: createdVenue.sports_available,
-            facilities: createdVenue.facilities,
-            rating: createdVenue.rating,
-            operating_hours: {
-                opening_time: createdVenue.operating_hours.open,
-                closing_time: createdVenue.operating_hours.close
-            },
-            images: createdVenue.images,
-            grounds: venueGrounds
-        }
+        return VenueSerializer.toDto(createdVenue, venueGrounds);
 
 
-        return response;
+        // {
+        //     name: createdVenue.name,
+        //     slug: createdVenue.slug,
+        //     description: createdVenue.description,
+        //     address_line_1: {
+        //         city: createdVenue.city,
+        //         state: createdVenue.state,
+        //         postal_code: createdVenue.postal_code,
+        //         country: createdVenue.country,
+        //         latitude: createdVenue.latitude,
+        //         longitude: createdVenue.longitude
+        //     },
+        //     address_line_2: createdVenue.address_line_2,
+        //     phone: createdVenue.phone,
+        //     email: createdVenue.email,
+        //     website_url: createdVenue.website_url,
+        //     establishment_year: createdVenue.establishment_year,
+        //     rules_and_regulations: createdVenue.rules_and_regulations,
+        //     cancellation_policy: createdVenue.cancellation_policy,
+        //     advance_booking_days: createdVenue.advance_booking_days,
+        //     sports_available: createdVenue.sports_available,
+        //     facilities: createdVenue.facilities,
+        //     rating: createdVenue.rating,
+        //     operating_hours: {
+        //         opening_time: createdVenue.operating_hours.open,
+        //         closing_time: createdVenue.operating_hours.close
+        //     },
+        //     images: createdVenue.images,
+        //     grounds: venueGrounds
+        // }
+
+
     });
 
     return res
@@ -498,7 +501,7 @@ const getVenueByAdminId = asyncHandler(async (req, res) => {
         throw new ApiError(404, "No venues found for this admin");
     }
 
-    return res.status(200).json(new ApiResponse(200, "Venues found successfully", venues));
+    return res.status(200).json(new ApiResponse(200, "Venues found successfully", VenueSerializer.toDto(venues)));
 });
 
 export {
