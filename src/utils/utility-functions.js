@@ -8,3 +8,22 @@ export const getStatusColor = (status) => {
             return 'bg-gray-100 text-gray-800';
     }
 };
+
+export const getLocationString = (locationObject) => {
+    const { city, state, postal_code, country } = locationObject;
+    const parts = [];
+
+    if (city) parts.push(city);
+
+    if (state || postal_code) {
+        let combined = "";
+        if (state) combined += state;
+        if (postal_code) combined += (state ? "-" : "") + postal_code;
+
+        parts.push(combined);
+    }
+
+    if (country) parts.push(country);
+
+    return parts.join(", ");
+} 
