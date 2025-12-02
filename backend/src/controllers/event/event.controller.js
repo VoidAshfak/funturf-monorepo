@@ -17,7 +17,7 @@ const createEvent = asyncHandler(async (req, res) => {
         end_time,
         ground_id,
         venue_id,
-        max_palyers,
+        max_players,
         min_Players,
         current_players,
         skill_level_required,
@@ -33,7 +33,7 @@ const createEvent = asyncHandler(async (req, res) => {
         || !end_time
         || !venue_id
         || !ground_id
-        || !max_palyers
+        || !max_players
         || !min_Players
         || !current_players
         || !skill_level_required
@@ -55,7 +55,7 @@ const createEvent = asyncHandler(async (req, res) => {
         ${end_time}::time, 
         ${venue_id}::uuid, 
         ${ground_id}::uuid, 
-        ${Number(max_palyers)}::int, 
+        ${Number(max_players)}::int, 
         ${Number(min_Players)}::int,
         ${Number(current_players.length)}::int,
         ${skill_level_required}::skill_level_type, 
@@ -70,7 +70,7 @@ const createEvent = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Event creation failed!")
     }
 
-    const eventParticipentData = current_players.map((player) => ({
+    const eventParticipantData = current_players.map((player) => ({
         event_id: createdEvent.id,
         user_id: player.value,
         payment_status: 'pending',
@@ -79,7 +79,7 @@ const createEvent = asyncHandler(async (req, res) => {
     }))
 
     const insertEventParticipants = await pgClient.event_participants.createMany({
-        data: eventParticipentData,
+        data: eventParticipantData,
         skipDuplicates: true
     });
 
@@ -167,7 +167,7 @@ const deleteEvent = asyncHandler(async (req, res) => {
         throw new ApiError(400, "The event doesn't exiss.")
     }
 
-    if(existingEvent.organizer_id !== user_id) {
+    if (existingEvent.organizer_id !== user_id) {
         throw new ApiError(400, "You are not authorized to delete this event.")
     }
 
@@ -311,6 +311,71 @@ const getNearbyEvents = asyncHandler(async (req, res) => {
     }
 });
 
+const editEvent = asyncHandler(async (req, res) => {
+
+    const { event_id } = req.params;
+
+    if (!event_id) {
+        throw new ApiError(400, "Bad request. You need to provide a event id.")
+    }
+
+    const event = await pgClient.events.findUnique({
+        where: {
+            id: event_id
+        }
+    })
+
+    if (!event) {
+        throw new ApiError(404, "Event not found.")
+    }
+
+    const editableFields = [
+        "organizer_id",
+        "title",
+        "description",
+        "sport_type",
+        "event_type",
+        "event_date",
+        "start_time",
+        "end_time",
+        "ground_id",
+        "venue_id",
+        "max_players",
+        "min_players",
+        "current_players",
+        "skill_level_required",
+        "total_cost",
+        "cost_split_type",
+    ];
+
+    const data = {};
+
+    editableFields.forEach((field) => {
+        if (req.body[field] !== undefined) {
+            data[field] = req.body[field];
+        }
+    });
+
+    console.log(data);
+    
+
+    const updatedEvent = await pgClient.events.update({
+        where: {
+            id: event_id
+        },
+        data
+    })
+
+    if(!updatedEvent) {
+        throw new ApiError(500, "Error updating event")
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, "Event updated successfully", updatedEvent)
+    );
+
+})
+
 
 export {
     createEvent,
@@ -318,5 +383,6 @@ export {
     deleteEvent,
     getUserEvents,
     getNearbyEvents,
-    getEventById
+    getEventById,
+    editEvent
 }
