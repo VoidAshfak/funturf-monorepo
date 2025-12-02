@@ -501,7 +501,9 @@ const getVenueByAdminId = asyncHandler(async (req, res) => {
         throw new ApiError(404, "No venues found for this admin");
     }
 
-    return res.status(200).json(new ApiResponse(200, "Venues found successfully", VenueSerializer.toDto(venues)));
+    const response = venues.map((venue) => VenueSerializer.toDto(venue));
+
+    return res.status(200).json(new ApiResponse(200, "Venues found successfully", response));
 });
 
 export {
