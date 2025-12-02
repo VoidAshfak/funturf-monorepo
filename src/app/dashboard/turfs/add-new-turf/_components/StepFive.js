@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { uploadImageObjArray, uploadSingleImageObj } from "@/utils/image-upload";
-import { getStatusColor } from "@/utils/utility-functions";
+import { getLocationString, getStatusColor } from "@/utils/utility-functions";
 import {
     Building2,
     Clock,
@@ -103,9 +103,7 @@ export default function StepFive({ formdata, setStep }) {
                         <div className="flex-1">
                             <p className="text-sm text-gray-600">Address</p>
                             <p className="font-medium text-gray-900">
-                                {formdata.address_line_1?.city}, {formdata.address_line_1?.state}
-                                <br />
-                                {formdata.address_line_1?.postal_code}, {formdata.address_line_1?.country}
+                                {getLocationString(formdata.address_line_1)}
                             </p>
                             {formdata.address_line_2 && (
                                 <p className="text-sm text-gray-600 mt-1">{formdata.address_line_2}</p>

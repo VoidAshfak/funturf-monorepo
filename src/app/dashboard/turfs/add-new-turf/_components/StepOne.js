@@ -27,7 +27,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
             className="space-y-4"
             onSubmit={handleSubmit(submitHandler)}
         >
-            <div>
+            <div className="flex flex-col gap-1.5">
                 <Label htmlFor="venueName">Venue Name <RequiredSign /></Label>
                 <InputField errors={errors}>
                     <Input
@@ -39,7 +39,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                 </InputField>
             </div>
 
-            <div>
+            <div className="flex flex-col gap-1.5">
                 <Label htmlFor="description">Description</Label>
                 <InputField errors={errors}>
                     <Textarea
@@ -52,7 +52,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="city">City <RequiredSign /></Label>
                     <InputField errors={errors}>
                         <Input
@@ -63,7 +63,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                         />
                     </InputField>
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="state">State <RequiredSign /></Label>
                     <InputField errors={errors}>
                         <Input
@@ -74,7 +74,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                         />
                     </InputField>
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="postalCode">Postal Code <RequiredSign /></Label>
                     <InputField errors={errors}>
                         <Input
@@ -85,7 +85,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                         />
                     </InputField>
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="country">Country <RequiredSign /></Label>
                     <InputField errors={errors}>
                         <Input
@@ -96,7 +96,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                         />
                     </InputField>
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="latitude">Latitude </Label>
                     <InputField errors={errors}>
                         <Input
@@ -106,7 +106,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                         />
                     </InputField>
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="longitude">Longitude </Label>
                     <InputField errors={errors}>
                         <Input
@@ -118,8 +118,8 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                 </div>
             </div>
 
-            <div>
-                <Label htmlFor="address_line_2">Secondary Address</Label>
+            <div className="flex flex-col gap-1.5">
+                <Label htmlFor="address_line_2">Secondary Address <RequiredSign /> </Label>
                 <InputField errors={errors}>
                     <Textarea
                         id="address_line_2"
@@ -133,7 +133,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="phone">Contact Phone <RequiredSign /></Label>
                     <InputField errors={errors}>
                         <Input
@@ -147,8 +147,8 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                         />
                     </InputField>
                 </div>
-                <div>
-                    <Label htmlFor="email">Email</Label>
+                <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="email">Email <RequiredSign /> </Label>
                     <InputField errors={errors}>
                         <Input
                             id="email"
@@ -165,7 +165,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="website_url">Website URL </Label>
                     <InputField errors={errors}>
                         <Input
@@ -175,7 +175,7 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
                         />
                     </InputField>
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="establishment_year">Establishment Year</Label>
                     <InputField errors={errors}>
                         <Input

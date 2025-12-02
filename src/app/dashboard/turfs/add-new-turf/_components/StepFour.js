@@ -228,7 +228,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
 
                                     <div>
                                         <Label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Maximum Booking Hours
+                                            Maximum Booking Hours <RequiredSign/>
                                         </Label>
                                         <InputField errors={errors}>
                                             <Input
@@ -262,7 +262,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
 
                             {/* Images Section */}
                             <div>
-                                <h4 className="font-semibold text-gray-900 mb-4">Ground Images</h4>
+                                <h4 className="font-semibold text-gray-900 mb-4">Ground Images <RequiredSign/></h4>
 
                                 {/* Upload Area */}
                                 <div className="mb-4">

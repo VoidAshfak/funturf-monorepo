@@ -5,7 +5,7 @@ import Image from "next/image";
 export default function AllVenues() {
 
     return (
-        <div className="relative">
+        <div className="relative pb-10">
             <div className="relative w-full h-72 md:h-80 lg:h-96 md:mb-16">
                 <Image
                     src="/assets/images/bg2.jpg"
@@ -24,7 +24,9 @@ export default function AllVenues() {
                 <FilterVenueInput title="Find Venue" />
             </div>
 
-            <VenueListWrapper />
+            <div className="w-[90%] mx-auto mt-28">
+                <VenueListWrapper />
+            </div>
         </div>
     )
 }

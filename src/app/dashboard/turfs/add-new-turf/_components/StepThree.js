@@ -96,7 +96,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                     className="space-y-4"
                                     onSubmit={handleSubmit(submitHandler)}
                                 >
-                                    <div>
+                                    <div className="flex flex-col gap-1.5">
                                         <Label htmlFor={`grounds.${index}.name`}>Ground Name <RequiredSign /> </Label>
                                         <InputField errors={errors}>
                                             <Input
@@ -109,7 +109,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
+                                        <div className="flex flex-col gap-1.5">
                                             <Label htmlFor={`grounds.${index}.ground_type`}>Ground Type <RequiredSign /> </Label>
                                             <InputField errors={errors}>
                                                 <Controller
@@ -137,7 +137,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                             </InputField>
                                         </div>
 
-                                        <div>
+                                        <div className="flex flex-col gap-1.5">
                                             <Label htmlFor={`grounds.${index}.sport_type`}>Sport Type <RequiredSign /> </Label>
                                             <InputField errors={errors}>
                                                 <Controller
@@ -165,7 +165,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                             </InputField>
                                         </div>
 
-                                        <div>
+                                        <div className="flex flex-col gap-1.5">
                                             <Label htmlFor={`grounds.${index}.surface_type`}>Surface Type<RequiredSign /> </Label>
                                             <InputField errors={errors}>
                                                 <Controller
@@ -193,8 +193,8 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                             </InputField>
                                         </div>
 
-                                        <div>
-                                            <Label htmlFor={`grounds.${index}.capacity_players`}>Player Capacity</Label>
+                                        <div className="flex flex-col gap-1.5">
+                                            <Label htmlFor={`grounds.${index}.capacity_players`}>Player Capacity <RequiredSign /> </Label>
                                             <InputField errors={errors}>
                                                 <Input
                                                     id={`grounds.${index}.capacity_players`}
@@ -212,8 +212,8 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                             </InputField>
                                         </div>
 
-                                        <div>
-                                            <Label htmlFor={`grounds.${index}.dimensions_length_m`}>Length (m)</Label>
+                                        <div className="flex flex-col gap-1.5">
+                                            <Label htmlFor={`grounds.${index}.dimensions_length_m`}>Length (m) <RequiredSign /></Label>
                                             <InputField errors={errors}>
                                                 <Input
                                                     id={`grounds.${index}.dimensions_length_m`}
@@ -232,8 +232,8 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                             </InputField>
                                         </div>
 
-                                        <div>
-                                            <Label htmlFor={`grounds.${index}.dimensions_width_m`}>Width (m)</Label>
+                                        <div className="flex flex-col gap-1.5">
+                                            <Label htmlFor={`grounds.${index}.dimensions_width_m`}>Width (m) <RequiredSign /></Label>
                                             <InputField errors={errors}>
                                                 <Input
                                                     id={`grounds.${index}.dimensions_width_m`}
@@ -251,7 +251,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                             </InputField>
                                         </div>
 
-                                        <div>
+                                        <div className="flex flex-col gap-1.5">
                                             <Label htmlFor={`grounds.${index}.status`}>Status <RequiredSign /> </Label>
                                             <InputField errors={errors}>
                                                 <Controller
@@ -281,7 +281,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                     </div>
 
                                     <div>
-                                        <Label>Amenities</Label>
+                                        <Label>Amenities <RequiredSign/></Label>
                                         <div className="flex flex-wrap gap-2 mt-2">
                                             {AMENITIES.map((amenity) => (
                                                 <Badge
@@ -313,7 +313,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                         )}
                                     </div>
 
-                                    <div>
+                                    <div className="flex flex-col gap-1.5">
                                         <Label htmlFor={`grounds.${index}.notes`}>Notes</Label>
                                         <InputField errors={errors}>
                                             <Textarea

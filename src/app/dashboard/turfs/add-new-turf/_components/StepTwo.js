@@ -67,7 +67,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
         >
 
             <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="openingTime">Opening Time <RequiredSign /> </Label>
                     <Input
                         id="openingTime"
@@ -79,7 +79,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                         <span className="text-red-500 text-sm">{errors.operating_hours?.opening_time.message}</span>
                     )}
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
                     <Label htmlFor="closingTime">Closing Time <RequiredSign /> </Label>
                     <Input
                         id="closingTime"
@@ -94,7 +94,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div>
-                <Label>Sports Available *</Label>
+                <Label>Sports Available <RequiredSign /></Label>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                     {SPORTS.map(sport => (
                         <div
@@ -121,7 +121,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div>
-                <Label>Facilities</Label>
+                <Label>Facilities <RequiredSign /> </Label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                     {FACILITIES.map(amenity => (
                         <div key={amenity} className="flex items-center space-x-2">
@@ -144,7 +144,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                 )}
             </div>
 
-            <div>
+            <div className="flex flex-col gap-1.5">
                 <Label htmlFor="advanceBookingDays">Advance Booking (days)</Label>
                 <InputField errors={errors}>
                     <Input
@@ -158,8 +158,8 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                 </InputField>
             </div>
 
-            <div>
-                <Label htmlFor="cancellation_policy">Cancellation Policy</Label>
+            <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cancellation_policy">Cancellation Policy <RequiredSign /></Label>
                 <InputField errors={errors}>
                     <Textarea
                         id="cancellation_policy"
@@ -173,7 +173,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                 </InputField>
             </div>
 
-            <div>
+            <div className="flex flex-col gap-1.5">
                 <Label htmlFor="rules_and_regulations">Rules & Regulations</Label>
                 <InputField errors={errors}>
                     <Textarea
@@ -186,7 +186,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div>
-                <h4 className="font-semibold text-gray-900 mb-4">Venue Image</h4>
+                <h4 className="font-semibold text-gray-900 mb-4">Venue Image <RequiredSign /> </h4>
 
                 <div className="mb-4">
                     <input

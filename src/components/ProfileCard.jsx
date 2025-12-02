@@ -13,7 +13,11 @@ export default async function ProfileCard({ userId }) {
     const result = await getUserByUserId(userId);
 
     if (!result.ok) {
-        return <EmptyState/>;
+        return (
+            <EmptyState
+                title="No User Found"
+            />
+        );
     }
 
     const userData = result.data;
