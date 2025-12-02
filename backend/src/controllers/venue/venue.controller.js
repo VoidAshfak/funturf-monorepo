@@ -168,7 +168,15 @@ const getVenues = asyncHandler(async (req, res) => {
         select: {
             id: true,
             name: true,
-            address_line_1: true,
+            images: true,
+            operating_hours: true,
+            rating: true,
+            city: true,
+            state: true,
+            postal_code: true,
+            country: true,
+            latitude: true,
+            longitude: true,
             grounds: {
                 select: {
                     id: true,
@@ -178,10 +186,12 @@ const getVenues = asyncHandler(async (req, res) => {
             }
         }
     })
-
+    
     if (!venues) throw new ApiError(404, "Not found");
 
-    return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, venues));
+    const response = venues.map((venue) => VenueSerializer.toVenueListDto(venue));
+    
+    return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, response));
 })
 
 const getVenueById = asyncHandler(async (req, res) => {

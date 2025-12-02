@@ -28,6 +28,8 @@ export class VenueSerializer {
         const groundsSource = groundsOverride ?? venue.grounds ?? [];
 
         return {
+            id: venue.id,
+            admin_user_id: venue.admin_user_id,
             name: venue.name,
             slug: venue.slug,
             description: venue.description,
@@ -50,9 +52,13 @@ export class VenueSerializer {
             email: venue.email,
             website_url: venue.website_url,
             establishment_year: venue.establishment_year,
+            total_grounds: venue.total_grounds,
             rules_and_regulations: venue.rules_and_regulations,
             cancellation_policy: venue.cancellation_policy,
             advance_booking_days: venue.advance_booking_days,
+            status: venue.status,
+            verified: venue.verified,
+            total_bookings: venue.total_bookings,
             sports_available: venue.sports_available,
             facilities: venue.facilities,
             rating: Number(venue.rating) || 0,
@@ -61,7 +67,41 @@ export class VenueSerializer {
                 closing_time: venue.operating_hours.close,
             },
             images: venue.images,
-            grounds: groundsSource //.map((ground) => this.toGroundDto(ground)),
+            grounds: groundsSource, //.map((ground) => this.toGroundDto(ground)),
+            created_at: venue.created_at,
+            updated_at: venue.updated_at
+        };
+    }
+
+    static toVenueListDto(venue) {
+        return {
+            id: venue.id,
+            name: venue.name,
+            address_line_1: {
+                city: venue.city,
+                state: venue.state,
+                postal_code: venue.postal_code,
+                country: venue.country,
+                latitude:
+                    venue.latitude === null || venue.latitude === undefined
+                        ? null
+                        : Number(venue.latitude) || null,
+                longitude:
+                    venue.longitude === null || venue.longitude === undefined
+                        ? null
+                        : Number(venue.longitude) || null,
+            },
+            address_line_2: venue.address_line_2,
+            status: venue.status,
+            verified: venue.verified,
+            sports_available: venue.sports_available,
+            rating: Number(venue.rating) || 0,
+            operating_hours: {
+                opening_time: venue.operating_hours.open,
+                closing_time: venue.operating_hours.close,
+            },
+            images: venue.images,
+            grounds: venue.grounds        
         };
     }
 }
