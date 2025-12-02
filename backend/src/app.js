@@ -6,10 +6,22 @@ import cookieParser from "cookie-parser";
 const app = express();
 
 // Cross Origin Resource Sharing (CORS) setup for APIs
-app.use(cors({
-    origin: 'http://localhost:3000',
-    credentials: false,
-}))
+const whitelist = ['http://localhost:3000', 'https://funturf-frontend-git-dev-v2-personal-dev-team.vercel.app'];
+
+const corsOptions = {
+    origin: (origin, cb) => {
+        if(whitelist.indexOf(origin) !== -1) {
+            cb(null, true);
+        } else {
+            cb(new Error('Not allowed by CORS'))
+        }
+    },
+    credentials: true
+}
+
+app.use(cors(corsOptions));
+
+
 // json data setup
 app.use(express.json({
     limit: "56kb"
