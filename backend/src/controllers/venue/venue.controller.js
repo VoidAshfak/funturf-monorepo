@@ -264,6 +264,7 @@ const createVenue = asyncHandler(async (req, res) => {
         ground.hasOwnProperty("minimum_booking_hours") &&
         ground.hasOwnProperty("maximum_booking_hours") &&
         ground.hasOwnProperty("amenities") &&
+        ground.hasOwnProperty("status") &&
         ground.hasOwnProperty("images")
     ));
 
@@ -311,8 +312,8 @@ const createVenue = asyncHandler(async (req, res) => {
             state: address_line_1.state,
             country: address_line_1.country,
             postal_code: address_line_1.postal_code,
-            latitude: Number(address_line_1.latitude),
-            longitude: Number(address_line_1.longitude),
+            latitude: Number(address_line_1.latitude) ?? null,
+            longitude: Number(address_line_1.longitude) ?? null,
             phone,
             email,
             website_url,
