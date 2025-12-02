@@ -1,12 +1,17 @@
 import { getAllVenues } from "@/utils/getData";
 import { VenueCard } from "./VenueCard";
 import Link from "next/link";
+import EmptyState from "./EmptyState";
 
 export default async function VenueList({ max, type }) {
     const { data: venues } = await getAllVenues();
 
     if (!venues || venues.length === 0) {
-        return <p>No venue found</p>;
+        return (
+            <EmptyState 
+            title="No Venue Yet"
+            />
+        );
     }
 
     let filteredVenues = venues;
