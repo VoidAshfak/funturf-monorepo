@@ -10,6 +10,8 @@ const whitelist = ['http://localhost:3000', 'https://funturf-frontend-git-dev-v2
 
 const corsOptions = {
     origin: (origin, cb) => {
+        if(!origin) return cb(null, true); // for mobile and next auth server call
+
         if(whitelist.indexOf(origin) !== -1) {
             cb(null, true);
         } else {
