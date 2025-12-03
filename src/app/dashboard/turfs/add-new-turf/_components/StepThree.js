@@ -23,6 +23,7 @@ import { AMENITIES, GROUND_TYPES, groundData, SPORTS, STATUS_TYPES, SURFACE_TYPE
 import { Plus, Trash2 } from 'lucide-react';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import ButtonContainer from './ButtonContainer';
+import MultiSelect from '@/components/MultiSelect';
 
 export default function StepThree({ formdata, setFormdata, step, setStep }) {
     const {
@@ -145,21 +146,18 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                                     control={control}
                                                     rules={{ required: "Select a sport" }}
                                                     render={({ field }) => (
-                                                        <Select
-                                                            value={field.value}
-                                                            onValueChange={field.onChange}
-                                                        >
-                                                            <SelectTrigger className={`w-full ${errors?.grounds?.[index]?.sport_type ? 'border-2 border-red-500' : ''}`}>
-                                                                <SelectValue placeholder="Select sport type" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {SPORTS.map((type) => (
-                                                                    <SelectItem key={type} value={type}>
-                                                                        {type}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <MultiSelect
+                                                            options={SPORTS.map(type => ({ label: type, value: type }))}
+                                                            values={SPORTS
+                                                                .map(type => ({ label: type, value: type }))
+                                                                .filter(opt => field.value?.includes(opt.value)
+                                                                )}
+                                                            onChange={(selectedItems) => {
+                                                                const values = selectedItems.map(item => item.value);
+                                                                field.onChange(values);
+                                                            }}
+                                                            placeholder="Select sport type"
+                                                        />
                                                     )}
                                                 />
                                             </InputField>
@@ -281,7 +279,7 @@ export default function StepThree({ formdata, setFormdata, step, setStep }) {
                                     </div>
 
                                     <div>
-                                        <Label>Amenities <RequiredSign/></Label>
+                                        <Label>Amenities <RequiredSign /></Label>
                                         <div className="flex flex-wrap gap-2 mt-2">
                                             {AMENITIES.map((amenity) => (
                                                 <Badge
