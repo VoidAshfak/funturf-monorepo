@@ -1,15 +1,11 @@
-import EventCard from "@/components/EventCard";
+import EventListWrapper from "@/components/EventListWrapper";
 import FilterVenueInput from "@/components/FilterVanueInput";
-import { getAllEvents } from "@/utils/getData";
 import Image from "next/image";
-import Link from "next/link";
 import CreateNewEvent from "./_components/CreateNewEvent";
 
-const AllEvents = async () => {
-    const events = await getAllEvents();
-
+export default function AllEvents() {
     return (
-        <div className="w-[90%] mx-auto">
+        <div className="w-[90%] mx-auto pb-10">
             <div className="relative h-72 rounded-2xl mt-10">
                 <Image
                     src="/assets/images/banner1.jpg"
@@ -30,18 +26,8 @@ const AllEvents = async () => {
                 <FilterVenueInput title="Find Events" />
             </div>
 
-            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'>
-                {events?.map(event => (
-                    <Link
-                        key={event._id}
-                        href={`/events/${event._id}`}
-                    >
-                        <EventCard event={event} />
-                    </Link>
-                ))}
-            </div>
+            <EventListWrapper />
+
         </div>
     )
 }
-
-export default AllEvents

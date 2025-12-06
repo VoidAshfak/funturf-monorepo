@@ -1,10 +1,8 @@
-import React from 'react'
-import Link from 'next/link'
+import EventListWrapper from '@/components/EventListWrapper'
 import HeaderText from '@/components/HeaderText'
-import EventCard from '@/components/EventCard'
-import events from "../../public/data/events.json"
+import Link from 'next/link'
 
-const FeaturedEvents = () => {
+export default function FeaturedEvents() {
 
     return (
         <div>
@@ -17,15 +15,8 @@ const FeaturedEvents = () => {
                     See all Matches →
                 </Link>
             </div>
-            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'>
-                {events.map((event) => (
-                    <Link href={`/events/${event._id}`} key={event._id}>
-                        <EventCard event={event} />
-                    </Link>
-                ))}
-            </div>
+
+            <EventListWrapper />
         </div>
     )
 }
-
-export default FeaturedEvents
