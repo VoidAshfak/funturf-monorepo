@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { getAllVenues } from "@/utils/getData";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { redirect } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
@@ -20,7 +22,12 @@ const players = [
     { id: 3, label: "Bappi", value: "BAPPI" },
 ];
 
-export default function EventCreationForm() {
+export default function EventCreationForm({ setOpen }) {
+
+    const { data: session, status } = useSession();
+
+    if (status === "loading") return null;
+    if (status === "unauthenticated") redirect("/login");
 
     const [venues, setVenues] = useState([]);
     const [grounds, setGrounds] = useState([]);
@@ -39,12 +46,12 @@ export default function EventCreationForm() {
             venue_id: '',
             ground_id: '',
             sport_type: '',
-            event_date: '',
+            event_date: null,
             start_time: '',
             end_time: '',
             description: '',
-            max_palyers: 1,
-            min_Players: 1,
+            max_players: 1,
+            min_players: 1,
             event_type: 'friendly',
             skill_level_required: 'any',
             total_cost: '',
@@ -53,8 +60,24 @@ export default function EventCreationForm() {
         }
     });
 
-    const onSubmit = (values) => {
-        console.log(values)
+    const onSubmit = async (values) => {
+        try {
+            const response = await fetch('https://app4-osju.onrender.com/api/v1/events/create-event', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session?.user?.access_token}`,
+                },
+                body: JSON.stringify(values),
+            });
+
+            const data = await response.json();
+            if (data?.success) {
+                setOpen(false)
+            }
+        } catch (error) {
+            console.error(error)
+        }
     };
 
     const fetchVenues = async () => {
@@ -291,8 +314,8 @@ export default function EventCreationForm() {
                     <InputField errors={errors}>
                         <Input
                             type="number"
-                            className={`${errors?.max_palyers ? 'border-2 border-red-500' : ''}`}
-                            {...register('max_palyers', {
+                            className={`${errors?.max_players ? 'border-2 border-red-500' : ''}`}
+                            {...register('max_players', {
                                 required: "Enter maximum number of players can join",
                                 min: {
                                     value: 1,

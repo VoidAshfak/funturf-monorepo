@@ -3,27 +3,38 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import EventCreationForm from "./EventCreationForm";
+import { useState } from "react";
 
 export default function CreateNewEvent() {
+    const [open, setOpen] = useState(false);
 
     return (
-        <Dialog className="w-[500px]">
-            <DialogTrigger asChild>
-                <Button className="text-white bg-green-500 hover:cursor-pointer hover:bg-green-700 w-fit">
-                    Create New Event
-                </Button>
-            </DialogTrigger>
+        <div>
+            <Button
+                className="text-white bg-green-500 hover:cursor-pointer hover:bg-green-700 w-fit"
+                onClick={() => setOpen(true)}
+            >
+                Create New Event
+            </Button>
 
-            <DialogContent className="max-h-11/12 overflow-auto ">
-                <DialogHeader className="sm:text-center">
-                    <DialogTitle>Create Your Event </DialogTitle>
-                    <DialogDescription>
-                        Enter your information below to create your event
-                    </DialogDescription>
-                </DialogHeader>
+            {open && (
+                <Dialog
+                    open={open}
+                    onOpenChange={setOpen}
+                    className="w-[500px]"
+                >
+                    <DialogContent className="max-h-11/12 overflow-auto ">
+                        <DialogHeader className="sm:text-center">
+                            <DialogTitle>Create Your Event </DialogTitle>
+                            <DialogDescription>
+                                Enter your information below to create your event
+                            </DialogDescription>
+                        </DialogHeader>
 
-                <EventCreationForm />
-            </DialogContent>
-        </Dialog>
+                        <EventCreationForm setOpen={setOpen} />
+                    </DialogContent>
+                </Dialog>
+            )}
+        </div>
     )
 }

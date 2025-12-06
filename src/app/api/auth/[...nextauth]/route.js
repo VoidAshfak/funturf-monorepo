@@ -51,7 +51,7 @@ export const authOptions = {
                 token.bio = user.bio;
                 token.user_type = user.user_type;
                 token.status = user.status;
-                token.access_token = user.refresh_token;  // refresh_token should be changed to access_token
+                token.access_token = user.accessToken;
             }
             return token
         },
