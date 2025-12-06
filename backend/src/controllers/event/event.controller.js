@@ -92,19 +92,35 @@ const getEvents = asyncHandler(async (req, res) => {
         select: {
             id: true,
             title: true,
+            description: true,
+            grounds: {
+                select: {
+                    id: true,
+                    name: true,
+                    turfs: {
+                        select: {
+                            id: true,
+                            name: true,
+                            address_line_1: true
+                        }
+                    }
+                }
+            },
             organizer_id: true,
             sport_type: true,
             event_date: true,
             start_time: true,
             end_time: true,
             min_players: true,
+            max_players: true,
             current_players: true,
             event_participants: {
                 select: {
                     user_id: true,
                     status: true
                 }
-            }
+            },
+            
         }
     })
 
