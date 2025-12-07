@@ -1,6 +1,4 @@
 import users from '@/../public/data/users.json';
-import venues from '@/../public/data/venues.json';
-import events from '@/../public/data/events.json';
 
 export async function getAllUser() {
     // const userResponse = await fetch(`/data/users.json`);
@@ -28,22 +26,46 @@ export async function getUserByUserId(userId) {
 
 
 export async function getAllVenues() {
-    const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues`);
-    return res.json();
+    try {
+        const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues`);
+        return res.json();
+    } catch (error) {
+        return { data: [] }
+    }
 };
 
 export async function getAllVenuesByAdminId(adminId) {
-    const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues/get-venues-by-admin/${adminId}`);
-    return res.json();
+    try {
+        const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues/get-venues-by-admin/${adminId}`);
+        return res.json();
+    } catch (error) {
+        return { data: [] }
+    }
 };
 
 export async function getIndividualVenueByVenueId(venueId) {
-    const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues/${venueId}`);
-    return res.json();
+    try {
+        const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues/${venueId}`);
+        return res.json();
+    } catch (error) {
+        return { data: {} }
+    }
 };
 
 export async function getAllEvents() {
-    // const eventResponse = await fetch(`/data/events.json`);
-    // return eventResponse.json();
-    return events;
+    try {
+        const res = await fetch(`https://app4-osju.onrender.com/api/v1/events`);
+        return res.json();
+    } catch (error) {
+        return { data: [] }
+    }
+};
+
+export async function getIndividualEventByEventId(eventId) {
+    try {
+        const res = await fetch(`https://app4-osju.onrender.com/api/v1/events/${eventId}`);
+        return res.json();
+    } catch (error) {
+        return { data: {} }
+    }
 };
