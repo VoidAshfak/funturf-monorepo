@@ -2,6 +2,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
 import { pgClient } from "../../prisma.js";
+import { EventSerializer } from "../../utils/dataSerializer.js";
 
 
 const createEvent = asyncHandler(async (req, res) => {
@@ -120,7 +121,7 @@ const getEvents = asyncHandler(async (req, res) => {
                     status: true
                 }
             },
-            
+
         }
     })
 
@@ -141,6 +142,51 @@ const getEventById = asyncHandler(async (req, res) => {
     const event = await pgClient.events.findUnique({
         where: {
             id: event_id
+        },
+        select: {
+            id: true,
+            title: true,
+            users: {
+                select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    profile_picture_url: true
+                }
+            },
+            description: true,
+            grounds: {
+                select: {
+                    id: true,
+                    name: true,
+                    turfs: {
+                        select: {
+                            id: true,
+                            name: true,
+                            city: true,
+                            state: true,
+                            postal_code: true,
+                            country: true,
+                            latitude: true,
+                            longitude: true,
+                        }
+                    }
+                }
+            },
+            sport_type: true,
+            event_date: true,
+            start_time: true,
+            end_time: true,
+            min_players: true,
+            max_players: true,
+            current_players: true,
+            event_participants: {
+                select: {
+                    user_id: true,
+                    status: true,
+                }
+            },
+            event_comments: true,
         }
     })
 
@@ -148,23 +194,22 @@ const getEventById = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Event not found.")
     }
 
-    const palyers_joined = await pgClient.event_participants.findMany({
+    const players_joined = await pgClient.event_participants.findMany({
         where: {
             event_id: event.id
         }
     })
 
-    console.log(palyers_joined);
 
 
-    if (!palyers_joined) {
+    if (!players_joined) {
         throw new ApiError(404, "Error getting event players")
     }
 
-    const response = {
+    const response = EventSerializer.toDto({
         ...event,
-        palyers_joined
-    }
+        event_participants: players_joined
+    })
 
     return res.status(200).json(new ApiResponse(200, "Event found", response));
 });
@@ -373,7 +418,7 @@ const editEvent = asyncHandler(async (req, res) => {
     });
 
     console.log(data);
-    
+
 
     const updatedEvent = await pgClient.events.update({
         where: {
@@ -382,7 +427,7 @@ const editEvent = asyncHandler(async (req, res) => {
         data
     })
 
-    if(!updatedEvent) {
+    if (!updatedEvent) {
         throw new ApiError(500, "Error updating event")
     }
 
