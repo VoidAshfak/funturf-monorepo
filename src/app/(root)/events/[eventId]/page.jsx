@@ -1,42 +1,40 @@
-import { Clock, MapPin, ArrowUpRight, User2, Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import Link from "next/link"
-import EventCard from "@/components/EventCard"
-import events from "../../../../../public/data/events.json"
-// import { getIndividualEvent } from "@/utils/getData"
-import RulesAndComments from "@/components/RulesAndComments"
+import EventListWrapper from "@/components/EventListWrapper"
 import PlayerItem from "@/components/PlayerItem"
-import { format } from "date-fns"
+import RulesAndComments from "@/components/RulesAndComments"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { getIndividualEventByEventId } from "@/utils/getData"
+import { getLocationString } from "@/utils/utility-functions"
+import { format } from "date-fns"
+import { ArrowUpRight, Clock, MapPin, User2 } from "lucide-react"
+import Link from "next/link"
 
-const EventDetails = async ({ params }) => {
+export default async function EventDetails({ params }) {
 
-    const { eventId } = await params
+    const { eventId } = await params;
+    const { data: event } = await getIndividualEventByEventId(eventId);
 
-    const event = events.find(e => e._id === eventId)
-    // const event = await getIndividualEvent(eventId);
-
-    const { _id, name, sport, description, location, slot, organizer, participants, teams, venue, isBooked, booking, playersRequired, isPublic, rules } = event;
+    const { title, organizer, event_date, start_time, end_time, ground, venue_id, rules, max_players, min_players, current_players, participants } = event;
 
     return (
-        <div className="w-[90%] mx-auto mt-10">
+        <div className="w-[90%] mx-auto mt-10 pb-10">
             <div className="lg:grid grid-cols-3 gap-10">
                 <div className="bg-white col-span-2 border border-gray-300 p-5 md:p-10 rounded-xl">
                     {/* EVENT INFO */}
                     <div className="flex items-center justify-between mb-10">
                         <div className="space-y-2">
-                            <h1 className="text-xl md:text-3xl font-bold md:font-extrabold text-gray-700">{name}</h1>
+                            <h1 className="text-xl md:text-3xl font-bold md:font-extrabold text-gray-700">{title}</h1>
                             <div className="flex items-center gap-2">
                                 <User2 className="w-5 text-gray-600" />
-                                <p className="text-gray-600">Organized by {organizer}</p>
+                                <p className="text-gray-600">Organized by {`${organizer.first_name} ${organizer.last_name}`}</p>
                             </div>
                         </div>
 
                         <Link href="#">
                             <Avatar className="cursor-pointer h-14 w-14" >
-                                <AvatarImage src="https://github.com/shadcn.png" alt="@profile" />
-                                <AvatarFallback>PF</AvatarFallback>
+                                <AvatarImage src={organizer.profile_picture_url} alt="@profile" />
+                                <AvatarFallback>{`${organizer.first_name} ${organizer.last_name}`}</AvatarFallback>
                             </Avatar>
                         </Link>
                     </div>
@@ -44,8 +42,8 @@ const EventDetails = async ({ params }) => {
                     <div className="flex items-center gap-2 mb-5">
                         <Clock className="w-5 text-gray-600" />
                         <div>
-                            <p className="font-semibold md:font-bold md:text-2xl text-gray-700"> {format(slot.date, "EEEE, d MMMM yyyy")} </p>
-                            <p> {slot.startTime} - {slot.endTime} </p>
+                            <p className="font-semibold md:font-bold md:text-2xl text-gray-700"> {format(event_date, "EEEE, d MMMM yyyy")} </p>
+                            <p> {format(start_time, 'hh:mm a')} - {format(end_time, 'hh:mm a')} </p>
                         </div>
                     </div>
 
@@ -53,7 +51,10 @@ const EventDetails = async ({ params }) => {
                         <div className="md:flex items-center gap-2">
                             <div className="flex gap-2">
                                 <MapPin className="w-5 text-gray-600" />
-                                <p>{location}</p>
+                                <div>
+                                    <p>{ground.name}, {ground.turf.name}</p>
+                                    <p>{getLocationString(ground.turf.address_line_1)}</p>
+                                </div>
                             </div>
                             <Button
                                 variant="outline"
@@ -73,7 +74,7 @@ const EventDetails = async ({ params }) => {
                 </div>
 
                 <div className="bg-white border rounded-2xl p-5 mt-10 lg:m-0">
-                    <h1 className="text-2xl font-bold">Players {participants.length} / {playersRequired}</h1>
+                    <h1 className="text-2xl font-bold">Players {current_players} / {min_players}</h1>
                     <div className="mt-7">
                         {participants.map((participant, index) => (
                             <PlayerItem key={participant} userId={participant} />
@@ -92,19 +93,8 @@ const EventDetails = async ({ params }) => {
                     >See All Events
                     </Link>
                 </div>
-                <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'>
-                    {events.map((event) => (
-                        <Link
-                            key={event._id}
-                            href={`/events/${event._id}`}
-                        >
-                            <EventCard event={event} />
-                        </Link>
-                    ))}
-                </div>
+                <EventListWrapper />
             </div>
         </div>
     )
 }
-
-export default EventDetails
