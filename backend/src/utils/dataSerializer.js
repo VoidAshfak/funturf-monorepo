@@ -101,8 +101,68 @@ export class VenueSerializer {
                 closing_time: venue.operating_hours.close,
             },
             images: venue.images,
-            grounds: venue.grounds        
+            grounds: venue.grounds
         };
     }
 }
 
+
+
+export class EventSerializer {
+    static toDto(event) {
+        if (!event) return null;
+
+        return {
+            id: event.id,
+            title: event.title,
+            description: event.description,
+            sport_type: event.sport_type,
+
+            event_date: event.event_date,
+            start_time: event.start_time,
+            end_time: event.end_time,
+
+            min_players: event.min_players,
+            max_players: event.max_players,
+            current_players: event.current_players,
+
+            organizer: event.users ? this.userToDto(event.users) : null,
+            ground: event.grounds ? this.groundToDto(event.grounds) : null,
+
+            participants: event.event_participants || [],
+            comments: event.event_comments || []
+        };
+    }
+
+    static userToDto(user) {
+        return {
+            id: user.id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            profile_picture_url: user.profile_picture_url
+        };
+    }
+
+    static groundToDto(ground) {
+        return {
+            id: ground.id,
+            name: ground.name,
+            turf: ground.turfs ? this.turfToDto(ground.turfs) : null
+        };
+    }
+
+    static turfToDto(turf) {
+        return {
+            id: turf.id,
+            name: turf.name,
+            address_line_1: {
+                city: turf.city,
+                state: turf.state,
+                postal_code: turf.postal_code,
+                country: turf.country,
+                latitude: turf.latitude,
+                longitude: turf.longitude
+            }
+        };
+    }
+}

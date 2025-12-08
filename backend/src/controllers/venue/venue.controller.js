@@ -2,7 +2,7 @@ import { pgClient } from '../../prisma.js';
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
-import { VenueSerializer } from "../../utils/venueSerializer.js"
+import { VenueSerializer } from "../../utils/dataSerializer.js"
 
 
 // const getVenues = asyncHandler(async (req, res) => {
