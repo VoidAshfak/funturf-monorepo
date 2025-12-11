@@ -49,6 +49,7 @@ model users {
   promotion_usage                                    promotion_usage[]
   reviews_reviews_reviewee_idTousers                 reviews[]            @relation("reviews_reviewee_idTousers")
   reviews_reviews_reviewer_idTousers                 reviews[]            @relation("reviews_reviewer_idTousers")
+  slot_locks                                         slot_locks[]
   turfs                                              turfs[]
   wallets                                            wallets?
 
@@ -241,7 +242,7 @@ model events {
   cost_split_type                      cost_split_type?        @default(equal)
   visibility                           visibility_type?        @default(public)
   join_approval_required               Boolean?                @default(false)
-  status                               event_status_type?      @default(upcoming)
+  status                               event_status_type?      @default(open)
   cancellation_reason                  String?
   rules                                String?
   what_to_bring                        String?
@@ -267,32 +268,35 @@ model events {
 }
 
 model grounds {
-  id                    String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  turf_id               String              @db.Uuid
-  name                  String              @db.VarChar(255)
+  id                    String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  turf_id               String               @db.Uuid
+  name                  String               @db.VarChar(255)
   ground_type           ground_type?
   surface_type          surface_type?
-  dimensions_length_m   Decimal?            @db.Decimal(5, 2)
-  dimensions_width_m    Decimal?            @db.Decimal(5, 2)
+  dimensions_length_m   Decimal?             @db.Decimal(5, 2)
+  dimensions_width_m    Decimal?             @db.Decimal(5, 2)
   capacity_players      Int?
-  hourly_rate           Decimal             @db.Decimal(10, 2)
-  weekend_hourly_rate   Decimal?            @db.Decimal(10, 2)
-  peak_hour_rate        Decimal?            @db.Decimal(10, 2)
-  off_peak_hour_rate    Decimal?            @db.Decimal(10, 2)
-  currency              String?             @default("USD") @db.VarChar(3)
-  minimum_booking_hours Decimal?            @default(1) @db.Decimal(3, 1)
-  maximum_booking_hours Decimal?            @default(4) @db.Decimal(3, 1)
-  status                ground_status_type? @default(available)
+  hourly_rate           Decimal              @db.Decimal(10, 2)
+  weekend_hourly_rate   Decimal?             @db.Decimal(10, 2)
+  peak_hour_rate        Decimal?             @db.Decimal(10, 2)
+  off_peak_hour_rate    Decimal?             @db.Decimal(10, 2)
+  currency              String?              @default("USD") @db.VarChar(3)
+  minimum_booking_hours Decimal?             @default(1) @db.Decimal(3, 1)
+  maximum_booking_hours Decimal?             @default(4) @db.Decimal(3, 1)
+  status                ground_status_type?  @default(available)
   amenities             Json?
   images                Json?
   notes                 String?
-  created_at            DateTime?           @default(now()) @db.Timestamp(6)
-  updated_at            DateTime?           @default(now()) @db.Timestamp(6)
+  created_at            DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?            @default(now()) @db.Timestamp(6)
   sport_type            Json?
   bookings              bookings[]
   events                events[]
-  turfs                 turfs               @relation(fields: [turf_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  slots                 slots?
+  turfs                 turfs                @relation(fields: [turf_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  peak_hour_settings    peak_hour_settings[]
+  promotions            promotions[]
+  slot_locks            slot_locks[]
+  slots                 slots[]
 
   @@index([status], map: "idx_grounds_status")
   @@index([turf_id], map: "idx_grounds_turf_id")
@@ -451,8 +455,10 @@ model promotions {
   status                  promotion_status_type? @default(active)
   created_at              DateTime?              @default(now()) @db.Timestamp(6)
   updated_at              DateTime?              @default(now()) @db.Timestamp(6)
+  ground_id               String?                @db.Uuid
   promotion_usage         promotion_usage[]
-  turfs                   turfs?                 @relation(fields: [turf_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ground_rate             grounds?               @relation(fields: [ground_id], references: [id], onDelete: Cascade, map: "fk_ground_promo")
+  turfs                   turfs?                 @relation(fields: [turf_id], references: [id], onDelete: Cascade, map: "fk_turf_promo")
 
   @@index([code], map: "idx_promotions_code")
   @@index([status], map: "idx_promotions_status")
@@ -540,21 +546,21 @@ model turf_statistics {
 }
 
 model turfs {
-  id                    String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  admin_user_id         String            @db.Uuid
-  name                  String            @db.VarChar(255)
-  slug                  String            @unique @db.VarChar(255)
+  id                    String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  admin_user_id         String               @db.Uuid
+  name                  String               @db.VarChar(255)
+  slug                  String               @unique @db.VarChar(255)
   description           String?
-  address_line_1        String            @db.VarChar(255)
-  address_line_2        String?           @db.VarChar(255)
-  city                  String            @db.VarChar(100)
-  state                 String            @db.VarChar(100)
-  country               String            @db.VarChar(100)
-  postal_code           String?           @db.VarChar(20)
-  latitude              Decimal?          @db.Decimal(10, 8)
-  longitude             Decimal?          @db.Decimal(11, 8)
-  phone                 String?           @db.VarChar(20)
-  email                 String?           @db.VarChar(255)
+  address_line_1        String               @db.VarChar(255)
+  address_line_2        String?              @db.VarChar(255)
+  city                  String               @db.VarChar(100)
+  state                 String               @db.VarChar(100)
+  country               String               @db.VarChar(100)
+  postal_code           String?              @db.VarChar(20)
+  latitude              Decimal?             @db.Decimal(10, 8)
+  longitude             Decimal?             @db.Decimal(11, 8)
+  phone                 String?              @db.VarChar(20)
+  email                 String?              @db.VarChar(255)
   website_url           String?
   establishment_year    Int?
   total_grounds         Int?
@@ -562,21 +568,22 @@ model turfs {
   sports_available      Json?
   rules_and_regulations String?
   cancellation_policy   String?
-  advance_booking_days  Int?              @default(30)
-  status                turf_status_type? @default(pending_approval)
-  verified              Boolean?          @default(false)
-  rating                Decimal?          @default(0.00) @db.Decimal(3, 2)
-  total_bookings        Int?              @default(0)
+  advance_booking_days  Int?                 @default(30)
+  status                turf_status_type?    @default(pending_approval)
+  verified              Boolean?             @default(false)
+  rating                Decimal?             @default(0.00) @db.Decimal(3, 2)
+  total_bookings        Int?                 @default(0)
   operating_hours       Json?
   holiday_dates         Json?
   images                Json?
-  created_at            DateTime?         @default(now()) @db.Timestamp(6)
-  updated_at            DateTime?         @default(now()) @db.Timestamp(6)
+  created_at            DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?            @default(now()) @db.Timestamp(6)
   grounds               grounds[]
+  peak_hour_settings    peak_hour_settings[]
   promotions            promotions[]
   reviews               reviews[]
   turf_statistics       turf_statistics[]
-  users                 users             @relation(fields: [admin_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                 users                @relation(fields: [admin_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([admin_user_id], map: "idx_turfs_admin_user")
   @@index([city], map: "idx_turfs_city")
@@ -621,7 +628,7 @@ model wallets {
 }
 
 model slots {
-  ground_id String   @id @db.Uuid
+  ground_id String   @db.Uuid
   t0000     Boolean? @default(true)
   t0130     Boolean? @default(true)
   t0300     Boolean? @default(true)
@@ -640,6 +647,37 @@ model slots {
   t2230     Boolean? @default(true)
   date      DateTime @default(dbgenerated("'1999-01-01'::date")) @db.Date
   grounds   grounds  @relation(fields: [ground_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_grounds")
+
+  @@id([ground_id, date])
+}
+
+model slot_locks {
+  ground_id         String   @db.Uuid
+  date              DateTime @db.Date
+  slot_code         String   @db.VarChar(5)
+  locked_until      DateTime @db.Timestamp(6)
+  locked_by_user_id String   @db.Uuid
+  grounds           grounds  @relation(fields: [ground_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_slot_locks_ground")
+  users             users    @relation(fields: [locked_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_slot_locks_user")
+
+  @@unique([ground_id, date, slot_code], map: "slot_locks_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model peak_hour_settings {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ground_id   String    @db.Uuid
+  turf_id     String    @db.Uuid
+  day_of_week Int       @db.SmallInt
+  start_time  DateTime  @db.Time(6)
+  end_time    DateTime  @db.Time(6)
+  is_active   Boolean?  @default(true)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  grounds     grounds   @relation(fields: [ground_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_peak_hour_ground")
+  turfs       turfs     @relation(fields: [turf_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_peak_hour_turf")
+
+  @@unique([ground_id, day_of_week, start_time, end_time], map: "uniq_ground_time")
 }
 
 enum age_group_type {
@@ -691,9 +729,9 @@ enum discount_type {
 }
 
 enum event_status_type {
-  draft
-  upcoming
-  ongoing
+  open
+  ready
+  booked
   completed
   cancelled
 }
