@@ -1,256 +1,220 @@
-import { pgClient } from "../../prisma.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
+import { logger } from "../../../logs/logger.js";
+import { pgClient } from "../../prisma.js";
+import { minutesToTimeString, slotKeyToMinutes, parseSlotCodeToTime } from "../../utils/timeAndDateFormatting.js";
 
+export const getAvailableSlots = asyncHandler(async (req, res) => {
+    const { ground, date } = req.query;
+    logger.info(`Received request to get available slots for ground ${ground} on ${date}`);
 
-const getAvailableSlots = asyncHandler(async (req, res) => {
-    const { ground_id, booking_date } = req.body;
-
-    if (!ground_id || !booking_date) {
-        console.log("Parameters not provided");
-        throw new ApiError(401, "Bad Request");
+    if (!ground || !date) {
+        logger.warning(`Did not received query parameters properly`);
+        throw new ApiError(405, "Invalid Request")
+    } else {
+        logger.info(`Received request to get available slots for ground ${ground} on ${date}`);
     }
 
-    const slotStatus = await pgClient.slots.findUnique({
+    const availableSlots = await pgClient.slots.findUnique({
         where: {
-            ground_id: ground_id,
-            date: new Date(booking_date)
-        },
-        select: {
-            t0000: true,
-            t0130: true,
-            t0300: true,
-            t0430: true,
-            t0600: true,
-            t0730: true,
-            t0900: true,
-            t1030: true,
-            t1200: true,
-            t1330: true,
-            t1500: true,
-            t1630: true,
-            t1800: true,
-            t1930: true,
-            t2100: true,
-            t2230: true
+            ground_id_date: {
+                ground_id: ground,
+                date: new Date(date)
+            }
+        }
+    });
+
+    if (!availableSlots) {
+        logger.warning(`No available slots found for ground ${ground} on ${date}`);
+        throw new ApiError(404, "No available slots found");
+    } else {
+        logger.info(`Available slots found for ground ${ground} on ${date}`);
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, "Available slots found", availableSlots)
+    );
+
+})
+
+export const calculateBookingPrice = asyncHandler(async (req, res) => {
+
+    const { ground_id, slot, booking_date, promo_code } = req.query;
+    // const user_id = req.user?.id || '8806583a-1630-4ab3-a93b-94f5f432cc14'
+
+    if (!ground_id || !slot || !booking_date) {
+        logger.warning(`Did not received query parameters properly`);
+        throw new ApiError(405, "Invalid Request")
+    } else {
+        logger.info(`Received request to get booking price for ground ${ground_id} on ${booking_date}`);
+    }
+
+    const slot_row = await pgClient.slots.findUnique({
+        where: {
+            ground_id_date: {
+                ground_id,
+                date: new Date(booking_date)
+            }
         }
     })
 
-    if (!slotStatus) {
-        console.log("No slots found!");
-        throw new ApiError(404, "No Slot Found!");
+    if (!slot_row) {
+        logger.error(JSON.stringify({ isAvailable: false, reason: "slot_disabled" }));
+        throw new ApiError(404, "Slot not found");
     }
 
-    const available_slots = Object.keys(slotStatus).filter((key) => slotStatus[key]);
-
-
-    console.log(available_slots);
-
-    function formatTime(t) {
-        let h = parseInt(t.slice(1, 3), 10);
-        let m = t.slice(3, 5);
-        const ampm = h >= 12 ? "PM" : "AM";
-        h = h % 12 || 12;
-        return `${h.toString().padStart(2, "0")}:${m} ${ampm}`;
+    const slot_available = Boolean((slot_row)[slot]);
+    if (!slot_available) {
+        logger.info(JSON.stringify({ isAvailable: false, reason: "slot_already_booked" }))
+        throw new ApiError(404, "Slot already booked");
     }
 
-    // Build slots
-    const timeSlots = [];
-    for (let i = 0; i < available_slots.length - 1; i++) {
-        const start = formatTime(available_slots[i]);
-        const end = formatTime(available_slots[i + 1]);
-        timeSlots.push(`${start} - ${end}`);
-    }
-    
-    console.log(timeSlots);
-    
+    const slot_time = parseSlotCodeToTime(slot);
+    const js_date = new Date(booking_date + "T00:00:00");
+    const day_of_week = js_date.getUTCDay();
 
-    return res.status(200).json(new ApiResponse(200, `${Object.keys(available_slots).length} slots are available.`, available_slots));
-})
-
-const createBooking = asyncHandler(async (req, res) => {
-    if (req.user.user_type !== 'player') {
-        return res.status(403).json({
-            message: "Unauthorized Request",
-            redirect: "/login"
-        })
-    }
-
-    const {
-        ground_id,
-        booking_date,
-        start_time,
-        end_time,
-        event_id,
-        payment_method,
-        notes,
-        promo_code
-    } = req.body;
-
-    const { available, requested_slot, pricing } = req.availability;
-
-    const booking = await pgClient.$transaction(async (prisma) => {
-
-        // 1. Check ground availability again (double-check)
-        const ground = await prisma.grounds.findUnique({
-            where: { id: ground_id },
-            include: {
-                turfs: {
-                    select: {
-                        admin_user_id: true,
-                        name: true,
-                        cancellation_policy: true
-                    }
-                }
-            }
-        });
-
-        if (!ground || ground.status !== 'available') {
-            throw new ApiError(400, "Ground is not available");
-        }
-
-        // 2. Check for conflicting bookings (with lock)
-        if (available === false) {
-            throw new ApiError(400, "This time slot is no longer available");
-        }
-
-
-        // // 3. Calculate pricing
-        // const duration = calculateDuration(start_time, end_time);
-        // const pricing = calculateBookingPrice(
-        //     ground,
-        //     bookingDateObj,
-        //     start_time,
-        //     end_time,
-        //     duration
-        // );
-
-        // 4. Apply promo code if provided
-        // let discount = 0;
-        // let appliedPromotion = null;
-
-        // if (promo_code) {
-        //     const promotion = await validateAndApplyPromoCode(
-        //         prisma,
-        //         promo_code,
-        //         ground.turf_id,
-        //         pricing.totalAmount,
-        //         bookingDateObj,
-        //         userId
-        //     );
-
-        //     if (promotion) {
-        //         discount = promotion.discountAmount;
-        //         appliedPromotion = promotion;
-        //     }
-        // }
-
-        // const finalAmount = pricing.totalAmount - discount;
-
-        // 5. Create the booking
-        const newBooking = await prisma.bookings.create({
-            data: {
-                ground_id,
-                user_id: userId,
-                event_id,
-                booking_date: requested_slot.date,
-                start_time: requested_slot.start_time,
-                end_time: requested_slot.end_time,
-                duration_hours: duration,
-                total_amount: pricing.totalAmount,
-                discount_amount: discount,
-                final_amount: finalAmount,
-                payment_status: 'pending',
-                booking_status: 'pending',
-                payment_method,
-                notes
-            },
-            include: {
-                ground: {
-                    include: {
-                        turf: true
-                    }
-                },
-                user: {
-                    select: {
-                        first_name: true,
-                        last_name: true,
-                        email: true,
-                        phone: true
-                    }
-                }
-            }
-        });
-
-        // 6. Record promo code usage if applied
-        if (appliedPromotion) {
-            await prisma.promotion_usage.create({
-                data: {
-                    promotion_id: appliedPromotion.id,
-                    user_id: userId,
-                    booking_id: newBooking.id,
-                    discount_amount: discount
-                }
-            });
-
-            // Update promotion usage count
-            await prisma.promotions.update({
-                where: { id: appliedPromotion.id },
-                data: { used_count: { increment: 1 } }
-            });
-        }
-
-        // 7. Create initial payment record
-        const payment = await prisma.payments.create({
-            data: {
-                user_id: userId,
-                booking_id: newBooking.id,
-                amount: finalAmount,
-                payment_method,
-                status: 'initiated',
-                payment_gateway: payment_method === 'cash' ? 'manual' : 'stripe'
-            }
-        });
-
-        // 8. Send notifications
-        await sendNotification(prisma, {
-            user_id: ground.turf.admin_user_id,
-            type: 'booking_pending',
-            title: 'New Booking Request',
-            message: `New booking request for ${ground.name} on ${booking_date}`,
-            data: {
-                booking_id: newBooking.id,
-                ground_name: ground.name,
-                customer_name: `${newBooking.user.first_name} ${newBooking.user.last_name}`,
-                date: booking_date,
-                time: `${start_time} - ${end_time}`
-            },
-            priority: 'high'
-        });
-
-        // 9. Log activity
-        await prisma.activity_logs.create({
-            data: {
-                user_id: userId,
-                entity_type: 'booking',
-                entity_id: newBooking.id,
-                action: 'create',
-                new_values: {
-                    booking_id: newBooking.id,
-                    ground_id,
-                    amount: finalAmount
-                }
-            }
-        });
-
-        return newBooking;
+    const ground = await pgClient.grounds.findUnique({
+        where: { id: ground_id },
     });
 
+    if (!ground) {
+        logger.error(JSON.stringify({ isAvailable: false, reason: "ground_not_found" }));
+        throw new ApiError(404, "Ground not found");
+    }
+
+    const hourly_rate = Number(ground.hourly_rate);
+
+    const weekend_rate = ground.weekend_hourly_rate
+        ? Number(ground.weekend_hourly_rate)
+        : hourly_rate;
+
+    const peak_rate = ground.peak_hour_rate
+        ? Number(ground.peak_hour_rate)
+        : hourly_rate;
+
+    const off_peak_rate = ground.off_peak_hour_rate
+        ? Number(ground.off_peak_hour_rate)
+        : hourly_rate;
+
+    const is_weekend = [5, 6].includes(day_of_week);
+
+    const peak_setting = await pgClient.peak_hour_settings.findFirst({
+        where: {
+            ground_id,
+            day_of_week,
+            is_active: true,
+            start_time: { lte: new Date(`1970-01-01T${slot_time}`)},
+            end_time: { gt: new Date(`1970-01-01T${slot_time}`) },
+        },
+    });
+    const is_peak = !!peak_setting;
+
+
+    let base_rate;
+    if (is_peak) base_rate = peak_rate;
+    else if (is_weekend) base_rate = weekend_rate;
+    else base_rate = off_peak_rate;
+
+
+
+    let discount = 0;
+    let promo_meta = null;
+
+    if (promo_code) {
+        const candidate_promos = await pgClient.promotions.findMany({
+            where: {
+                ground_id,
+                code: promo_code,
+                status: 'active',
+                valid_from: { lte: new Date() },
+                valid_until: { gte: new Date() },
+                usage_limit: { gt: 1 }
+            },
+        })
+
+        logger.info(JSON.stringify(candidate_promos));
+
+        const promo = candidate_promos.find((p) => {
+            if (p.applicable_days) {
+                const days = p.applicable_days;
+                if (!days.includes(day_of_week)) return false;
+            }
+            return true;
+        })
+
+        if (promo) {
+            // if (
+            //     promo.usage_limit != null &&
+            //     promo.used_count != null &&
+            //     promo.used_count >= promo.usage_limit
+            // ) {
+            //     // exhausted – ignore
+            // } 
+            if (
+                !promo.minimum_booking_amount ||
+                base_rate >= Number(promo.minimum_booking_amount)
+            ) {
+                let raw_discount = 0;
+                if (promo.discount_type === "percentage") {
+                    raw_discount = base_rate * (Number(promo.discount_value) / 100);
+                } else {
+                    raw_discount = Number(promo.discount_value);
+                }
+
+                if (promo.maximum_discount_amount != null) {
+                    raw_discount = Math.min(
+                        raw_discount,
+                        Number(promo.maximum_discount_amount)
+                    );
+                }
+
+                if(raw_discount > 0) {
+                    logger.info(`Promo code applied`);
+                }
+
+                discount = raw_discount;
+                promo_meta = { id: promo.id, code: promo.code };
+
+            }
+        }
+    }
+    const final_price = Math.max(base_rate - discount, 0);
+
+    logger.info(JSON.stringify(
+        {
+            isAvailable: true,
+            reason: null,
+            slot,
+            booking_date,
+            slot_time,
+            day_of_week,
+            is_peak,
+            is_weekend,
+            base_rate,
+            discount,
+            final_price,
+            promotion: promo_meta,
+        }
+    ))
+
+    return res.json(
+        new ApiResponse(200, "Success", {
+            isAvailable: true,
+            reason: null,
+            slot,
+            booking_date,
+            slot_time,
+            day_of_week,
+            is_peak,
+            is_weekend,
+            base_rate,
+            discount,
+            final_price,
+            promotion: promo_meta,
+        })
+    );
 
 })
 
-export {
-    createBooking,
-    getAvailableSlots
-}
+export const createBooking = asyncHandler(async (req, res) => {});

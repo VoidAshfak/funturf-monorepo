@@ -106,8 +106,6 @@ export class VenueSerializer {
     }
 }
 
-
-
 export class EventSerializer {
     static toDto(event) {
         if (!event) return null;
@@ -166,3 +164,42 @@ export class EventSerializer {
         };
     }
 }
+
+export class BookingPriceSerializer {
+    static toDto(params) {
+        const {
+            isAvailable,
+            reason = null,
+            ground_id,
+            slot,
+            booking_date,
+            slot_time,
+            day_of_week,
+            is_peak,
+            is_weekend,
+            base_rate,
+            discount,
+            final_price,
+            promo_meta = null,
+        } = params;
+
+        return {
+            isAvailable,
+            reason,
+            ground_id,
+            slot,
+            booking_date,
+            slot_time,
+            day_of_week,
+            is_peak,
+            is_weekend,
+            base_rate,
+            discount,
+            final_price,
+            promotion: promo_meta
+                ? { id: promo_meta.id, code: promo_meta.code }
+                : null,
+        };
+    }
+}
+
