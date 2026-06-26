@@ -306,3 +306,153 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/*
+  Shimmer skeleton. A muted base with a green-tinted light sweeping across it.
+  Used by loading placeholders (DESIGN.md green-glass) while data streams in.
+*/
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--muted);
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(29, 185, 84, 0.14),
+    transparent
+  );
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.dark .shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(29, 185, 84, 0.1),
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after {
+    animation: none;
+  }
+}
+
+/* ---- Leaflet map theming (green-glass) ---- */
+
+/* Custom brand marker: green teardrop pin with white ring + ground pulse */
+.funturf-marker .ft-marker {
+  position: relative;
+  display: block;
+  width: 30px;
+  height: 40px;
+}
+.funturf-marker .ft-pin {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  background: #1db954;
+  border: 3px solid #ffffff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+.funturf-marker .ft-pin::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #ffffff;
+  transform: translate(-50%, -50%);
+}
+.funturf-marker .ft-pulse {
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  width: 18px;
+  height: 6px;
+  margin-left: -9px;
+  border-radius: 9999px;
+  background: rgba(29, 185, 84, 0.35);
+  animation: ft-pulse 1.8s ease-out infinite;
+}
+@keyframes ft-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .funturf-marker .ft-pulse {
+    animation: none;
+  }
+}
+
+/* Glass popup */
+.leaflet-popup-content-wrapper {
+  border-radius: 0.875rem;
+  background: var(--popover);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.5);
+}
+.leaflet-popup-content {
+  margin: 0.75rem 0.9rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+.leaflet-popup-content .ft-popup-sub {
+  color: var(--muted-foreground);
+}
+.leaflet-popup-tip {
+  background: var(--popover);
+  border: 1px solid var(--border);
+}
+.leaflet-popup-close-button {
+  color: var(--muted-foreground) !important;
+}
+
+/* Zoom controls */
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--card);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+.leaflet-bar a:hover {
+  background: var(--accent);
+}
+
+/* Attribution — subtle */
+.leaflet-control-attribution {
+  background: color-mix(in srgb, var(--card) 80%, transparent) !important;
+  color: var(--muted-foreground) !important;
+  font-size: 10px;
+}
+.leaflet-control-attribution a {
+  color: var(--primary) !important;
+}

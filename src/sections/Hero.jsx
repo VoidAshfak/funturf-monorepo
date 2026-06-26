@@ -1,12 +1,23 @@
 "use client";
 
 import { useRef } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useGSAP } from "@gsap/react";
 import { CalendarPlus, MapPin, Search } from "lucide-react";
-import BannerCarousel from "@/components/BannerCarousel";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { gsap, heroReveal } from "@/lib/animations";
+
+// Heavy embla carousel — lazy-loaded so it doesn't block hero paint.
+const BannerCarousel = dynamic(() => import("@/components/BannerCarousel"), {
+    ssr: false,
+    loading: () => (
+        <div className="mx-auto w-full max-w-[400px]">
+            <Skeleton className="aspect-[4/5] w-full rounded-3xl" />
+        </div>
+    ),
+});
 
 const STATS = [
     { value: "120+", label: "Turfs" },

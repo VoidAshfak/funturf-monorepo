@@ -19,7 +19,7 @@ const VenueDetails = async ({ params }) => {
 
     return (
 
-        <div className="w-[90%] mx-auto">
+        <div className="w-[90%] mx-auto md:pt-24">
             <div className="md:flex justify-between my-10">
                 <HeaderText
                     title={name}

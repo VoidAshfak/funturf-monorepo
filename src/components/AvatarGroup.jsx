@@ -1,9 +1,9 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getAllUser } from "@/utils/getData";
+import allUser from "@/../public/data/users.json";
 
-export default async function AvatarGroup({ people = [] }) {
-
-    const allUser = await getAllUser();
+// Synchronous + client-safe: reads the local users seed directly so this can be
+// rendered inside client components (e.g. the events filter explorer).
+export default function AvatarGroup({ people = [] }) {
 
     const participantsInfo = allUser
         .filter(eachUser => people.includes(eachUser._id))

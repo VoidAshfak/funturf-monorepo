@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import EventList from "./EventList";
+import EventListSkeleton from "./EventCardSkeleton";
 
 export default function EventListWrapper() {
     return (
-        <Suspense fallback={<p>fetching events</p>}>
+        <Suspense fallback={<EventListSkeleton count={6} />}>
             <EventList />
         </Suspense>
     )
