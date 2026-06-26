@@ -1,4 +1,7 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
+import { useCreateVenueMutation } from "@/store/api/apiSlice";
 import { uploadImageObjArray, uploadSingleImageObj } from "@/utils/image-upload";
 import { getLocationString, getStatusColor } from "@/utils/utility-functions";
 import {
@@ -15,6 +18,7 @@ import { useRouter } from "next/navigation";
 
 export default function StepFive({ formdata, setStep }) {
     const router = useRouter();
+    const [createVenueMutation, { isLoading }] = useCreateVenueMutation();
 
     const createVenue = async () => {
 
@@ -38,13 +42,7 @@ export default function StepFive({ formdata, setStep }) {
                 grounds: updatedGrounds,
             };
 
-            const response = await fetch("https://app4-osju.onrender.com/api/v1/venues/create-venue", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(finalPayload),
-            });
-
-            const data = await response.json();
+            const data = await createVenueMutation(finalPayload).unwrap();
 
             if (data.success) {
                 router.push('/dashboard/turfs');
@@ -322,7 +320,8 @@ export default function StepFive({ formdata, setStep }) {
 
                 <Button
                     onClick={createVenue}
-                >Submit</Button>
+                    disabled={isLoading}
+                >{isLoading ? "Submitting…" : "Submit"}</Button>
             </div>
         </div>
     );

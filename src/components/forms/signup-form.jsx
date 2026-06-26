@@ -21,6 +21,7 @@ import MultiSelect from "../MultiSelect"
 import RequiredSign from "../RequiredSign"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { useRegisterUserMutation } from "@/store/api/apiSlice"
 
 const sportsOptions = [
     { id: 1, value: 'football', label: 'Football' },
@@ -33,6 +34,7 @@ export function SignupForm({
     ...props
 }) {
     const router = useRouter();
+    const [registerUser] = useRegisterUserMutation();
 
     const {
         register,
@@ -72,28 +74,13 @@ export function SignupForm({
                 throw new Error("Image URL not found");
             }
 
-            // Now register user
-            const response = await fetch(
-                "https://app4-osju.onrender.com/api/v1/users/register",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        ...rest,
-                        password_hash: password,
-                        profile_picture_url: imageUrl,
-                    }),
-                }
-            );
+            // Now register user via RTK Query mutation
+            await registerUser({
+                ...rest,
+                password_hash: password,
+                profile_picture_url: imageUrl,
+            }).unwrap();
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            
             alert("User registered successfully!");
             router.push("/login");
         } catch (error) {
@@ -117,13 +104,15 @@ export function SignupForm({
         >
             {/* Heading */}
             <div className="flex flex-col items-center gap-2 text-center">
-                <h1 className="text-2xl font-bold">Register User</h1>
+                <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
+                    Create your account
+                </h1>
                 <p className="text-muted-foreground text-sm text-balance">
-                    Enter your information below to create an account
+                    Join the squad — it only takes a minute.
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 shadow-md">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
                 <div className="space-y-2">
                     <Label
                         htmlFor="first_name"
@@ -396,11 +385,10 @@ export function SignupForm({
             <div className="flex flex-col items-center justify-center gap-4 text-center text-sm">
                 <Button
                     type="submit"
-                    className="w-1/3"
+                    className="green-glow w-full rounded-full sm:w-1/2"
                     disabled={isSubmitting}
                 >
-                    {/* {loading && <Loader2 className="animate-spin" />} */}
-                    Sign Up
+                    {isSubmitting ? "Creating account…" : "Sign Up"}
                 </Button>
                 <div>
                     Already have an account?{" "}

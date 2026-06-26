@@ -27,6 +27,7 @@ export default function NavLink() {
                             alt="play"
                             width={25}
                             height={25}
+                            className="transition-[filter] duration-300 dark:invert"
                         />
                         <span className="text-xl"> Play </span>
                     </Link>
@@ -42,6 +43,7 @@ export default function NavLink() {
                             alt="book"
                             width={25}
                             height={20}
+                            className="transition-[filter] duration-300 dark:invert"
                         /><span className="text-xl"> Book </span>
                     </Link>
                 </NavigationMenuItem>

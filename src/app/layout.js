@@ -1,6 +1,7 @@
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import NextAuthSessionProvider from "@/providers/NextAuthSessionProvider";
+import ReduxProvider from "@/providers/ReduxProvider";
 import ThemeProvider from "@/components/ThemeProvider";
 
 const inter = Inter({
@@ -24,9 +25,11 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning className={`${inter.variable} ${geistMono.variable}`}>
       <NextAuthSessionProvider>
         <body className="font-sans antialiased">
-          <ThemeProvider>
-            {children}
-          </ThemeProvider>
+          <ReduxProvider>
+            <ThemeProvider>
+              {children}
+            </ThemeProvider>
+          </ReduxProvider>
         </body>
       </NextAuthSessionProvider>
     </html>

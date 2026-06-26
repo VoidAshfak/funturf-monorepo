@@ -1,20 +1,16 @@
+import AuthBrandPanel from "@/components/auth/AuthBrandPanel"
 import { SignupForm } from "@/components/forms/signup-form"
-import Image from "next/image"
 
 const SignupPage = () => {
     return (
-        <div className="grid min-h-svh lg:grid-cols-5 backdrop-blur-sm">
-            <div className="col-span-3 p-6 md:p-10">
-                <SignupForm />
-            </div>
-            <div className="col-span-2 bg-muted relative hidden lg:block lg:sticky lg:top-0 lg:h-screen">
-                <Image
-                    src="/assets/images/login.png"
-                    alt="Image"
-                    fill
-                    className="object-cover dark:brightness-[0.2] dark:grayscale"
-                    priority
-                />
+        <div className="relative grid min-h-svh overflow-hidden bg-gradient-to-b from-[#eef3ef] to-[#e7f1ea] dark:from-[#0a1412] dark:to-[#0a0a0a] lg:grid-cols-5">
+            <AuthBrandPanel className="border-r border-border lg:col-span-2 lg:sticky lg:top-0 lg:h-screen" />
+
+            <div className="relative flex items-start justify-center p-6 md:p-10 lg:col-span-3">
+                <div className="pointer-events-none absolute -right-20 top-10 h-72 w-72 rounded-full bg-teal/15 blur-[120px] lg:hidden" />
+                <div className="glass-card relative w-full max-w-3xl rounded-3xl p-6 shadow-[0_24px_70px_-30px_rgba(0,0,0,0.4)] md:p-8">
+                    <SignupForm />
+                </div>
             </div>
         </div>
     )
