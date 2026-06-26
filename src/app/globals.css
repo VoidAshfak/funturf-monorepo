@@ -6,7 +6,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -37,79 +37,119 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  /* Funturf brand + accents (DESIGN.md) */
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-muted: var(--brand-muted);
+  --color-lime: var(--lime);
+  --color-teal: var(--teal);
+  --color-amber: var(--amber);
+  --color-info: var(--info);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+  Funturf is dark-first (DESIGN.md) but ships a light theme too, toggled via
+  next-themes (class strategy). :root = light surfaces, .dark = the signature
+  green-glass dark theme. Default theme is dark (see ThemeProvider).
+*/
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+
+  --background: #f5f5f5;          /* Off White page */
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+
+  --primary: #1db954;
+  --primary-foreground: #0a0a0a;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f0f0f0;
+  --muted-foreground: #6b6b6b; /* Text Muted (light) */
+  --accent: #f0f0f0;
+  --accent-foreground: #0a0a0a;
+  --destructive: #e53935;
+
+  --border: #e0e0e0;
+  --input: #e0e0e0;
+  --ring: #1db954;
+
+  --chart-1: #1db954;
+  --chart-2: #00c9a7;
+  --chart-3: #a8ff3e;
+  --chart-4: #ffb800;
+  --chart-5: #29b6f6;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #444444;
+  --sidebar-primary: #1db954;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #e0e0e0;
+  --sidebar-ring: #1db954;
+
+  /* Brand scale (theme-independent) */
+  --brand: #1db954;
+  --brand-light: #25d366;
+  --brand-dark: #158a3e;
+  --brand-muted: #0f6b30;
+  --lime: #a8ff3e;
+  --teal: #00c9a7;
+  --amber: #ffb800;
+  --info: #29b6f6;
+
+  /* Glass system tokens (consumed by .dark glass surfaces) */
+  --glass-green-subtle: rgba(29, 185, 84, 0.06);
+  --glass-green-medium: rgba(29, 185, 84, 0.12);
+  --glass-green-strong: rgba(29, 185, 84, 0.18);
+  --glass-dark: rgba(18, 18, 18, 0.55);
+  --glass-white: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-green: rgba(29, 185, 84, 0.35);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0a0a0a;          /* Pitch Black */
+  --foreground: #ffffff;
+  --card: #1a1a1a;
+  --card-foreground: #ffffff;
+  --popover: #242424;
+  --popover-foreground: #ffffff;
+
+  --primary: #1db954;
+  --primary-foreground: #0a0a0a;
+  --secondary: #242424;
+  --secondary-foreground: #ffffff;
+  --muted: #1a1a1a;
+  --muted-foreground: #a0a0a0;
+  --accent: #242424;
+  --accent-foreground: #ffffff;
+  --destructive: #e53935;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --input: #242424;
+  --ring: #1db954;
+
+  --sidebar: #121212;
+  --sidebar-foreground: #a0a0a0;
+  --sidebar-primary: #1db954;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #1db954;
 }
 
 @layer base {
@@ -123,18 +163,122 @@
 }
 
 @layer components {
+  /*
+    Glass surfaces. In light theme they degrade to clean solid cards (DESIGN.md:
+    "glass is a dark-surface effect; revert to solid white in light areas").
+    In dark theme they become the signature green-tinted frosted glass.
+  */
+  .glass-card {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+  .glass-card:hover {
+    border-color: var(--glass-border-green);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .glass-nav {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(24px) saturate(1.2);
+    -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .glass-strong {
+    background: #ffffff;
+    border: 1px solid var(--glass-border-green);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .glass-neutral {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .glass-chip {
+    background: #f0f0f0;
+    border: 1px solid #e0e0e0;
+  }
+
   .navbar {
-    @apply flex justify-between items-center px-10 py-3 border backdrop-blur-sm bg-green-200/30;
+    @apply flex justify-between items-center px-10 py-3;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(24px) saturate(1.2);
+    -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  /* Dark theme — the real frosted glass */
+  .dark .glass-card {
+    background: var(--glass-green-subtle);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow), var(--glass-highlight);
+  }
+  .dark .glass-card:hover {
+    background: var(--glass-green-medium);
+    border-color: var(--glass-border-green);
+    box-shadow: 0 8px 32px rgba(29, 185, 84, 0.18), var(--glass-highlight);
+  }
+
+  .dark .glass-nav,
+  .dark .navbar {
+    background: linear-gradient(rgba(29, 185, 84, 0.08), rgba(29, 185, 84, 0.08)),
+      rgba(10, 10, 10, 0.6);
+    backdrop-filter: blur(24px) saturate(1.4);
+    -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .dark .glass-strong {
+    background: var(--glass-green-strong);
+    backdrop-filter: blur(30px) saturate(1.4);
+    -webkit-backdrop-filter: blur(30px) saturate(1.4);
+    border: 1px solid var(--glass-border-green);
+    box-shadow: 0 0 24px rgba(29, 185, 84, 0.15), var(--glass-shadow), var(--glass-highlight);
+  }
+
+  .dark .glass-neutral {
+    background: var(--glass-dark);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .dark .glass-chip {
+    background: var(--glass-white);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+  }
+
+  /* Solid fallbacks where backdrop-filter is unavailable (dark theme) */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .dark .glass-card,
+    .dark .glass-strong { background: #1a1a1a; }
+    .dark .glass-nav,
+    .dark .navbar { background: rgba(10, 10, 10, 0.95); }
+    .dark .glass-neutral { background: #141414; }
+    .dark .glass-chip { background: #242424; }
+  }
+
+  .green-glow {
+    box-shadow: 0 0 20px rgba(29, 185, 84, 0.25);
   }
 }
 
 @layer utilities {
   .section_container {
-    @apply px-6 py-10 max-w-7xl mx-auto;
+    @apply px-4 md:px-8 py-12 md:py-20 max-w-7xl mx-auto;
   }
 
   .card_grid {
-    @apply grid md:grid-cols-3 sm:grid-cols-2 gap-5;
+    @apply grid md:grid-cols-3 sm:grid-cols-2 gap-6;
   }
 
   .line-clamp-1 {
@@ -144,7 +288,7 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  
+
   .line-clamp-2 {
     display: -webkit-box;
     line-clamp: 2;

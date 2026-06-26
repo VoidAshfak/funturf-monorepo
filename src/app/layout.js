@@ -1,10 +1,12 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import NextAuthSessionProvider from "@/providers/NextAuthSessionProvider";
+import ThemeProvider from "@/components/ThemeProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -19,14 +21,12 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${geistMono.variable}`}>
       <NextAuthSessionProvider>
-        <body
-          cz-shortcut-listen="true"
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-
-        >
-          {children}
+        <body className="font-sans antialiased">
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
         </body>
       </NextAuthSessionProvider>
     </html>

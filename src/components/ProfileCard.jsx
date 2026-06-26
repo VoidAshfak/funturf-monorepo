@@ -50,8 +50,8 @@ export default async function ProfileCard({ userId }) {
                         </Avatar>
 
                         <div className="text-center md:text-start mb-3 md:m-0">
-                            <h1 className="text-2xl text-slate-700 font-bold">{first_name + ' ' + last_name}</h1>
-                            <p className="text-slate-400 font-bold">@{username}</p>
+                            <h1 className="text-2xl text-foreground font-bold">{first_name + ' ' + last_name}</h1>
+                            <p className="text-muted-foreground font-bold">@{username}</p>
                         </div>
                     </div>
                     <Button
@@ -81,7 +81,7 @@ export default async function ProfileCard({ userId }) {
 
                 <Separator className="mt-12 mb-7" />
 
-                <p className="text-slate-600 text-center lg:w-4/5 mx-auto">{bio} </p>
+                <p className="text-muted-foreground text-center lg:w-4/5 mx-auto">{bio} </p>
 
             </div>
 

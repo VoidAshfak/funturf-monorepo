@@ -247,7 +247,7 @@ export default function EventCreationForm({ setOpen }) {
             </div>
 
             {/* Start and End time */}
-            <fieldset className="border border-gray-300 rounded-xl p-4">
+            <fieldset className="border border-border rounded-xl p-4">
                 <legend className="px-2 text-sm  text-gray-700">Select Slot</legend>
                 <div className="grid grid-cols-2 gap-5">
                     <div className="space-y-2">

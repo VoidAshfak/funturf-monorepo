@@ -11,7 +11,7 @@ export default function CreateNewEvent() {
     return (
         <div>
             <Button
-                className="text-white bg-green-500 hover:cursor-pointer hover:bg-green-700 w-fit"
+                className="hover:cursor-pointer w-fit"
                 onClick={() => setOpen(true)}
             >
                 Create New Event

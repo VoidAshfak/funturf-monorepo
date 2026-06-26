@@ -10,7 +10,7 @@ export default function CommentsSection({ currentUser }) {
     const tree = buildTree(comments);
 
     return (
-        <div className="max-w-3xl p-6 rounded-2xl mx-auto space-y-6 bg-gray-50">
+        <div className="max-w-3xl p-6 rounded-2xl mx-auto space-y-6 glass-neutral">
             <CommentForm
                 onSubmit={async (content) => {
                     console.log("commented");

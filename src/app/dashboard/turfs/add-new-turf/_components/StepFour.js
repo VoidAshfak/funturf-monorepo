@@ -52,8 +52,8 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
     return (
         <div className="space-y-4">
             <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Pricing & Images</h2>
-                <p className="text-gray-600 mt-1">Set pricing and upload images for each ground</p>
+                <h2 className="text-2xl font-bold text-foreground">Pricing & Images</h2>
+                <p className="text-muted-foreground mt-1">Set pricing and upload images for each ground</p>
             </div>
 
             <form
@@ -65,14 +65,14 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                     const groundData = watch(`grounds.${index}`);
 
                     return (
-                        <div key={field.id} className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+                        <div key={field.id} className="glass-card rounded-2xl p-6 space-y-6">
                             {/* Ground Header */}
                             <div className="flex items-center justify-between pb-4 border-b">
                                 <div>
-                                    <h3 className="text-lg font-semibold text-gray-900">
+                                    <h3 className="text-lg font-semibold text-foreground">
                                         {groundData?.name || `Ground ${index + 1}`}
                                     </h3>
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-sm text-muted-foreground">
                                         {groundData?.sport_type} • {groundData?.ground_type}
                                     </p>
                                 </div>
@@ -89,14 +89,14 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                             {/* Pricing Section */}
                             <div>
                                 <div className="flex items-center gap-2 mb-4">
-                                    <DollarSign className="h-5 w-5 text-gray-400" />
-                                    <h4 className="font-semibold text-gray-900">Pricing Information</h4>
+                                    <DollarSign className="h-5 w-5 text-muted-foreground" />
+                                    <h4 className="font-semibold text-foreground">Pricing Information</h4>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {/* Hourly Rate */}
                                     <div>
-                                        <Label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <Label className="block text-sm font-medium text-foreground mb-1">
                                             Standard Hourly Rate <RequiredSign />
                                         </Label>
                                         <div className="relative">
@@ -115,7 +115,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     })}
                                                 />
                                             </InputField>
-                                            <span className="absolute left-3 top-2.5 text-gray-500 text-sm">
+                                            <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">
                                                 BDT
                                             </span>
                                         </div>
@@ -123,7 +123,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
 
                                     {/* Weekend Rate */}
                                     <div>
-                                        <Label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <Label className="block text-sm font-medium text-foreground mb-1">
                                             Weekend Hourly Rate
                                         </Label>
                                         <div className="relative">
@@ -142,7 +142,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     })}
                                                 />
                                             </InputField>
-                                            <span className="absolute left-3 top-2.5 text-gray-500 text-sm">
+                                            <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">
                                                 BDT
                                             </span>
                                         </div>
@@ -150,7 +150,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
 
                                     {/* Peak Hour Rate */}
                                     <div>
-                                        <Label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <Label className="block text-sm font-medium text-foreground mb-1">
                                             Peak Hour Rate
                                         </Label>
                                         <div className="relative">
@@ -169,7 +169,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     })}
                                                 />
                                             </InputField>
-                                            <span className="absolute left-3 top-2.5 text-gray-500 text-sm">
+                                            <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">
                                                 BDT
                                             </span>
                                         </div>
@@ -177,7 +177,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
 
                                     {/* Off-Peak Hour Rate */}
                                     <div>
-                                        <Label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <Label className="block text-sm font-medium text-foreground mb-1">
                                             Off-Peak Hour Rate
                                         </Label>
                                         <div className="relative">
@@ -196,7 +196,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                                     })}
                                                 />
                                             </InputField>
-                                            <span className="absolute left-3 top-2.5 text-gray-500 text-sm">
+                                            <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">
                                                 BDT
                                             </span>
                                         </div>
@@ -206,7 +206,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                 {/* Booking Hours */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                                     <div>
-                                        <Label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <Label className="block text-sm font-medium text-foreground mb-1">
                                             Minimum Booking Hours <RequiredSign />
                                         </Label>
                                         <InputField errors={errors}>
@@ -227,7 +227,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                     </div>
 
                                     <div>
-                                        <Label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <Label className="block text-sm font-medium text-foreground mb-1">
                                             Maximum Booking Hours <RequiredSign/>
                                         </Label>
                                         <InputField errors={errors}>
@@ -262,7 +262,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
 
                             {/* Images Section */}
                             <div>
-                                <h4 className="font-semibold text-gray-900 mb-4">Ground Images <RequiredSign/></h4>
+                                <h4 className="font-semibold text-foreground mb-4">Ground Images <RequiredSign/></h4>
 
                                 {/* Upload Area */}
                                 <div className="mb-4">
@@ -276,11 +276,11 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                     />
                                     <Label
                                         htmlFor={`image-upload-${index}`}
-                                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-accent transition-colors"
                                     >
-                                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                                        <span className="text-sm text-gray-600">Click to upload images</span>
-                                        <span className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB</span>
+                                        <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                                        <span className="text-sm text-muted-foreground">Click to upload images</span>
+                                        <span className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP up to 10MB</span>
                                     </Label>
                                 </div>
 
@@ -303,7 +303,7 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         {(watch(`grounds.${index}.images`) || []).map((img, imgIdx) => (
                                             <div key={imgIdx} className="relative group">
-                                                <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                                                <div className="aspect-square rounded-lg overflow-hidden bg-muted">
                                                     <img
                                                         src={img.preview || img}
                                                         alt={img.name || `Image ${imgIdx + 1}`}
@@ -326,29 +326,29 @@ export default function StepFour({ formdata, setFormdata, step, setStep }) {
                                 )}
 
                                 {(watch(`grounds.${index}.images`) || []).length === 0 && (
-                                    <div className="text-center py-4 text-gray-500 text-sm">
+                                    <div className="text-center py-4 text-muted-foreground text-sm">
                                         No images uploaded yet
                                     </div>
                                 )}
                             </div>
 
                             {/* Dimensions Info (Read-only display) */}
-                            <div className="pt-4 border-t border-gray-100">
+                            <div className="pt-4 border-t border-border">
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                                     <div>
-                                        <span className="text-gray-600">Length:</span>
+                                        <span className="text-muted-foreground">Length:</span>
                                         <span className="ml-2 font-medium">
                                             {groundData?.dimensions_length_m ? `${groundData.dimensions_length_m}m` : '-'}
                                         </span>
                                     </div>
                                     <div>
-                                        <span className="text-gray-600">Width:</span>
+                                        <span className="text-muted-foreground">Width:</span>
                                         <span className="ml-2 font-medium">
                                             {groundData?.dimensions_width_m ? `${groundData.dimensions_width_m}m` : '-'}
                                         </span>
                                     </div>
                                     <div>
-                                        <span className="text-gray-600">Capacity:</span>
+                                        <span className="text-muted-foreground">Capacity:</span>
                                         <span className="ml-2 font-medium">
                                             {groundData?.capacity_players ? `${groundData.capacity_players} players` : '-'}
                                         </span>

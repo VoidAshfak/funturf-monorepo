@@ -13,15 +13,15 @@ export default async function PlayerItem({ userId }) {
     return (
         <Link
             href={`/profile/${userId}`}
-            className="flex items-center gap-5 rounded-xl hover:bg-gray-100"
+            className="flex items-center gap-5 rounded-xl p-2 hover:bg-accent"
         >
             <Avatar className="w-10 h-10">
                 <AvatarImage src={profilePicture} alt="@profile" />
                 <AvatarFallback>PF</AvatarFallback>
             </Avatar>
             <div>
-                <h1 className="font-bold text-gray-700">{fullName}</h1>
-                <p className="text-gray-500">{role}</p>
+                <h1 className="font-bold text-foreground">{fullName}</h1>
+                <p className="text-muted-foreground">{role}</p>
             </div>
         </Link>
     )

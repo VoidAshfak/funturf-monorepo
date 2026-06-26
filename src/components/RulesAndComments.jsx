@@ -19,7 +19,7 @@ export default function RulesAndComments({rules}) {
                 <TabsTrigger value="comments">Comments</TabsTrigger>
             </TabsList>
             <TabsContent value="rules">
-                <div className="p-4 flex items-center bg-gray-50 rounded-2xl">
+                <div className="p-4 flex items-center bg-muted rounded-2xl">
                     <p className="text-left">{rules}</p>
                 </div>
             </TabsContent>

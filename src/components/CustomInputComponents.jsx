@@ -30,7 +30,7 @@ export const Select = ({ onResetHandler, onChange, name, value, filterType = "sp
                 name={name}
                 value={value}
                 onChange={onChange}
-                className="block appearance-none w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 pr-8 rounded-2xl leading-tight focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-200 transition-all duration-200"
+                className="block appearance-none w-full bg-card border border-border text-foreground py-3 px-4 pr-8 rounded-2xl leading-tight focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-200"
             >
                 {filterType === "sport" && sportOptions.map(item => (
                     <option key={item.option} value={item.val} > {item.option} </option>
@@ -41,7 +41,7 @@ export const Select = ({ onResetHandler, onChange, name, value, filterType = "sp
                 <button
                     type="button"
                     onClick={onResetHandler}
-                    className="absolute cursor-pointer inset-y-0 right-4  text-gray-400 hover:text-red-500"
+                    className="absolute cursor-pointer inset-y-0 right-4  text-muted-foreground hover:text-red-500"
                 >
                     ✕
                 </button>
@@ -49,7 +49,7 @@ export const Select = ({ onResetHandler, onChange, name, value, filterType = "sp
 
             {/* Dropdown arrow */}
             {!value && (
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
@@ -69,7 +69,7 @@ export const Input = ({ value, onChange, onResetHandler, name, placeholder, type
                 onChange={onChange}
                 type={type}
                 placeholder={placeholder}
-                className="block appearance-none w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 pr-8 rounded-2xl leading-tight focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-200 transition-all duration-200"
+                className="block appearance-none w-full bg-card border border-border text-foreground py-3 px-4 pr-8 rounded-2xl leading-tight focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-200"
             />
 
         </div>

@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/drawer";
 import { Menu } from "lucide-react";
 import NavLinksForSmallScreen from "./NavLinksForSmallScreen";
+import ThemeToggle from "./ThemeToggle";
 
 export default function SmallScreenMenu({ session }) {
     return (
@@ -15,9 +16,10 @@ export default function SmallScreenMenu({ session }) {
                 <Menu className="text-7xl" />
             </DrawerTrigger>
 
-            <DrawerContent className="backdrop-blur-lg bg-green-200/30" width="1/2">
-                <DrawerHeader>
-                    <DrawerTitle>Menu</DrawerTitle>
+            <DrawerContent className="glass-neutral text-foreground border-r border-border" width="1/2">
+                <DrawerHeader className="flex flex-row items-center justify-between">
+                    <DrawerTitle className="text-primary">Menu</DrawerTitle>
+                    <ThemeToggle />
                 </DrawerHeader>
 
                 <NavLinksForSmallScreen session={session} />
