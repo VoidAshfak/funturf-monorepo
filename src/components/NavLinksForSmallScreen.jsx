@@ -17,7 +17,7 @@ export default function NavLinksForSmallScreen({ session }) {
             <div className="flex flex-col">
                 <DrawerClose
                     asChild
-                    className={`px-5 py-2 hover:bg-white ${pathname === '/' ? 'bg-white' : ''}`}
+                    className={`px-5 py-2 hover:bg-white/5 ${pathname === '/' ? 'bg-primary/10 text-primary' : ''}`}
                 >
                     <Link
                         href="/"
@@ -28,7 +28,7 @@ export default function NavLinksForSmallScreen({ session }) {
                 </DrawerClose>
                 <DrawerClose
                     asChild
-                    className={`px-5 py-2 hover:bg-white ${pathname.startsWith('/events') ? 'bg-white' : ''}`}
+                    className={`px-5 py-2 hover:bg-white/5 ${pathname.startsWith('/events') ? 'bg-primary/10 text-primary' : ''}`}
                 >
                     <Link
                         href="/events"
@@ -44,7 +44,7 @@ export default function NavLinksForSmallScreen({ session }) {
                 </DrawerClose>
                 <DrawerClose
                     asChild
-                    className={`px-5 py-2 hover:bg-white ${pathname.startsWith('/venues') ? 'bg-white' : ''}`}
+                    className={`px-5 py-2 hover:bg-white/5 ${pathname.startsWith('/venues') ? 'bg-primary/10 text-primary' : ''}`}
                 >
                     <Link
                         href="/venues"
@@ -66,7 +66,7 @@ export default function NavLinksForSmallScreen({ session }) {
                     <>
                         <DrawerClose
                             asChild
-                            className={`px-5 py-2 hover:bg-white ${pathname.startsWith('/profile') ? 'bg-white' : ''}`}
+                            className={`px-5 py-2 hover:bg-white/5 ${pathname.startsWith('/profile') ? 'bg-primary/10 text-primary' : ''}`}
                         >
                             <Link
                                 href={`/profile/${session?.user?.id}`}
@@ -78,7 +78,7 @@ export default function NavLinksForSmallScreen({ session }) {
                         </DrawerClose>
                         <DrawerClose
                             asChild
-                            className={`px-5 py-2 hover:bg-white ${pathname.startsWith('/settings') ? 'bg-white' : ''}`}
+                            className={`px-5 py-2 hover:bg-white/5 ${pathname.startsWith('/settings') ? 'bg-primary/10 text-primary' : ''}`}
                         >
                             <Link
                                 href="#"
@@ -89,7 +89,7 @@ export default function NavLinksForSmallScreen({ session }) {
                         </DrawerClose>
                         <DrawerClose
                             asChild
-                            className={`px-5 py-2 hover:bg-white ${pathname.startsWith('/teams') ? 'bg-white' : ''}`}
+                            className={`px-5 py-2 hover:bg-white/5 ${pathname.startsWith('/teams') ? 'bg-primary/10 text-primary' : ''}`}
                         >
                             <Link
                                 href="#"
@@ -100,7 +100,7 @@ export default function NavLinksForSmallScreen({ session }) {
                         </DrawerClose>
                         <DrawerClose
                             asChild
-                            className="px-5 py-2 hover:bg-white"
+                            className="px-5 py-2 hover:bg-white/5"
                         >
                             <LogoutButton />
                         </DrawerClose>

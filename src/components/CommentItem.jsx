@@ -29,16 +29,16 @@ export default function CommentItem({ comment, currentUser, onAction, depth = 0 
     };
 
     return (
-        <div className={`pl-${depth * 4} border-l ${depth ? 'border-gray-200' : ''} space-y-2`}>
+        <div className={`pl-${depth * 4} border-l ${depth ? 'border-border' : ''} space-y-2`}>
             <div className="flex items-start space-x-3">
                 <img src={comment.author.avatar} className="w-8 h-8 rounded-full" />
                 <div className="flex-1">
                     <div className="text-sm font-semibold">{comment.author.name}</div>
                     {isEditing
                         ? <CommentForm initialValue={comment.content} onSubmit={doEdit} onCancel={() => setEditing(false)} />
-                        : <p className="text-gray-700">{comment.content}</p>
+                        : <p className="text-foreground">{comment.content}</p>
                     }
-                    <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+                    <div className="flex items-center space-x-4 text-xs text-muted-foreground mt-1">
                         <button onClick={doLike}>
                             {hasLiked ? '👍' : '👍🏻'} {comment.likes.length}
                         </button>

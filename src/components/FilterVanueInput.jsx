@@ -13,8 +13,8 @@ export default function FilterVenueInput({title}) {
     const [open, setOpen] = useState(false)
 
     return (
-        <div className=" bg-white p-5 border rounded-2xl">
-            <p className="font-semibold mb-1">{title}</p>
+        <div className="glass-neutral p-5 rounded-2xl">
+            <p className="font-semibold mb-1 text-foreground">{title}</p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <Select>
                     <SelectTrigger className="w-full">

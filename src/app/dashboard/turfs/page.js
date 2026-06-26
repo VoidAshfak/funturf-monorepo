@@ -17,13 +17,13 @@ export default async function DashboardTurfsPage() {
     const isEmpty = venueByAdminId.length === 0;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+        <div className="min-h-screen bg-background p-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="flex justify-between items-center">
                     <div className="mb-8">
-                        <h1 className="text-4xl font-bold text-slate-800 mb-2">Venue Dashboard</h1>
-                        <p className="text-slate-600">Manage and monitor your sports venues</p>
+                        <h1 className="text-4xl font-bold text-foreground mb-2">Venue Dashboard</h1>
+                        <p className="text-muted-foreground">Manage and monitor your sports venues</p>
                     </div>
 
                     {!isEmpty && (

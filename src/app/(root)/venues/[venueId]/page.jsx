@@ -35,7 +35,7 @@ const VenueDetails = async ({ params }) => {
                 </div>
 
                 <div className="space-y-3 mt-5 lg:mt-0">
-                    <div className="shadow-sm shadow-gray-300 rounded-lg p-4 ">
+                    <div className="glass-card rounded-2xl p-4 ">
                         <div className="grid grid-cols-2 grid-rows-2 gap-4">
                             <div className="col-span-2 ">
                                 <BookVenue venue={venue} />
@@ -43,7 +43,7 @@ const VenueDetails = async ({ params }) => {
 
                             <div className="row-start-2">
                                 <Button
-                                    className={`w-full hover:bg-green-200 cursor-pointer`}
+                                    className={`w-full cursor-pointer`}
                                     variant={"outline"}
                                 >
                                     <Share2 />
@@ -52,7 +52,7 @@ const VenueDetails = async ({ params }) => {
                             </div>
                             <div className="row-start-2">
                                 <Button
-                                    className={`w-full hover:bg-green-200 cursor-pointer`}
+                                    className={`w-full cursor-pointer`}
                                     variant={"outline"}
                                 >
                                     Corporate/Bulk
@@ -62,31 +62,31 @@ const VenueDetails = async ({ params }) => {
 
                     </div>
 
-                    <div className="shadow-sm shadow-gray-300 rounded-lg p-4 ">
+                    <div className="glass-card rounded-2xl p-4 ">
                         <h1 className="font-bold items-center flex pb-5"> <Clock className="mr-2" /> Open Time</h1>
                         <p> {operating_hours.opening_time} - {operating_hours.closing_time} </p>
                     </div>
 
-                    <div className="shadow-sm shadow-gray-300 rounded-lg p-4 ">
+                    <div className="glass-card rounded-2xl p-4 ">
                         <h1 className="font-bold">Location</h1>
                         <p>{getLocationString(address_line_1)}</p>
-                        <p className=" text-gray-600">({address_line_2})</p>
+                        <p className=" text-muted-foreground">({address_line_2})</p>
                     </div>
                 </div>
             </div>
 
-            <div className="shadow-sm shadow-gray-300 rounded-lg p-4 my-5">
+            <div className="glass-card rounded-2xl p-4 my-5">
                 <h1 className="font-bold text-2xl">
                     Available Sports at {name}
                 </h1>
-                <p className="text-gray-500">(Click on sports to view price chart)</p>
+                <p className="text-muted-foreground">(Click on sports to view price chart)</p>
 
                 <AvailableSports
                     sports_available={sports_available ?? []}
                 />
             </div>
 
-            <div className="shadow-sm shadow-gray-300 rounded-lg p-4 my-5">
+            <div className="glass-card rounded-2xl p-4 my-5">
                 <h1 className="font-bold text-2xl">
                     Facilities
                 </h1>
@@ -96,11 +96,11 @@ const VenueDetails = async ({ params }) => {
                 />
             </div>
 
-            <div className="shadow-sm shadow-gray-300 rounded-lg p-4 my-5">
+            <div className="glass-card rounded-2xl p-4 my-5">
                 <h1 className="font-bold text-2xl">
                     About {name}
                 </h1>
-                <pre className="whitespace-pre-wrap text-sm text-gray-800 py-10">{description}</pre>
+                <pre className="whitespace-pre-wrap text-sm text-foreground/90 py-10">{description}</pre>
             </div>
 
             <div className="mt-10">

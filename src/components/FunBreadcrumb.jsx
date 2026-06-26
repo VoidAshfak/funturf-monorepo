@@ -20,7 +20,7 @@ export default function FunBreadcrumb() {
     const pathname = usePathname();
 
     return (
-        <p className="text-gray-600 font-sans">{getBreadCrumbText(pathname)}</p>
+        <p className="text-muted-foreground font-sans">{getBreadCrumbText(pathname)}</p>
 
     )
 }

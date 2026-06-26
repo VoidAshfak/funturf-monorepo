@@ -101,8 +101,8 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                             key={sport}
                             onClick={() => toggleSport(sport)}
                             className={`cursor-pointer p-3 rounded-lg border-2 text-center transition-all ${selectedSports.includes(sport)
-                                ? 'border-green-600 bg-green-50 text-green-700'
-                                : 'border-gray-200 hover:border-gray-300'
+                                ? 'border-primary bg-primary/15 text-primary'
+                                : 'border-border hover:border-primary/40'
                                 }`}
                         >
                             {sport}
@@ -186,7 +186,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
             </div>
 
             <div>
-                <h4 className="font-semibold text-gray-900 mb-4">Venue Image <RequiredSign /> </h4>
+                <h4 className="font-semibold text-foreground mb-4">Venue Image <RequiredSign /> </h4>
 
                 <div className="mb-4">
                     <input
@@ -198,11 +198,11 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                     />
                     <Label
                         htmlFor={`image-upload`}
-                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors"
+                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-accent transition-colors"
                     >
-                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                        <span className="text-sm text-gray-600">Click to upload images</span>
-                        <span className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB</span>
+                        <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                        <span className="text-sm text-muted-foreground">Click to upload images</span>
+                        <span className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP up to 10MB</span>
                     </Label>
                 </div>
 
@@ -220,7 +220,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                 {inputImage ? (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="relative group">
-                            <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                            <div className="aspect-square rounded-lg overflow-hidden bg-muted">
                                 <img
                                     src={inputImage.preview || inputImage}
                                     alt={inputImage.name || "Image"}
@@ -242,7 +242,7 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                         </div>
                     </div>
                 ) : (
-                    <div className="text-center py-4 text-gray-500 text-sm">
+                    <div className="text-center py-4 text-muted-foreground text-sm">
                         No image uploaded yet
                     </div>
                 )}

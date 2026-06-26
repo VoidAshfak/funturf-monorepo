@@ -20,14 +20,14 @@ export default async function EventDetails({ params }) {
     return (
         <div className="w-[90%] mx-auto mt-10 pb-10">
             <div className="lg:grid grid-cols-3 gap-10">
-                <div className="bg-white col-span-2 border border-gray-300 p-5 md:p-10 rounded-xl">
+                <div className="glass-card col-span-2 p-5 md:p-10 rounded-2xl">
                     {/* EVENT INFO */}
                     <div className="flex items-center justify-between mb-10">
                         <div className="space-y-2">
-                            <h1 className="text-xl md:text-3xl font-bold md:font-extrabold text-gray-700">{title}</h1>
+                            <h1 className="text-xl md:text-3xl font-bold md:font-extrabold text-foreground">{title}</h1>
                             <div className="flex items-center gap-2">
-                                <User2 className="w-5 text-gray-600" />
-                                <p className="text-gray-600">Organized by {`${organizer.first_name} ${organizer.last_name}`}</p>
+                                <User2 className="w-5 text-muted-foreground" />
+                                <p className="text-muted-foreground">Organized by {`${organizer.first_name} ${organizer.last_name}`}</p>
                             </div>
                         </div>
 
@@ -40,9 +40,9 @@ export default async function EventDetails({ params }) {
                     </div>
 
                     <div className="flex items-center gap-2 mb-5">
-                        <Clock className="w-5 text-gray-600" />
+                        <Clock className="w-5 text-muted-foreground" />
                         <div>
-                            <p className="font-semibold md:font-bold md:text-2xl text-gray-700"> {format(event_date, "EEEE, d MMMM yyyy")} </p>
+                            <p className="font-semibold md:font-bold md:text-2xl text-foreground"> {format(event_date, "EEEE, d MMMM yyyy")} </p>
                             <p> {format(start_time, 'hh:mm a')} - {format(end_time, 'hh:mm a')} </p>
                         </div>
                     </div>
@@ -50,7 +50,7 @@ export default async function EventDetails({ params }) {
                     <div className="md:flex items-center justify-between">
                         <div className="md:flex items-center gap-2">
                             <div className="flex gap-2">
-                                <MapPin className="w-5 text-gray-600" />
+                                <MapPin className="w-5 text-muted-foreground" />
                                 <div>
                                     <p>{ground.name}, {ground.turf.name}</p>
                                     <p>{getLocationString(ground.turf.address_line_1)}</p>
@@ -73,7 +73,7 @@ export default async function EventDetails({ params }) {
                     <RulesAndComments rules={rules} />
                 </div>
 
-                <div className="bg-white border rounded-2xl p-5 mt-10 lg:m-0">
+                <div className="glass-card rounded-2xl p-5 mt-10 lg:m-0">
                     <h1 className="text-2xl font-bold">Players {current_players} / {min_players}</h1>
                     <div className="mt-7">
                         {participants.map((participant, index) => (
@@ -86,10 +86,10 @@ export default async function EventDetails({ params }) {
             {/* SIMILAR EVENTS */}
             <div className="mt-10">
                 <div className="flex items-center justify-between">
-                    <h1 className="font-bold text-3xl text-gray-700 pb-4"> Similar Events </h1>
+                    <h1 className="font-bold text-3xl text-foreground pb-4"> Similar Events </h1>
                     <Link
                         href="/events"
-                        className="text-gray-500 underline hover:text-green-500 cursor-pointer"
+                        className="text-muted-foreground underline hover:text-primary cursor-pointer"
                     >See All Events
                     </Link>
                 </div>

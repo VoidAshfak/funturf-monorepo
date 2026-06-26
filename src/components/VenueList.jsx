@@ -2,6 +2,7 @@ import { getAllVenues } from "@/utils/getData";
 import { VenueCard } from "./VenueCard";
 import Link from "next/link";
 import EmptyState from "./EmptyState";
+import VenueGrid from "./VenueGrid";
 
 export default async function VenueList({ max, type }) {
     const { data: venues } = await getAllVenues();
@@ -27,12 +28,12 @@ export default async function VenueList({ max, type }) {
     const finalVenues = max ? filteredVenues.slice(0, max) : filteredVenues;
 
     return (
-        <div className="py-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <VenueGrid>
             {finalVenues.map((venue) => (
-                <Link href={`/venues/${venue.id}`} key={venue.id}>
+                <Link href={`/venues/${venue.id}`} key={venue.id} className="venue-card">
                     <VenueCard venue={venue} />
                 </Link>
             ))}
-        </div>
+        </VenueGrid>
     );
 }

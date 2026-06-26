@@ -12,11 +12,11 @@ const RatingText = ({rating, ratingCount}) => {
     return (
         <h1 className="font-bold items-center flex"> <StarIcon className="mr-2 text-yellow-500" />
             {rating}
-            <span className="ml-1 font-medium text-sm text-gray-600">
+            <span className="ml-1 font-medium text-sm text-muted-foreground">
                 {`(${ratingCount} ratings)`}
             </span>
             <span
-                className="ml-4 font-normal underline text-blue-700 hover:text-gray-700 cursor-pointer"
+                className="ml-4 font-normal underline text-primary hover:text-foreground cursor-pointer"
                 onClick={handleRating}
             >
                 Rate Venue
