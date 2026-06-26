@@ -232,9 +232,31 @@ export default async function EventDetails({ params }) {
 
                     <div className="space-y-1">
                         {participants.length > 0 ? (
-                            participants.map((participant) => (
-                                <PlayerItem key={participant} userId={participant} />
+                            participants.map((participant, i) => (
+                                <PlayerItem
+                                    key={participant?.id ?? participant?.user_id ?? participant ?? i}
+                                    participant={participant}
+                                />
                             ))
+                        ) : cur > 0 ? (
+                            <div className="rounded-xl bg-muted/50 p-4 text-center">
+                                <div className="mb-2 flex justify-center -space-x-3">
+                                    {Array.from({ length: Math.min(cur, 5) }).map((_, i) => (
+                                        <span
+                                            key={i}
+                                            className="grid h-9 w-9 place-items-center rounded-full border-2 border-card bg-gradient-to-br from-brand to-teal text-primary-foreground"
+                                        >
+                                            <Users className="h-4 w-4" />
+                                        </span>
+                                    ))}
+                                </div>
+                                <p className="text-sm font-semibold text-foreground">
+                                    {cur} player{cur === 1 ? "" : "s"} joined
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    Roster hidden until you join.
+                                </p>
+                            </div>
                         ) : (
                             <p className="rounded-xl bg-muted/50 p-4 text-center text-sm text-muted-foreground">
                                 No players yet. Be the first to join!

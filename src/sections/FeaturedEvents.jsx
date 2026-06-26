@@ -57,7 +57,7 @@ export default function FeaturedEvents() {
 
             {/* grid */}
             <div className="relative">
-                <EventListWrapper />
+                <EventListWrapper max={6} />
             </div>
 
             {/* mobile see-all */}

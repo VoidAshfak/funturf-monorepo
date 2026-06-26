@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import Link from "next/link";
 import Image from "next/image";
 import { useGSAP } from "@gsap/react";
+import {
+    selectEventFilters,
+    setEventFilter,
+    setEventPage,
+    resetEventFilters,
+} from "@/store/slices/filtersSlice";
 import {
     Search,
     SlidersHorizontal,
@@ -72,11 +79,19 @@ function getPageList(current, total) {
 }
 
 export default function EventsExplorer({ events = [] }) {
-    const [query, setQuery] = useState("");
-    const [sport, setSport] = useState("all");
-    const [timeframe, setTimeframe] = useState("all");
-    const [openOnly, setOpenOnly] = useState(false);
-    const [page, setPage] = useState(1);
+    const dispatch = useDispatch();
+    const { query, sport, timeframe, openOnly, page } = useSelector(selectEventFilters);
+
+    const setQuery = (value) => dispatch(setEventFilter({ key: "query", value }));
+    const setSport = (value) => dispatch(setEventFilter({ key: "sport", value }));
+    const setTimeframe = (value) => dispatch(setEventFilter({ key: "timeframe", value }));
+    const setOpenOnly = (updater) =>
+        dispatch(
+            setEventFilter({
+                key: "openOnly",
+                value: typeof updater === "function" ? updater(openOnly) : updater,
+            })
+        );
 
     const scope = useRef(null);
 
@@ -118,21 +133,12 @@ export default function EventsExplorer({ events = [] }) {
     const hasActiveFilters =
         query || sport !== "all" || timeframe !== "all" || openOnly;
 
-    const clearAll = () => {
-        setQuery("");
-        setSport("all");
-        setTimeframe("all");
-        setOpenOnly(false);
-    };
+    const clearAll = () => dispatch(resetEventFilters());
 
-    // Pagination derived from the filtered list.
+    // Pagination derived from the filtered list. The slice resets page to 1
+    // automatically whenever a filter changes.
     const filterKey = `${query}|${sport}|${timeframe}|${openOnly}`;
     const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-
-    // Reset to first page whenever the filters change.
-    useEffect(() => {
-        setPage(1);
-    }, [filterKey]);
 
     const safePage = Math.min(page, pageCount);
     const paged = filtered.slice(
@@ -143,7 +149,7 @@ export default function EventsExplorer({ events = [] }) {
     const goTo = (p) => {
         const next = Math.min(Math.max(p, 1), pageCount);
         if (next === safePage) return;
-        setPage(next);
+        dispatch(setEventPage(next));
         scope.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
     useGSAP(

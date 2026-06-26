@@ -8,12 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { getAllVenues } from "@/utils/getData";
+import { useCreateEventMutation, useGetVenuesQuery } from "@/store/api/apiSlice";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 const players = [
@@ -24,12 +24,10 @@ const players = [
 
 export default function EventCreationForm({ setOpen }) {
 
-    const { data: session, status } = useSession();
+    const { status } = useSession();
+    const { data: venues = [] } = useGetVenuesQuery();
+    const [createEvent] = useCreateEventMutation();
 
-    if (status === "loading") return null;
-    if (status === "unauthenticated") redirect("/login");
-
-    const [venues, setVenues] = useState([]);
     const [grounds, setGrounds] = useState([]);
     const [sports, setSports] = useState([]);
 
@@ -62,16 +60,7 @@ export default function EventCreationForm({ setOpen }) {
 
     const onSubmit = async (values) => {
         try {
-            const response = await fetch('https://app4-osju.onrender.com/api/v1/events/create-event', {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${session?.user?.access_token}`,
-                },
-                body: JSON.stringify(values),
-            });
-
-            const data = await response.json();
+            const data = await createEvent(values).unwrap();
             if (data?.success) {
                 setOpen(false)
             }
@@ -80,18 +69,8 @@ export default function EventCreationForm({ setOpen }) {
         }
     };
 
-    const fetchVenues = async () => {
-        try {
-            const { data: allVenues } = await getAllVenues();
-            setVenues(allVenues);
-        } catch (error) {
-            setVenues([]);
-        }
-    };
-
-    useEffect(() => {
-        fetchVenues();
-    }, []);
+    if (status === "loading") return null;
+    if (status === "unauthenticated") redirect("/login");
 
     return (
         <form
