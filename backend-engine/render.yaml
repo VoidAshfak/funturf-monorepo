@@ -1,0 +1,38 @@
+services:
+  # --- Public entrypoint (Nginx) ---
+  - type: web
+    name: nginx
+    runtime: docker
+    rootDir: ./nginx
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: UPSTREAM1
+        value: http://app1:8080
+      - key: UPSTREAM2
+        value: http://app2:8080
+      - key: UPSTREAM3
+        value: http://app3:8080
+
+  # --- Private backend replicas ---
+  - type: web 
+    name: app1
+    runtime: docker
+    rootDir: ./backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+
+  - type: web
+    name: app2
+    runtime: docker
+    rootDir: ./backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+
+  - type: web
+    name: app3
+    runtime: docker
+    rootDir: ./backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+

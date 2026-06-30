@@ -1,0 +1,142 @@
+generator client {
+    provider = "prisma-client-js"
+    output   = "../../src/generated/prisma/mongo"
+}
+
+datasource db {
+    provider = "mongodb"
+    url      = env("MONGO_DATABASE_URL")
+}
+
+enum Role {
+    ADMIN
+    PLAYER
+}
+
+enum Sports {
+    FOOTBALL
+    BADMINTON
+    CRICKET
+}
+
+enum FriendStatus {
+    PENDING
+    ACCEPTED
+    REJECTED
+}
+
+enum EventStatus {
+    PENDING
+    ENDED
+}
+
+enum PaymentStatus {
+    PAID
+    UNPAID
+    REFUND
+}
+
+model User {
+    id                String   @id @default(auto()) @map("_id") @db.ObjectId
+    email             String   @unique
+    password          String
+    name              String
+    address           String?
+    bio               String?
+    phone             String
+    profilePicture    String?
+    sportsPreferences Sports?  @default(FOOTBALL)
+    eventsJoined      String[] @db.ObjectId
+    role              Role     @default(PLAYER)
+    rating            Float    @default(0.0)
+    refreshToken      String?
+
+    // relations
+    sentRequests     TurfmateRequests[] @relation("Sender")
+    receivedRequests TurfmateRequests[] @relation("Receiver")
+    eventsOrganized  Event[]            @relation("UserToEvents")
+    bookings         Booking[]          @relation("userBooked")
+    turfmates        Turfmates[]        @relation("UserTurfmates")
+    turfmateOf       Turfmates[]        @relation("UserTurfmateOf")
+}
+
+model TurfmateRequests {
+    id String @id @default(auto()) @map("_id") @db.ObjectId
+
+    sender    String       @db.ObjectId // Requester
+    receiver  String       @db.ObjectId // Target
+    status    FriendStatus
+    createdAt DateTime     @default(now())
+
+    // relations
+    player1 User @relation("Sender", fields: [sender], references: [id])
+    player2 User @relation("Receiver", fields: [receiver], references: [id])
+
+    @@unique([sender, receiver])
+    @@index([receiver])
+}
+
+model Turfmates {
+    id         String   @id @default(auto()) @map("_id") @db.ObjectId
+    userId     String   @db.ObjectId
+    turfmateId String   @db.ObjectId
+    createdAt  DateTime @default(now())
+
+    // Relations
+    user     User @relation("UserTurfmates", fields: [userId], references: [id])
+    turfmate User @relation("UserTurfmateOf", fields: [turfmateId], references: [id])
+
+    @@unique([userId, turfmateId])
+}
+
+model Event {
+    id              String      @id @default(auto()) @map("_id") @db.ObjectId
+    title           String
+    description     String?
+    organizerId     String      @db.ObjectId
+    sport           Sports
+    date            DateTime 
+    playersRequired Int
+    playersJoined   String[]    @default([]) @db.ObjectId
+    status          EventStatus @default(PENDING)
+    venueId         String      @db.ObjectId
+    rules           String?
+
+    // relations
+    organizer User      @relation(fields: [organizerId], references: [id], "UserToEvents")
+    venue     Venue     @relation("EventToVenue", fields: [venueId], references: [id])
+    bookings  Booking[] @relation("eventBooked")
+}
+
+model Venue {
+    id              String   @id @default(auto()) @map("_id") @db.ObjectId
+    name            String
+    address         String
+    lat             String?
+    lng             String?
+    sportsAvailable Sports
+    pricePerSlot    Int?
+    contactInfo     String?
+    rating          Float    @default(0)
+    availability    String
+    about           String?
+    facilities      String[]
+
+    // relations
+    eventsOrganized Event[]   @relation("EventToVenue")
+    bookings        Booking[] @relation("venueBooked")
+}
+
+model Booking {
+    id      String        @id @default(auto()) @map("_id") @db.ObjectId
+    userId  String        @db.ObjectId
+    eventId String        @db.ObjectId
+    venueId String        @db.ObjectId
+    date    DateTime
+    status  PaymentStatus
+
+    // relations
+    user  User  @relation("userBooked", fields: [userId], references: [id])
+    event Event @relation("eventBooked", fields: [eventId], references: [id])
+    venue Venue @relation("venueBooked", fields: [venueId], references: [id])
+}

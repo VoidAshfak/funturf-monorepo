@@ -1,0 +1,98 @@
+
+name: funturf
+
+networks:
+  app-net:
+    driver: bridge
+  db-net:
+    driver: bridge
+
+volumes:
+  logs:
+  postgres-data:
+
+x-backend-common: &backend-common
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  restart: unless-stopped
+  expose:
+    - "8080"
+  networks:
+    - app-net
+    - db-net
+  depends_on:
+    db:
+      condition: service_healthy
+  
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+    interval: 10s
+    timeout: 3s
+    retries: 5
+    start_period: 40s
+  
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: funturf-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:8000:5432"
+    networks:
+      - db-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  app1:
+    <<: *backend-common
+    container_name: backend-app-1
+    volumes:
+    - ./backend/prisma/postgresql:/funturf/app/prisma/postgresql
+    command: npm run dev
+
+  app2:
+    <<: *backend-common
+    container_name: backend-app-2
+    volumes:
+    - ./backend/prisma/postgresql:/funturf/app/prisma/postgresql
+    command: npm run dev
+
+  app3:
+    <<: *backend-common
+    container_name: backend-app-3
+    volumes:
+    - ./backend/prisma/postgresql:/funturf/app/prisma/postgresql
+    command: npm run dev
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    depends_on:
+      # - app1
+      # - app2
+      # - app3
+      app1:
+        condition: service_healthy
+      app2:
+        condition: service_healthy
+      app3:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - app-net
+    restart: unless-stopped

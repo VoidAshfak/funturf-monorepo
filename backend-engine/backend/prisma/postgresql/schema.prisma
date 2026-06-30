@@ -1,0 +1,941 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/prisma/pg"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRESQL_DATABASE_URL")
+}
+
+model users {
+  id                                                 String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email                                              String               @unique @db.VarChar(255)
+  phone                                              String?              @unique @db.VarChar(20)
+  password_hash                                      String               @db.VarChar(255)
+  first_name                                         String               @db.VarChar(100)
+  last_name                                          String               @db.VarChar(100)
+  date_of_birth                                      DateTime?            @db.Date
+  gender                                             gender_type?
+  profile_picture_url                                String?
+  bio                                                String?
+  user_type                                          user_type
+  status                                             user_status?         @default(active)
+  email_verified                                     Boolean?             @default(false)
+  phone_verified                                     Boolean?             @default(false)
+  created_at                                         DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at                                         DateTime?            @default(now()) @db.Timestamp(6)
+  last_login_at                                      DateTime?            @db.Timestamp(6)
+  preferred_language                                 String?              @default("en") @db.VarChar(5)
+  timezone                                           String?              @default("UTC") @db.VarChar(50)
+  notification_preferences                           Json?
+  refresh_token                                      String?              @db.VarChar(255)
+  bookings_bookings_cancelled_byTousers              bookings[]           @relation("bookings_cancelled_byTousers")
+  bookings_bookings_user_idTousers                   bookings[]           @relation("bookings_user_idTousers")
+  comment_likes                                      comment_likes[]
+  comment_reports_comment_reports_reported_byTousers comment_reports[]    @relation("comment_reports_reported_byTousers")
+  comment_reports_comment_reports_reviewed_byTousers comment_reports[]    @relation("comment_reports_reviewed_byTousers")
+  connections_connections_recipient_idTousers        connections[]        @relation("connections_recipient_idTousers")
+  connections_connections_requester_idTousers        connections[]        @relation("connections_requester_idTousers")
+  event_comments_event_comments_deleted_byTousers    event_comments[]     @relation("event_comments_deleted_byTousers")
+  event_comments_event_comments_user_idTousers       event_comments[]     @relation("event_comments_user_idTousers")
+  event_participants                                 event_participants[]
+  events                                             events[]
+  messages_messages_recipient_idTousers              messages[]           @relation("messages_recipient_idTousers")
+  messages_messages_sender_idTousers                 messages[]           @relation("messages_sender_idTousers")
+  notifications                                      notifications[]
+  payments                                           payments[]
+  player_profiles                                    player_profiles[]
+  promotion_usage                                    promotion_usage[]
+  reviews_reviews_reviewee_idTousers                 reviews[]            @relation("reviews_reviewee_idTousers")
+  reviews_reviews_reviewer_idTousers                 reviews[]            @relation("reviews_reviewer_idTousers")
+  slot_locks                                         slot_locks[]
+  turfs                                              turfs[]
+  wallets                                            wallets?
+
+  @@index([email], map: "idx_users_email")
+  @@index([phone], map: "idx_users_phone")
+  @@index([user_type], map: "idx_users_user_type")
+}
+
+model activity_logs {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id     String?   @db.Uuid
+  entity_type String    @db.VarChar(50)
+  entity_id   String?   @db.Uuid
+  action      String    @db.VarChar(100)
+  old_values  Json?
+  new_values  Json?
+  ip_address  String?   @db.VarChar(45)
+  user_agent  String?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([created_at], map: "idx_activity_logs_created_at")
+  @@index([entity_type, entity_id], map: "idx_activity_logs_entity")
+  @@index([user_id], map: "idx_activity_logs_user")
+}
+
+model bookings {
+  id                                 String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  ground_id                          String               @db.Uuid
+  user_id                            String               @db.Uuid
+  event_id                           String?              @db.Uuid
+  booking_date                       DateTime             @db.Date
+  total_amount                       Decimal              @db.Decimal(10, 2)
+  discount_amount                    Decimal?             @default(0) @db.Decimal(10, 2)
+  final_amount                       Decimal              @db.Decimal(10, 2)
+  payment_status                     payment_status_type? @default(pending)
+  booking_status                     booking_status_type? @default(pending)
+  cancellation_reason                String?
+  cancelled_by                       String?              @db.Uuid
+  cancelled_at                       DateTime?            @db.Timestamp(6)
+  payment_method                     payment_method_type?
+  transaction_id                     String?              @db.VarChar(255)
+  notes                              String?
+  admin_notes                        String?
+  reminder_sent                      Boolean?             @default(false)
+  check_in_time                      DateTime?            @db.Timestamp(6)
+  check_out_time                     DateTime?            @db.Timestamp(6)
+  created_at                         DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at                         DateTime?            @default(now()) @db.Timestamp(6)
+  slot                               Json
+  users_bookings_cancelled_byTousers users?               @relation("bookings_cancelled_byTousers", fields: [cancelled_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events_bookings_event_idToevents   events?              @relation("bookings_event_idToevents", fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  grounds                            grounds              @relation(fields: [ground_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_bookings_user_idTousers      users                @relation("bookings_user_idTousers", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events_events_booking_idTobookings events[]             @relation("events_booking_idTobookings")
+  payments                           payments[]
+  promotion_usage                    promotion_usage[]
+  reviews                            reviews[]
+
+  @@index([booking_date], map: "idx_bookings_booking_date")
+  @@index([event_id], map: "idx_bookings_event_id")
+  @@index([ground_id], map: "idx_bookings_ground_id")
+  @@index([booking_status], map: "idx_bookings_status")
+  @@index([user_id], map: "idx_bookings_user_id")
+}
+
+model comment_likes {
+  id             String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  comment_id     String         @db.Uuid
+  user_id        String         @db.Uuid
+  created_at     DateTime?      @default(now()) @db.Timestamp(6)
+  event_comments event_comments @relation(fields: [comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          users          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([comment_id, user_id], map: "unique_comment_like")
+  @@index([comment_id], map: "idx_comment_likes_comment_id")
+  @@index([user_id], map: "idx_comment_likes_user_id")
+}
+
+model comment_reports {
+  id                                       String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  comment_id                               String         @db.Uuid
+  reported_by                              String         @db.Uuid
+  reason                                   String         @db.VarChar(100)
+  description                              String?
+  status                                   String?        @default("pending") @db.VarChar(50)
+  reviewed_by                              String?        @db.Uuid
+  reviewed_at                              DateTime?      @db.Timestamp(6)
+  action_taken                             String?
+  created_at                               DateTime?      @default(now()) @db.Timestamp(6)
+  event_comments                           event_comments @relation(fields: [comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_comment_reports_reported_byTousers users          @relation("comment_reports_reported_byTousers", fields: [reported_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_comment_reports_reviewed_byTousers users?         @relation("comment_reports_reviewed_byTousers", fields: [reviewed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([comment_id], map: "idx_comment_reports_comment_id")
+  @@index([status], map: "idx_comment_reports_status")
+}
+
+model connections {
+  id                                    String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  requester_id                          String                  @db.Uuid
+  recipient_id                          String                  @db.Uuid
+  status                                connection_status_type? @default(pending)
+  connection_type                       connection_type?        @default(friend)
+  message                               String?
+  created_at                            DateTime?               @default(now()) @db.Timestamp(6)
+  responded_at                          DateTime?               @db.Timestamp(6)
+  users_connections_recipient_idTousers users                   @relation("connections_recipient_idTousers", fields: [recipient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_connections_requester_idTousers users                   @relation("connections_requester_idTousers", fields: [requester_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([requester_id, recipient_id], map: "unique_connection")
+  @@index([recipient_id], map: "idx_connections_recipient")
+  @@index([requester_id], map: "idx_connections_requester")
+  @@index([status], map: "idx_connections_status")
+}
+
+model event_comments {
+  id                                     String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  event_id                               String            @db.Uuid
+  user_id                                String            @db.Uuid
+  parent_comment_id                      String?           @db.Uuid
+  content                                String
+  mentions                               Json?
+  attachments                            Json?
+  is_pinned                              Boolean?          @default(false)
+  is_edited                              Boolean?          @default(false)
+  edited_at                              DateTime?         @db.Timestamp(6)
+  is_deleted                             Boolean?          @default(false)
+  deleted_at                             DateTime?         @db.Timestamp(6)
+  deleted_by                             String?           @db.Uuid
+  likes_count                            Int?              @default(0)
+  replies_count                          Int?              @default(0)
+  created_at                             DateTime?         @default(now()) @db.Timestamp(6)
+  updated_at                             DateTime?         @default(now()) @db.Timestamp(6)
+  comment_likes                          comment_likes[]
+  comment_reports                        comment_reports[]
+  users_event_comments_deleted_byTousers users?            @relation("event_comments_deleted_byTousers", fields: [deleted_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events                                 events            @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  event_comments                         event_comments?   @relation("event_commentsToevent_comments", fields: [parent_comment_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_event_comments                   event_comments[]  @relation("event_commentsToevent_comments")
+  users_event_comments_user_idTousers    users             @relation("event_comments_user_idTousers", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_event_comments_created_at")
+  @@index([event_id], map: "idx_event_comments_event_id")
+  @@index([is_deleted], map: "idx_event_comments_is_deleted")
+  @@index([parent_comment_id], map: "idx_event_comments_parent_id")
+  @@index([user_id], map: "idx_event_comments_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model event_participants {
+  id              String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  event_id        String                   @db.Uuid
+  user_id         String                   @db.Uuid
+  status          participant_status_type? @default(requested)
+  payment_status  payment_status_type?     @default(pending)
+  joined_at       DateTime?                @default(now()) @db.Timestamp(6)
+  approved_at     DateTime?                @db.Timestamp(6)
+  rating_given    Int?
+  rating_received Int?
+  notes           String?
+  events          events                   @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users                    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([event_id, user_id], map: "unique_participant")
+  @@index([event_id], map: "idx_event_participants_event_id")
+  @@index([status], map: "idx_event_participants_status")
+  @@index([user_id], map: "idx_event_participants_user_id")
+}
+
+model events {
+  id                                   String                  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  organizer_id                         String                  @db.Uuid
+  booking_id                           String?                 @db.Uuid
+  title                                String                  @db.VarChar(255)
+  description                          String?
+  sport_type                           String                  @db.VarChar(50)
+  event_type                           event_type?             @default(friendly)
+  event_date                           DateTime                @db.Date
+  start_time                           DateTime                @db.Time(6)
+  end_time                             DateTime                @db.Time(6)
+  ground_id                            String?                 @db.Uuid
+  max_players                          Int
+  min_players                          Int
+  current_players                      Int?                    @default(1)
+  skill_level_required                 skill_level_type?       @default(any)
+  age_group                            age_group_type?         @default(any)
+  gender_preference                    gender_preference_type? @default(any)
+  entry_fee                            Decimal?                @default(0) @db.Decimal(10, 2)
+  total_cost                           Decimal?                @db.Decimal(10, 2)
+  cost_split_type                      cost_split_type?        @default(equal)
+  visibility                           visibility_type?        @default(public)
+  join_approval_required               Boolean?                @default(false)
+  status                               event_status_type?      @default(open)
+  cancellation_reason                  String?
+  rules                                String?
+  what_to_bring                        String?
+  images                               Json?
+  created_at                           DateTime?               @default(now()) @db.Timestamp(6)
+  updated_at                           DateTime?               @default(now()) @db.Timestamp(6)
+  venue_id                             String?                 @db.Uuid
+  bookings_bookings_event_idToevents   bookings[]              @relation("bookings_event_idToevents")
+  event_comments                       event_comments[]
+  event_participants                   event_participants[]
+  grounds                              grounds?                @relation(fields: [ground_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                                users                   @relation(fields: [organizer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bookings_events_booking_idTobookings bookings?               @relation("events_booking_idTobookings", fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_events_booking")
+  messages                             messages[]
+  payments                             payments[]
+  reviews                              reviews[]
+
+  @@index([event_date], map: "idx_events_event_date")
+  @@index([organizer_id], map: "idx_events_organizer")
+  @@index([sport_type], map: "idx_events_sport_type")
+  @@index([status], map: "idx_events_status")
+  @@index([visibility], map: "idx_events_visibility")
+}
+
+model grounds {
+  id                    String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  turf_id               String               @db.Uuid
+  name                  String               @db.VarChar(255)
+  ground_type           ground_type?
+  surface_type          surface_type?
+  dimensions_length_m   Decimal?             @db.Decimal(5, 2)
+  dimensions_width_m    Decimal?             @db.Decimal(5, 2)
+  capacity_players      Int?
+  hourly_rate           Decimal              @db.Decimal(10, 2)
+  weekend_hourly_rate   Decimal?             @db.Decimal(10, 2)
+  peak_hour_rate        Decimal?             @db.Decimal(10, 2)
+  off_peak_hour_rate    Decimal?             @db.Decimal(10, 2)
+  currency              String?              @default("USD") @db.VarChar(3)
+  minimum_booking_hours Decimal?             @default(1) @db.Decimal(3, 1)
+  maximum_booking_hours Decimal?             @default(4) @db.Decimal(3, 1)
+  status                ground_status_type?  @default(available)
+  amenities             Json?
+  images                Json?
+  notes                 String?
+  created_at            DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?            @default(now()) @db.Timestamp(6)
+  sport_type            Json?
+  bookings              bookings[]
+  events                events[]
+  turfs                 turfs                @relation(fields: [turf_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  peak_hour_settings    peak_hour_settings[]
+  promotions            promotions[]
+  slot_locks            slot_locks[]
+  slots                 slots[]
+
+  @@index([status], map: "idx_grounds_status")
+  @@index([turf_id], map: "idx_grounds_turf_id")
+}
+
+model messages {
+  id                                 String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sender_id                          String        @db.Uuid
+  recipient_id                       String?       @db.Uuid
+  event_id                           String?       @db.Uuid
+  message_type                       message_type? @default(text)
+  content                            String
+  attachment_url                     String?
+  is_read                            Boolean?      @default(false)
+  read_at                            DateTime?     @db.Timestamp(6)
+  is_edited                          Boolean?      @default(false)
+  edited_at                          DateTime?     @db.Timestamp(6)
+  is_deleted                         Boolean?      @default(false)
+  deleted_at                         DateTime?     @db.Timestamp(6)
+  created_at                         DateTime?     @default(now()) @db.Timestamp(6)
+  events                             events?       @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_messages_recipient_idTousers users?        @relation("messages_recipient_idTousers", fields: [recipient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_messages_sender_idTousers    users         @relation("messages_sender_idTousers", fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_messages_created_at")
+  @@index([event_id], map: "idx_messages_event")
+  @@index([recipient_id], map: "idx_messages_recipient")
+  @@index([sender_id], map: "idx_messages_sender")
+}
+
+model notification_templates {
+  id            String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  type          String       @db.VarChar(100)
+  channel       channel_type
+  subject       String?      @db.VarChar(255)
+  template_body String
+  variables     Json?
+  is_active     Boolean?     @default(true)
+  created_at    DateTime?    @default(now()) @db.Timestamp(6)
+  updated_at    DateTime?    @default(now()) @db.Timestamp(6)
+
+  @@unique([type, channel], map: "unique_template")
+  @@index([type], map: "idx_notification_templates_type")
+}
+
+model notifications {
+  id         String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id    String            @db.Uuid
+  type       notification_type
+  title      String            @db.VarChar(255)
+  message    String
+  data       Json?
+  priority   priority_type?    @default(medium)
+  is_read    Boolean?          @default(false)
+  read_at    DateTime?         @db.Timestamp(6)
+  action_url String?
+  expires_at DateTime?         @db.Timestamp(6)
+  created_at DateTime?         @default(now()) @db.Timestamp(6)
+  users      users             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_notifications_created_at")
+  @@index([is_read], map: "idx_notifications_is_read")
+  @@index([type], map: "idx_notifications_type")
+  @@index([user_id], map: "idx_notifications_user_id")
+}
+
+model payments {
+  id                  String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id             String                @db.Uuid
+  booking_id          String?               @db.Uuid
+  event_id            String?               @db.Uuid
+  amount              Decimal               @db.Decimal(10, 2)
+  currency            String?               @default("USD") @db.VarChar(3)
+  payment_method      payment_method_type?
+  payment_gateway     String?               @default("manual") @db.VarChar(50)
+  transaction_id      String?               @unique @db.VarChar(255)
+  gateway_response    Json?
+  status              payment_status_type?  @default(pending)
+  refund_amount       Decimal?              @db.Decimal(10, 2)
+  refund_reason       String?
+  refunded_at         DateTime?             @db.Timestamp(6)
+  payment_date        DateTime?             @db.Timestamp(6)
+  created_at          DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at          DateTime?             @default(now()) @db.Timestamp(6)
+  bookings            bookings?             @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events              events?               @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users               users                 @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wallet_transactions wallet_transactions[]
+
+  @@index([booking_id], map: "idx_payments_booking")
+  @@index([status], map: "idx_payments_status")
+  @@index([transaction_id], map: "idx_payments_transaction")
+  @@index([user_id], map: "idx_payments_user")
+}
+
+model player_profiles {
+  id                     String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id                String               @db.Uuid
+  preferred_positions    Json?
+  skill_level            skill_level_type?
+  years_of_experience    Int?
+  preferred_foot         preferred_foot_type?
+  jersey_number          Int?
+  height_cm              Int?
+  weight_kg              Int?
+  achievements           String?
+  sports_played          Json?
+  availability_schedule  Json?
+  preferred_play_time    play_time_type?
+  max_travel_distance_km Int?
+  rating                 Decimal?             @default(0.00) @db.Decimal(3, 2)
+  total_games_played     Int?                 @default(0)
+  total_games_organized  Int?                 @default(0)
+  reliability_score      Int?                 @default(100)
+  created_at             DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?            @default(now()) @db.Timestamp(6)
+  users                  users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([skill_level], map: "idx_player_profiles_skill_level")
+  @@index([user_id], map: "idx_player_profiles_user_id")
+}
+
+model promotion_usage {
+  id              String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  promotion_id    String     @db.Uuid
+  user_id         String     @db.Uuid
+  booking_id      String     @db.Uuid
+  discount_amount Decimal    @db.Decimal(10, 2)
+  used_at         DateTime?  @default(now()) @db.Timestamp(6)
+  bookings        bookings   @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  promotions      promotions @relation(fields: [promotion_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users           users      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([promotion_id, booking_id], map: "unique_usage")
+  @@index([promotion_id], map: "idx_promotion_usage_promotion")
+  @@index([user_id], map: "idx_promotion_usage_user")
+}
+
+model promotions {
+  id                      String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  turf_id                 String?                @db.Uuid
+  code                    String                 @unique @db.VarChar(50)
+  title                   String                 @db.VarChar(255)
+  description             String?
+  discount_type           discount_type
+  discount_value          Decimal                @db.Decimal(10, 2)
+  minimum_booking_amount  Decimal?               @db.Decimal(10, 2)
+  maximum_discount_amount Decimal?               @db.Decimal(10, 2)
+  valid_from              DateTime               @db.Timestamp(6)
+  valid_until             DateTime               @db.Timestamp(6)
+  usage_limit             Int?
+  used_count              Int?                   @default(0)
+  applicable_days         Json?
+  applicable_hours        Json?
+  applicable_sports       Json?
+  status                  promotion_status_type? @default(active)
+  created_at              DateTime?              @default(now()) @db.Timestamp(6)
+  updated_at              DateTime?              @default(now()) @db.Timestamp(6)
+  ground_id               String?                @db.Uuid
+  promotion_usage         promotion_usage[]
+  ground_rate             grounds?               @relation(fields: [ground_id], references: [id], onDelete: Cascade, map: "fk_ground_promo")
+  turfs                   turfs?                 @relation(fields: [turf_id], references: [id], onDelete: Cascade, map: "fk_turf_promo")
+
+  @@index([code], map: "idx_promotions_code")
+  @@index([status], map: "idx_promotions_status")
+  @@index([turf_id], map: "idx_promotions_turf")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model reviews {
+  id                               String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  reviewer_id                      String              @db.Uuid
+  reviewee_id                      String?             @db.Uuid
+  turf_id                          String?             @db.Uuid
+  event_id                         String?             @db.Uuid
+  booking_id                       String?             @db.Uuid
+  review_type                      review_type
+  rating                           Int
+  title                            String?             @db.VarChar(255)
+  comment                          String?
+  pros                             String?
+  cons                             String?
+  would_recommend                  Boolean?
+  images                           Json?
+  is_verified_booking              Boolean?            @default(false)
+  helpful_count                    Int?                @default(0)
+  response_from_owner              String?
+  responded_at                     DateTime?           @db.Timestamp(6)
+  status                           review_status_type? @default(approved)
+  created_at                       DateTime?           @default(now()) @db.Timestamp(6)
+  updated_at                       DateTime?           @default(now()) @db.Timestamp(6)
+  bookings                         bookings?           @relation(fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events                           events?             @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_reviews_reviewee_idTousers users?              @relation("reviews_reviewee_idTousers", fields: [reviewee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_reviews_reviewer_idTousers users               @relation("reviews_reviewer_idTousers", fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  turfs                            turfs?              @relation(fields: [turf_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([rating], map: "idx_reviews_rating")
+  @@index([reviewer_id], map: "idx_reviews_reviewer")
+  @@index([turf_id], map: "idx_reviews_turf")
+  @@index([review_type], map: "idx_reviews_type")
+}
+
+model sport_positions {
+  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sport_id      String  @db.Uuid
+  position_name String  @db.VarChar(100)
+  position_code String? @db.VarChar(20)
+  description   String?
+  sports        sports  @relation(fields: [sport_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([sport_id], map: "idx_sport_positions_sport")
+}
+
+model sports {
+  id              String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name            String            @unique @db.VarChar(100)
+  category        String?           @db.VarChar(50)
+  team_size_min   Int?
+  team_size_max   Int?
+  icon_url        String?
+  rules_url       String?
+  is_active       Boolean?          @default(true)
+  sport_positions sport_positions[]
+}
+
+model turf_statistics {
+  id                    String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  turf_id               String    @db.Uuid
+  date                  DateTime  @db.Date
+  total_bookings        Int?      @default(0)
+  confirmed_bookings    Int?      @default(0)
+  cancelled_bookings    Int?      @default(0)
+  total_revenue         Decimal?  @default(0.00) @db.Decimal(10, 2)
+  total_hours_booked    Decimal?  @default(0.00) @db.Decimal(5, 2)
+  occupancy_rate        Decimal?  @default(0.00) @db.Decimal(5, 2)
+  average_booking_value Decimal?  @default(0.00) @db.Decimal(10, 2)
+  peak_hour_bookings    Int?      @default(0)
+  most_booked_sport     String?   @db.VarChar(50)
+  new_customers         Int?      @default(0)
+  returning_customers   Int?      @default(0)
+  created_at            DateTime? @default(now()) @db.Timestamp(6)
+  turfs                 turfs     @relation(fields: [turf_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([turf_id, date], map: "unique_stat")
+  @@index([turf_id, date], map: "idx_turf_statistics_turf_date")
+}
+
+model turfs {
+  id                    String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  admin_user_id         String               @db.Uuid
+  name                  String               @db.VarChar(255)
+  slug                  String               @unique @db.VarChar(255)
+  description           String?
+  address_line_1        String               @db.VarChar(255)
+  address_line_2        String?              @db.VarChar(255)
+  city                  String               @db.VarChar(100)
+  state                 String               @db.VarChar(100)
+  country               String               @db.VarChar(100)
+  postal_code           String?              @db.VarChar(20)
+  latitude              Decimal?             @db.Decimal(10, 8)
+  longitude             Decimal?             @db.Decimal(11, 8)
+  phone                 String?              @db.VarChar(20)
+  email                 String?              @db.VarChar(255)
+  website_url           String?
+  establishment_year    Int?
+  total_grounds         Int?
+  facilities            Json?
+  sports_available      Json?
+  rules_and_regulations String?
+  cancellation_policy   String?
+  advance_booking_days  Int?                 @default(30)
+  status                turf_status_type?    @default(pending_approval)
+  verified              Boolean?             @default(false)
+  rating                Decimal?             @default(0.00) @db.Decimal(3, 2)
+  total_bookings        Int?                 @default(0)
+  operating_hours       Json?
+  holiday_dates         Json?
+  images                Json?
+  created_at            DateTime?            @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?            @default(now()) @db.Timestamp(6)
+  grounds               grounds[]
+  peak_hour_settings    peak_hour_settings[]
+  promotions            promotions[]
+  reviews               reviews[]
+  turf_statistics       turf_statistics[]
+  users                 users                @relation(fields: [admin_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([admin_user_id], map: "idx_turfs_admin_user")
+  @@index([city], map: "idx_turfs_city")
+  @@index([slug], map: "idx_turfs_slug")
+  @@index([status], map: "idx_turfs_status")
+}
+
+model wallet_transactions {
+  id               String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  wallet_id        String               @db.Uuid
+  transaction_type transaction_type
+  amount           Decimal              @db.Decimal(10, 2)
+  balance_after    Decimal              @db.Decimal(10, 2)
+  description      String?
+  reference_type   reference_type?
+  reference_id     String?              @db.Uuid
+  payment_id       String?              @db.Uuid
+  status           payment_status_type? @default(completed)
+  created_at       DateTime?            @default(now()) @db.Timestamp(6)
+  payments         payments?            @relation(fields: [payment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  wallets          wallets              @relation(fields: [wallet_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at], map: "idx_wallet_transactions_created_at")
+  @@index([transaction_type], map: "idx_wallet_transactions_type")
+  @@index([wallet_id], map: "idx_wallet_transactions_wallet")
+}
+
+model wallets {
+  id                  String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id             String                @unique @db.Uuid
+  balance             Decimal?              @default(0.00) @db.Decimal(10, 2)
+  currency            String?               @default("USD") @db.VarChar(3)
+  total_credited      Decimal?              @default(0.00) @db.Decimal(10, 2)
+  total_debited       Decimal?              @default(0.00) @db.Decimal(10, 2)
+  status              wallet_status_type?   @default(active)
+  created_at          DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at          DateTime?             @default(now()) @db.Timestamp(6)
+  wallet_transactions wallet_transactions[]
+  users               users                 @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_wallets_user_id")
+}
+
+model slots {
+  ground_id String   @db.Uuid
+  t0000     Boolean? @default(true)
+  t0130     Boolean? @default(true)
+  t0300     Boolean? @default(true)
+  t0430     Boolean? @default(true)
+  t0600     Boolean? @default(true)
+  t0730     Boolean? @default(true)
+  t0900     Boolean? @default(true)
+  t1030     Boolean? @default(true)
+  t1200     Boolean? @default(true)
+  t1330     Boolean? @default(true)
+  t1500     Boolean? @default(true)
+  t1630     Boolean? @default(true)
+  t1800     Boolean? @default(true)
+  t1930     Boolean? @default(true)
+  t2100     Boolean? @default(true)
+  t2230     Boolean? @default(true)
+  date      DateTime @default(dbgenerated("'1999-01-01'::date")) @db.Date
+  grounds   grounds  @relation(fields: [ground_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_grounds")
+
+  @@id([ground_id, date])
+}
+
+model slot_locks {
+  ground_id         String   @db.Uuid
+  date              DateTime @db.Date
+  slot_code         String   @db.VarChar(5)
+  locked_until      DateTime @db.Timestamp(6)
+  locked_by_user_id String   @db.Uuid
+  grounds           grounds  @relation(fields: [ground_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_slot_locks_ground")
+  users             users    @relation(fields: [locked_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_slot_locks_user")
+
+  @@unique([ground_id, date, slot_code], map: "slot_locks_unique")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model peak_hour_settings {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ground_id   String    @db.Uuid
+  turf_id     String    @db.Uuid
+  day_of_week Int       @db.SmallInt
+  start_time  DateTime  @db.Time(6)
+  end_time    DateTime  @db.Time(6)
+  is_active   Boolean?  @default(true)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+  grounds     grounds   @relation(fields: [ground_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_peak_hour_ground")
+  turfs       turfs     @relation(fields: [turf_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_peak_hour_turf")
+
+  @@unique([ground_id, day_of_week, start_time, end_time], map: "uniq_ground_time")
+}
+
+enum age_group_type {
+  any
+  under_16
+  between_16_25 @map("16_25")
+  between_5_35  @map("25_35")
+  between_35_45 @map("35_45")
+  above_45
+}
+
+enum booking_status_type {
+  pending
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+enum channel_type {
+  in_app
+  email
+  sms
+  push
+}
+
+enum connection_status_type {
+  pending
+  accepted
+  rejected
+  blocked
+}
+
+enum connection_type {
+  friend
+  teammate
+  follow
+}
+
+enum cost_split_type {
+  equal
+  organizer_pays
+  custom
+}
+
+enum discount_type {
+  percentage
+  fixed_amount
+}
+
+enum event_status_type {
+  open
+  ready
+  booked
+  completed
+  cancelled
+}
+
+enum event_type {
+  friendly
+  tournament
+  practice
+  league
+  pickup
+}
+
+enum gender_preference_type {
+  any
+  male
+  female
+  mixed
+}
+
+enum gender_type {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum ground_status_type {
+  available
+  maintenance
+  unavailable
+}
+
+enum ground_type {
+  v5x5            @map("5x5")
+  v6x6            @map("6x6")
+  v7x7            @map("7x7")
+  v11x11          @map("11x11")
+  cricket_pitch
+  tennis_court
+  badminton_court
+  custom
+}
+
+enum message_type {
+  text
+  image
+  location
+  system
+}
+
+enum notification_type {
+  booking_confirmed
+  booking_cancelled
+  booking_reminder
+  event_invitation
+  event_join_request
+  event_cancelled
+  event_reminder
+  event_full
+  payment_received
+  payment_pending
+  connection_request
+  connection_accepted
+  message_received
+  rating_received
+  system_announcement
+  comment_added
+  comment_reply
+}
+
+enum participant_role_type {
+  organizer
+  co_organizer
+  player
+  substitute
+}
+
+enum participant_status_type {
+  requested
+  approved
+  rejected
+  cancelled
+  attended
+  no_show
+}
+
+enum payment_method_type {
+  online
+  cash
+  bank_transfer
+  wallet
+}
+
+enum payment_status_type {
+  pending
+  partial
+  completed
+  refunded
+}
+
+enum play_time_type {
+  morning
+  afternoon
+  evening
+  night
+  flexible
+}
+
+enum preferred_foot_type {
+  left
+  right
+  both
+}
+
+enum priority_type {
+  low
+  medium
+  high
+  urgent
+}
+
+enum promotion_status_type {
+  active
+  inactive
+  expired
+}
+
+enum reference_type {
+  booking
+  event
+  refund
+  top_up
+  withdrawal
+  transfer
+}
+
+enum review_status_type {
+  pending
+  approved
+  rejected
+}
+
+enum review_type {
+  player
+  turf
+  event
+}
+
+enum skill_level_type {
+  beginner
+  intermediate
+  advanced
+  professional
+  any
+}
+
+enum surface_type {
+  natural_grass
+  artificial_grass
+  clay
+  concrete
+  synthetic
+  other
+}
+
+enum team_type {
+  team_a
+  team_b
+  unassigned
+}
+
+enum transaction_type {
+  credit
+  debit
+}
+
+enum turf_status_type {
+  pending_approval
+  active
+  inactive
+  suspended
+}
+
+enum user_status {
+  active
+  inactive
+  suspended
+  banned
+}
+
+enum user_type {
+  player
+  turf_admin
+  super_admin
+}
+
+enum visibility_type {
+  public
+  private
+  friends_only
+}
+
+enum wallet_status_type {
+  active
+  frozen
+  closed
+}
