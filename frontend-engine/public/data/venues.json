@@ -1,0 +1,147 @@
+[
+    {
+        "_id": "v1",
+        "name": "Downtown Gym",
+        "address": "123 5th Ave, New York, NY",
+        "location": {
+            "lat": 40.7128,
+            "lng": -74.0060
+        },
+        "sports": [
+            "Football",
+            "Badminton"
+        ],
+        "availability": [
+            "Mon-Fri 6am-10pm"
+        ],
+        "venueImages": [
+            "/assets/images/venue-v1.jpg",
+            "/assets/images/1.jpg",
+            "/assets/images/3.jpg",
+            "/assets/images/4.jpg",
+            "/assets/images/5.jpg"
+        ],
+        "rating": 4.8,
+        "about": "Football: - It is recommended but not compulsory to wear football studs while playing at the facility. - Metal studs are not allowed. ",
+        "facilities": [
+            "Swimming Pool",
+            "Locker Rooms",
+            "Car Parking",
+            "Pickup Services"
+        ] 
+    },
+    {
+        "_id": "v3",
+        "name": "Mission Park",
+        "address": "456 Mission St, San Francisco, CA",
+        "location": {
+            "lat": 37.7599,
+            "lng": -122.4148
+        },
+        "sports": [
+            "Football"
+        ],
+        "availability": [
+            "Weekends 8am-8pm"
+        ],
+        "venueImages": [
+            "/assets/images/venue-v2.jpg",
+            "/assets/images/1.jpg",
+            "/assets/images/3.jpg",
+            "/assets/images/4.jpg",
+            "/assets/images/5.jpg"
+        ],
+        "rating": 4.8,
+        "about": "Football: - It is recommended but not compulsory to wear football studs while playing at the facility. - Metal studs are not allowed. ",
+        "facilities": [
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers",
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers",
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers"
+        ] 
+    },
+    {
+        "_id": "v2",
+        "name": "Mission Park",
+        "address": "456 Mission St, San Francisco, CA",
+        "location": {
+            "lat": 37.7599,
+            "lng": -122.4148
+        },
+        "sports": [
+            "Football"
+        ],
+        "availability": [
+            "Weekends 8am-8pm"
+        ],
+        "venueImages": [
+            "/assets/images/venue-v2.jpg",
+            "/assets/images/1.jpg",
+            "/assets/images/3.jpg",
+            "/assets/images/4.jpg",
+            "/assets/images/5.jpg"
+        ],
+        "rating": 4.8,
+        "about": "Football: - It is recommended but not compulsory to wear football studs while playing at the facility. - Metal studs are not allowed. ",
+        "facilities": [
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers",
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers",
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers"
+        ] 
+    },
+    {
+        "_id": "v4",
+        "name": "Mission Park",
+        "address": "456 Mission St, San Francisco, CA",
+        "location": {
+            "lat": 37.7599,
+            "lng": -122.4148
+        },
+        "sports": [
+            "Football"
+        ],
+        "availability": [
+            "Weekends 8am-8pm"
+        ],
+        "venueImages": [
+            "/assets/images/venue-v2.jpg",
+            "/assets/images/1.jpg",
+            "/assets/images/3.jpg",
+            "/assets/images/4.jpg",
+            "/assets/images/5.jpg"
+        ],
+        "rating": 4.8,
+        "about": "Football: - It is recommended but not compulsory to wear football studs while playing at the facility. - Metal studs are not allowed. ",
+        "facilities": [
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers",
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers",
+            "Washrooms",
+            "Drinking Water",
+            "Changing Rooms",
+            "Showers"
+        ] 
+    }
+]
