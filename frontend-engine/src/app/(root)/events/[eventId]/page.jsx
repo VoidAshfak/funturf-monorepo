@@ -1,9 +1,10 @@
+import EventAdminPanel from "@/components/EventAdminPanel"
+import EventJoinButton from "@/components/EventJoinButton"
 import EventListWrapper from "@/components/EventListWrapper"
 import MapDialog from "@/components/MapDialog"
 import PlayerItem from "@/components/PlayerItem"
 import RulesAndComments from "@/components/RulesAndComments"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import { getIndividualEventByEventId } from "@/utils/getData"
 import { getLocationString } from "@/utils/utility-functions"
 import { format } from "date-fns"
@@ -159,13 +160,7 @@ export default async function EventDetails({ params }) {
 
                     {/* CTA */}
                     <div className="flex flex-col gap-3 sm:flex-row">
-                        <Button
-                            size="lg"
-                            disabled={isFull}
-                            className="rounded-full px-8 green-glow"
-                        >
-                            {isFull ? "Squad full" : "Request to Join"}
-                        </Button>
+                        <EventJoinButton event={event} isFull={isFull} />
                         <MapDialog
                             lat={mapLat}
                             lng={mapLng}
@@ -180,6 +175,9 @@ export default async function EventDetails({ params }) {
             <div className="mt-8 grid gap-6 lg:grid-cols-3">
                 {/* left: details / rules / comments */}
                 <div className="lg:col-span-2">
+                    {/* admin-only: pending join requests + manage admins */}
+                    <EventAdminPanel event={event} />
+
                     {/* quick stats */}
                     <div className="mb-6 grid grid-cols-3 gap-4">
                         <StatCard icon={Users} value={`${cur}/${min || "—"}`} label="Joined" />

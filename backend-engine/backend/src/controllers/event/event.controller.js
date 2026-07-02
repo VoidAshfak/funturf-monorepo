@@ -4,6 +4,26 @@ import { ApiResponse } from "../../utils/apiResponse.js";
 import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { pgClient } from "../../prisma.js";
 import { EventSerializer } from "../../utils/dataSerializer.js";
+import { createNotification } from "../../utils/notificationService.js";
+import { broadcastToTurfmates, getAcceptedTurfmateIds } from "../../utils/turfmateService.js";
+import { isEventAdmin, notifyEventAdmins } from "../../utils/eventService.js";
+
+// Build a display name from a user row, with a safe fallback.
+const displayName = (u, fallback = "A player") =>
+    [u?.first_name, u?.last_name].filter(Boolean).join(" ") || fallback;
+
+// Priority for turfmate broadcasts scales with how soon the match is:
+// today -> urgent, within 3 days -> high, else medium. Helps the notification
+// box surface the matches that need players *now*.
+const eventPriorityByDate = (eventDate) => {
+    if (!eventDate) return "medium";
+    const MS_DAY = 86400000;
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((startOfDay(new Date(eventDate)) - startOfDay(new Date())) / MS_DAY);
+    if (diffDays <= 0) return "urgent";
+    if (diffDays <= 3) return "high";
+    return "medium";
+};
 
 
 const createEvent = asyncHandler(async (req, res) => {
@@ -74,17 +94,38 @@ const createEvent = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Event creation failed!")
     }
 
+    // Initial roster the organizer hand-picked at creation are approved outright
+    // (not pending requests), so they never surface in the admin request queue.
     const eventParticipantData = current_players.map((player) => ({
         event_id: createdEvent.id,
         user_id: player.value,
+        status: 'approved',
+        role: 'player',
         payment_status: 'pending',
         joined_at: createdEvent.created_at,
-        approved_at: null
+        approved_at: createdEvent.created_at
     }))
 
     const insertEventParticipants = await pgClient.event_participants.createMany({
         data: eventParticipantData,
         skipDuplicates: true
+    });
+
+    // Align turfmates: tell the organizer's turfmates a new match is up for grabs,
+    // prioritised by how soon it is. Best-effort; never blocks event creation.
+    const organizer = await pgClient.users.findUnique({
+        where: { id: req.user.id },
+        select: { first_name: true, last_name: true },
+    });
+    const organizerName =
+        [organizer?.first_name, organizer?.last_name].filter(Boolean).join(" ") || "A turfmate";
+    await broadcastToTurfmates(req.user.id, {
+        type: "event_invitation",
+        title: "A turfmate organized a match",
+        message: `${organizerName} is organizing "${title}" — join if you're in`,
+        data: { eventId: createdEvent.id },
+        priority: eventPriorityByDate(createdEvent.event_date ?? event_date),
+        action_url: `/events/${createdEvent.id}`,
     });
 
     return res.status(200).json(new ApiResponse(200, "Event created successfully", createdEvent));
@@ -235,9 +276,35 @@ const getEvents = asyncHandler(async (req, res) => {
         stats = { total: globalTotal, open: openTotal, sports };
     }
 
+    // Turfmate highlight: if the request is authenticated (optional auth), tag each
+    // event with which of the caller's turfmates are involved (organizer or player).
+    let eventsOut = events;
+    if (req.user?.id) {
+        const myTurfmates = new Set(await getAcceptedTurfmateIds(req.user.id));
+        if (myTurfmates.size > 0) {
+            eventsOut = events.map((e) => {
+                const involved = [];
+                const seen = new Set();
+                const consider = (u) => {
+                    if (u && myTurfmates.has(u.id) && !seen.has(u.id)) {
+                        seen.add(u.id);
+                        involved.push({
+                            id: u.id,
+                            first_name: u.first_name,
+                            profile_picture_url: u.profile_picture_url,
+                        });
+                    }
+                };
+                consider(e.users); // organizer
+                e.event_participants?.forEach((p) => consider(p.users));
+                return { ...e, turfmates_involved: involved };
+            });
+        }
+    }
+
     return res.status(200).json(
-        new ApiResponse(200, `${events.length} events found`, {
-            events,
+        new ApiResponse(200, `${eventsOut.length} events found`, {
+            events: eventsOut,
             pagination: { page, limit, total, hasMore },
             ...(stats ? { stats } : {}),
         })
@@ -308,10 +375,28 @@ const getEventById = asyncHandler(async (req, res) => {
         throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
     }
 
+    // Full roster with profiles + role/status so the client can render the squad,
+    // read the caller's own participation, and drive the admin panel.
     const players_joined = await pgClient.event_participants.findMany({
         where: {
             event_id: event.id
-        }
+        },
+        select: {
+            id: true,
+            user_id: true,
+            status: true,
+            role: true,
+            joined_at: true,
+            users: {
+                select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    profile_picture_url: true,
+                },
+            },
+        },
+        orderBy: { joined_at: "asc" },
     })
 
 
@@ -553,6 +638,401 @@ const editEvent = asyncHandler(async (req, res) => {
 })
 
 
+// Request to join a match. Every join is a PENDING request that an event admin
+// must approve — it does NOT consume a slot or bump current_players yet. Notifies
+// all admins (there can be several) plus a confirmation to the requester.
+const joinEvent = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { event_id } = req.params;
+    if (!event_id) {
+        throw ApiError.fromCode(ERROR_CODES.BAD_REQUEST, { message: "An event id is required" });
+    }
+
+    const event = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { id: true, title: true, event_date: true, organizer_id: true, max_players: true },
+    });
+    if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
+    if (event.organizer_id === userId) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "You are the organizer of this match",
+        });
+    }
+
+    // Any existing row (pending request OR already approved) blocks a new request.
+    const already = await pgClient.event_participants.findFirst({
+        where: { event_id, user_id: userId },
+        select: { id: true },
+    });
+    if (already) throw ApiError.fromCode(ERROR_CODES.ALREADY_JOINED);
+
+    // Soft capacity guard: block requests once the approved roster is full.
+    // (Hard enforcement is at approval time in acceptJoinRequest.)
+    const event_full = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { current_players: true, max_players: true },
+    });
+    if (event_full.max_players && (event_full.current_players ?? 0) >= event_full.max_players) {
+        throw ApiError.fromCode(ERROR_CODES.EVENT_FULL);
+    }
+
+    const participant = await pgClient.event_participants.create({
+        data: {
+            event_id,
+            user_id: userId,
+            status: "requested",
+            role: "player",
+            payment_status: "pending",
+            joined_at: new Date(),
+            approved_at: null,
+        },
+    });
+
+    const joiner = await pgClient.users.findUnique({
+        where: { id: userId },
+        select: { first_name: true, last_name: true },
+    });
+    const joinerName = displayName(joiner);
+
+    // Notify every admin there is a request to review, plus the requester.
+    await notifyEventAdmins(event_id, {
+        type: "event_join_request",
+        title: "New join request",
+        message: `${joinerName} wants to join "${event.title}"`,
+        data: { eventId: event_id, userId },
+        priority: "medium",
+        action_url: `/events/${event_id}`,
+    });
+    await createNotification({
+        user_id: userId,
+        type: "event_join_request",
+        title: "Request sent",
+        message: `Your request to join "${event.title}" is awaiting approval`,
+        data: { eventId: event_id },
+        priority: "low",
+        action_url: `/events/${event_id}`,
+    });
+
+    return res.status(201).json(new ApiResponse(201, "Join request sent", participant));
+});
+
+// List pending join requests for an event (admins only) — powers the approval UI.
+const getJoinRequests = asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const { event_id } = req.params;
+
+    const event = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { id: true },
+    });
+    if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
+    if (!(await isEventAdmin(event_id, adminId))) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ADMIN);
+
+    const requests = await pgClient.event_participants.findMany({
+        where: { event_id, status: "requested" },
+        select: {
+            id: true,
+            user_id: true,
+            joined_at: true,
+            users: {
+                select: { id: true, first_name: true, last_name: true, profile_picture_url: true },
+            },
+        },
+        orderBy: { joined_at: "asc" },
+    });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, `${requests.length} pending requests`, { requests }));
+});
+
+// Approve a pending join request (admins only). Consumes a slot: flips the row
+// to approved and bumps current_players. Notifies the requester, the other
+// admins, and aligns the new player's turfmates.
+const acceptJoinRequest = asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const { event_id, user_id } = req.params;
+
+    const event = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { id: true, title: true, event_date: true, max_players: true, current_players: true },
+    });
+    if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
+    if (!(await isEventAdmin(event_id, adminId))) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ADMIN);
+
+    const request = await pgClient.event_participants.findFirst({
+        where: { event_id, user_id, status: "requested" },
+        select: { id: true },
+    });
+    if (!request) throw ApiError.fromCode(ERROR_CODES.JOIN_REQUEST_NOT_FOUND);
+
+    // Hard capacity enforcement at approval time (current_players tracks the
+    // approved roster incl. organizer).
+    if (event.max_players && (event.current_players ?? 0) >= event.max_players) {
+        throw ApiError.fromCode(ERROR_CODES.EVENT_FULL);
+    }
+
+    await pgClient.event_participants.update({
+        where: { id: request.id },
+        data: { status: "approved", approved_at: new Date() },
+    });
+    await pgClient.events.update({
+        where: { id: event_id },
+        data: { current_players: { increment: 1 } },
+    });
+
+    const requester = await pgClient.users.findUnique({
+        where: { id: user_id },
+        select: { first_name: true, last_name: true },
+    });
+    const requesterName = displayName(requester);
+
+    // Tell the requester they're in, notify the other admins, align turfmates.
+    await createNotification({
+        user_id,
+        type: "event_invitation",
+        title: "You're in!",
+        message: `Your request to join "${event.title}" was approved`,
+        data: { eventId: event_id },
+        priority: "high",
+        action_url: `/events/${event_id}`,
+    });
+    await notifyEventAdmins(
+        event_id,
+        {
+            type: "event_join_request",
+            title: "Join request approved",
+            message: `${requesterName} was approved for "${event.title}"`,
+            data: { eventId: event_id, userId: user_id },
+            priority: "low",
+            action_url: `/events/${event_id}`,
+        },
+        [adminId] // don't notify the admin who took the action
+    );
+    await broadcastToTurfmates(user_id, {
+        type: "event_invitation",
+        title: "A turfmate joined a match",
+        message: `${requesterName} joined "${event.title}" — jump in with them`,
+        data: { eventId: event_id },
+        priority: eventPriorityByDate(event.event_date),
+        action_url: `/events/${event_id}`,
+    });
+
+    return res.status(200).json(new ApiResponse(200, "Join request approved", { event_id, user_id }));
+});
+
+// Reject a pending join request (admins only). Marks it rejected and notifies
+// the requester + the other admins.
+const rejectJoinRequest = asyncHandler(async (req, res) => {
+    const adminId = req.user.id;
+    const { event_id, user_id } = req.params;
+
+    const event = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { id: true, title: true },
+    });
+    if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
+    if (!(await isEventAdmin(event_id, adminId))) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ADMIN);
+
+    const request = await pgClient.event_participants.findFirst({
+        where: { event_id, user_id, status: "requested" },
+        select: { id: true },
+    });
+    if (!request) throw ApiError.fromCode(ERROR_CODES.JOIN_REQUEST_NOT_FOUND);
+
+    await pgClient.event_participants.update({
+        where: { id: request.id },
+        data: { status: "rejected" },
+    });
+
+    await createNotification({
+        user_id,
+        type: "event_join_request",
+        title: "Request declined",
+        message: `Your request to join "${event.title}" was declined`,
+        data: { eventId: event_id },
+        priority: "low",
+        action_url: `/events/${event_id}`,
+    });
+    await notifyEventAdmins(
+        event_id,
+        {
+            type: "event_join_request",
+            title: "Join request declined",
+            message: `A request for "${event.title}" was declined`,
+            data: { eventId: event_id, userId: user_id },
+            priority: "low",
+            action_url: `/events/${event_id}`,
+        },
+        [adminId]
+    );
+
+    return res.status(200).json(new ApiResponse(200, "Join request rejected", { event_id, user_id }));
+});
+
+// Withdraw your OWN pending join request (requester only). A pending request
+// never consumed a slot, so there's nothing to decrement — just delete it and
+// let the admins know so their queue stays clean.
+const cancelJoinRequest = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { event_id } = req.params;
+    if (!event_id) {
+        throw ApiError.fromCode(ERROR_CODES.BAD_REQUEST, { message: "An event id is required" });
+    }
+
+    const request = await pgClient.event_participants.findFirst({
+        where: { event_id, user_id: userId, status: "requested" },
+        select: { id: true },
+    });
+    if (!request) throw ApiError.fromCode(ERROR_CODES.JOIN_REQUEST_NOT_FOUND);
+
+    await pgClient.event_participants.delete({ where: { id: request.id } });
+
+    const event = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { title: true },
+    });
+    await notifyEventAdmins(
+        event_id,
+        {
+            type: "event_join_request",
+            title: "Join request withdrawn",
+            message: `A player withdrew their request${event ? ` for "${event.title}"` : ""}`,
+            data: { eventId: event_id, userId },
+            priority: "low",
+            action_url: `/events/${event_id}`,
+        },
+        [userId]
+    );
+
+    return res.status(200).json(new ApiResponse(200, "Join request cancelled", { event_id }));
+});
+
+// Grant event-admin (co_organizer) to an approved participant. ORGANIZER ONLY —
+// only the creator can mint admins. Notifies the new admin + existing admins.
+const grantEventAdmin = asyncHandler(async (req, res) => {
+    const organizerId = req.user.id;
+    const { event_id } = req.params;
+    const { user_id } = req.body;
+    if (!user_id) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, { message: "user_id is required" });
+    }
+
+    const event = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { id: true, title: true, organizer_id: true },
+    });
+    if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
+    if (event.organizer_id !== organizerId) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ORGANIZER);
+    if (user_id === organizerId) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "You are already the organizer",
+        });
+    }
+
+    // Only an APPROVED participant can be promoted.
+    const participant = await pgClient.event_participants.findFirst({
+        where: { event_id, user_id, status: "approved" },
+        select: { id: true, role: true },
+    });
+    if (!participant) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_PARTICIPANT);
+    if (participant.role === "co_organizer") throw ApiError.fromCode(ERROR_CODES.ALREADY_ADMIN);
+
+    await pgClient.event_participants.update({
+        where: { id: participant.id },
+        data: { role: "co_organizer" },
+    });
+
+    await createNotification({
+        user_id,
+        type: "event_invitation",
+        title: "You're now a match admin",
+        message: `You can review join requests for "${event.title}"`,
+        data: { eventId: event_id },
+        priority: "high",
+        action_url: `/events/${event_id}`,
+    });
+    // Notify the other admins (exclude organizer + the newly promoted user).
+    await notifyEventAdmins(
+        event_id,
+        {
+            type: "event_invitation",
+            title: "New match admin",
+            message: `A new admin was added to "${event.title}"`,
+            data: { eventId: event_id, userId: user_id },
+            priority: "low",
+            action_url: `/events/${event_id}`,
+        },
+        [organizerId, user_id]
+    );
+
+    return res.status(200).json(new ApiResponse(200, "Admin granted", { event_id, user_id }));
+});
+
+// Revoke event-admin, demoting a co_organizer back to player. ORGANIZER ONLY.
+const revokeEventAdmin = asyncHandler(async (req, res) => {
+    const organizerId = req.user.id;
+    const { event_id, user_id } = req.params;
+
+    const event = await pgClient.events.findUnique({
+        where: { id: event_id },
+        select: { id: true, title: true, organizer_id: true },
+    });
+    if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
+    if (event.organizer_id !== organizerId) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ORGANIZER);
+
+    const participant = await pgClient.event_participants.findFirst({
+        where: { event_id, user_id, role: "co_organizer" },
+        select: { id: true },
+    });
+    if (!participant) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ADMIN);
+
+    await pgClient.event_participants.update({
+        where: { id: participant.id },
+        data: { role: "player" },
+    });
+
+    await createNotification({
+        user_id,
+        type: "event_invitation",
+        title: "Admin access removed",
+        message: `You are no longer an admin for "${event.title}"`,
+        data: { eventId: event_id },
+        priority: "low",
+        action_url: `/events/${event_id}`,
+    });
+
+    return res.status(200).json(new ApiResponse(200, "Admin revoked", { event_id, user_id }));
+});
+
+// Leave a match the caller previously joined (an APPROVED participant).
+const leaveEvent = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { event_id } = req.params;
+    if (!event_id) {
+        throw ApiError.fromCode(ERROR_CODES.BAD_REQUEST, { message: "An event id is required" });
+    }
+
+    const participant = await pgClient.event_participants.findFirst({
+        where: { event_id, user_id: userId },
+        select: { id: true, status: true },
+    });
+    if (!participant) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_PARTICIPANT);
+
+    await pgClient.event_participants.delete({ where: { id: participant.id } });
+
+    // Only an APPROVED participant occupied a slot; a still-pending request never
+    // bumped the counter, so don't decrement for those. Clamp at 0 (GREATEST) so
+    // the counter can't go negative if data ever drifts out of sync.
+    if (participant.status === "approved") {
+        await pgClient.$executeRaw`
+            UPDATE events SET current_players = GREATEST(current_players - 1, 0) WHERE id = ${event_id}::uuid
+        `;
+    }
+
+    return res.status(200).json(new ApiResponse(200, "Left match", { event_id }));
+});
+
 export {
     createEvent,
     getEvents,
@@ -560,5 +1040,13 @@ export {
     getUserEvents,
     getNearbyEvents,
     getEventById,
-    editEvent
+    editEvent,
+    joinEvent,
+    leaveEvent,
+    getJoinRequests,
+    acceptJoinRequest,
+    rejectJoinRequest,
+    cancelJoinRequest,
+    grantEventAdmin,
+    revokeEventAdmin
 }

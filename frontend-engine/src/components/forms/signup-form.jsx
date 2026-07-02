@@ -19,6 +19,7 @@ import { Controller, useForm } from "react-hook-form"
 import InputField from "../InputField"
 import MultiSelect from "../MultiSelect"
 import RequiredSign from "../RequiredSign"
+import { BD_DIVISIONS } from "@/utils/constants"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useRegisterUserMutation } from "@/store/api/apiSlice"
@@ -203,6 +204,37 @@ export function SignupForm({
                                     message: "Please enter a valid email address",
                                 },
                             })}
+                        />
+                    </InputField>
+                </div>
+
+                {/* Home area (optional) — powers turfmate recommendations near you. */}
+                <div className="space-y-2">
+                    <Label htmlFor="division">Division</Label>
+                    <InputField errors={errors}>
+                        <select
+                            id="division"
+                            className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            {...register("division")}
+                        >
+                            <option value="">Select division</option>
+                            {BD_DIVISIONS.map((d) => (
+                                <option key={d} value={d}>
+                                    {d}
+                                </option>
+                            ))}
+                        </select>
+                    </InputField>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="district">District / Area</Label>
+                    <InputField errors={errors}>
+                        <Input
+                            id="district"
+                            name="district"
+                            placeholder="e.g. Gulshan, Mirpur"
+                            {...register("district")}
                         />
                     </InputField>
                 </div>

@@ -1,0 +1,71 @@
+import { Server } from "socket.io";
+import jwt from "jsonwebtoken";
+import { logger } from "../logs/logger.js";
+
+// Single Socket.IO server instance for the process. Held in module scope so
+// controllers/services can `emitToUser` without threading `io` through every call.
+let io = null;
+
+// Room naming: every authenticated socket joins a private room keyed by user id,
+// so we can push a notification to *all* of a user's open tabs/devices at once.
+const userRoom = (userId) => `user:${userId}`;
+
+/**
+ * Attach Socket.IO to the HTTP server and wire JWT auth.
+ *
+ * NOTE (production / multi-replica): this keeps connection state in-process. The
+ * deploy runs 3 replicas behind nginx, so for real-time to work across replicas
+ * you must add nginx sticky sessions (ip_hash) + a Redis adapter
+ * (`@socket.io/redis-adapter`). Single-process dev works as-is.
+ */
+export function initSocket(server) {
+    io = new Server(server, {
+        // Mirror the permissive REST CORS for now (app.js uses origin:'*').
+        cors: { origin: "*", methods: ["GET", "POST"] },
+    });
+
+    // Handshake auth: the client sends its access token in `auth.token`.
+    io.use((socket, next) => {
+        try {
+            const token = socket.handshake.auth?.token;
+            if (!token) return next(new Error("MISSING_TOKEN"));
+
+            const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            if (!decoded?.id) return next(new Error("INVALID_TOKEN"));
+
+            // stash the authenticated identity on the socket for later handlers
+            socket.user = decoded;
+            return next();
+        } catch (err) {
+            return next(new Error("INVALID_TOKEN"));
+        }
+    });
+
+    io.on("connection", (socket) => {
+        const { id: userId } = socket.user;
+        socket.join(userRoom(userId));
+        logger.info(`socket connected: user=${userId} sid=${socket.id}`);
+
+        socket.on("disconnect", (reason) => {
+            logger.info(`socket disconnected: user=${userId} sid=${socket.id} (${reason})`);
+        });
+    });
+
+    logger.info("Socket.IO initialized");
+    return io;
+}
+
+/** Accessor for the initialized io instance (throws if used before initSocket). */
+export function getIo() {
+    if (!io) throw new Error("Socket.IO not initialized — call initSocket(server) first");
+    return io;
+}
+
+/**
+ * Emit an event to every socket a given user has open. Safe no-op if the socket
+ * layer isn't up yet (e.g. a unit context), so callers never need to guard.
+ */
+export function emitToUser(userId, event, payload) {
+    if (!io || !userId) return;
+    io.to(userRoom(userId)).emit(event, payload);
+}

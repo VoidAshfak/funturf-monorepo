@@ -54,6 +54,13 @@ Defined in `backend-engine/backend/src/utils/errorCodes.js`. Throw them via `Api
 | `USER_NOT_FOUND` | 404 | No such user |
 | `USER_ALREADY_EXISTS` | 409 | Email/phone already registered |
 | `TOKEN_GENERATION_FAILED` | 500 | Could not issue tokens |
+| `EVENT_FULL` | 409 | Match already at capacity (join/approve) |
+| `ALREADY_JOINED` | 409 | Caller already has a request/participation |
+| `NOT_EVENT_PARTICIPANT` | 400 | Caller isn't a participant (leave / promote target) |
+| `NOT_EVENT_ADMIN` | 403 | Caller isn't an event admin (organizer/co_organizer) |
+| `JOIN_REQUEST_NOT_FOUND` | 404 | No pending join request for that user |
+| `ALREADY_ADMIN` | 409 | Target is already an event admin |
+| `NOTIFICATION_NOT_FOUND` | 404 | Notification not found / not owned |
 
 ## Auth
 
@@ -70,7 +77,7 @@ Protected routes require `Authorization: Bearer <accessToken>`. The token is iss
 
 | method | path | auth | body / params | success `data` |
 | --- | --- | --- | --- | --- |
-| POST | `/register` | public | `{ first_name, last_name, email, password_hash, phone?, date_of_birth?, gender?, profile_picture_url?, bio?, sports?, user_type? }` | `201` — user fields + `accessToken`, `refreshToken`, `tokenExpiresIn` |
+| POST | `/register` | public | `{ first_name, last_name, email, password_hash, phone?, date_of_birth?, gender?, profile_picture_url?, bio?, sports?, division?, district?, latitude?, longitude?, user_type? }` | `201` — user fields + `accessToken`, `refreshToken`, `tokenExpiresIn` |
 | POST | `/login` | public | `{ email, password }` | `200` — `{ user: { ...profile, sports, teamsJoined, eventsJoined, friends, username, accessToken, refreshToken, tokenExpiresIn } }` |
 | POST | `/refresh` | public | `{ refresh_token }` | `200` — `{ accessToken, refreshToken, tokenExpiresIn }` |
 | GET | `/:user_id` | public | path `user_id` | `200` — `{ id, email, phone, first_name, last_name, ..., sports, teamsJoined, eventsJoined, friends, username }` |
@@ -136,9 +143,17 @@ address_line_1: {
 
 | method | path | auth | body / params | success `data` |
 | --- | --- | --- | --- | --- |
-| GET | `/` | public | query `page?`, `limit?`, `sport?`, `timeframe?`, `q?`, `openOnly?` | `200` — `{ events, pagination, stats? }` (paginated feed) |
+| GET | `/` | **optional auth** | query `page?`, `limit?`, `sport?`, `timeframe?`, `q?`, `openOnly?` | `200` — `{ events, pagination, stats? }` (paginated feed) |
+| POST | `/:event_id/join` | **required** | — | `201` — created **pending** request (status `requested`; does NOT bump `current_players`; notifies all admins + requester) |
+| DELETE | `/:event_id/join` | **required, requester** | — | `200` — `{ event_id }` (withdraw own pending request) |
+| DELETE | `/:event_id/leave` | **required, approved participant** | — | `200` — `{ event_id }` (decrements only if was approved) |
+| GET | `/:event_id/requests` | **required, admin** | — | `200` — `{ requests:[{id,user_id,joined_at,users}] }` (pending only) |
+| POST | `/:event_id/requests/:user_id/accept` | **required, admin** | — | `200` — `{ event_id, user_id }` (approve → +`current_players`, notify user + admins, align turfmates) |
+| POST | `/:event_id/requests/:user_id/reject` | **required, admin** | — | `200` — `{ event_id, user_id }` (decline) |
+| POST | `/:event_id/admins` | **required, organizer** | `{ user_id }` | `200` — `{ event_id, user_id }` (grant admin → role `co_organizer`) |
+| DELETE | `/:event_id/admins/:user_id` | **required, organizer** | — | `200` — `{ event_id, user_id }` (revoke admin → role `player`) |
 | GET | `/my-events` | **required** | query `status?` | `200` — `{ events: [ { ...event, my_participation:{status,payment_status,joined_at} } ] }` |
-| POST | `/create-event` | **required** | event fields + `current_players[]` | `200` — created event (organizer = token user) |
+| POST | `/create-event` | **required** | event fields + `current_players[]` | `200` — created event (organizer = token user; initial roster inserted as `approved`) |
 | PATCH | `/update-event/:event_id` | **required, organizer only** | editable event fields | `200` — updated event |
 | DELETE | `/delete-event` | **required, organizer only** | `{ event_id }` | `200` — deleted event |
 | GET | `/:event_id` | public | path `event_id` | `200` — full event DTO |
@@ -159,12 +174,46 @@ address_line_1: {
   ```
 - Events are ordered soonest-first (`event_date asc`, `id` tiebreak). Each event embeds the
   **organizer profile** (`users`) and **participant avatars** (`event_participants[].users`).
+- **Turfmate highlight:** `GET /events` uses **optional auth** (`attachUserIfPresent`) — when a
+  valid token is sent, each event gains `turfmates_involved:[{id,first_name,profile_picture_url}]`
+  listing the caller's turfmates who organize or play in it (the feed card rings + badges these).
 - `stats` (global, unfiltered) is returned only on `page === 1` to save queries; the frontend
   caches it for the hero + sport chips. `openOnly` uses a Prisma **field reference**
   (`min_players > current_players`).
 - Frontend: `useGetEventsQuery({page,limit,sport,timeframe,q,openOnly})` accumulates pages via
   RTK Query `merge` (cache key excludes `page`); the server component pre-fetches `page 1` only
   for `stats`.
+
+#### Join-request / admin flow
+
+Joining a match is an **approval flow** — no instant joins:
+
+- **Request:** `POST /:id/join` creates a participant row with status `requested` (guards
+  not-organizer, not-already-requested, soft `EVENT_FULL`). It does **not** touch `current_players`.
+  Notifies **all** event admins (`event_join_request`) and confirms to the requester.
+- **Withdraw:** `DELETE /:id/join` deletes the caller's own pending request (`JOIN_REQUEST_NOT_FOUND`
+  if none); no counter change; notifies admins.
+- **Approve:** `POST /:id/requests/:user_id/accept` — **admins only** (`NOT_EVENT_ADMIN`). Flips the
+  row to `approved`, bumps `current_players` (hard `EVENT_FULL` check here), notifies the requester
+  (`event_invitation`) + other admins, and broadcasts "a turfmate joined" to the new player's turfmates.
+- **Reject:** `POST /:id/requests/:user_id/reject` — admins only. Marks `rejected`; notifies requester + admins.
+- **List:** `GET /:id/requests` — admins only; pending requests with requester profiles.
+- **Leave:** `DELETE /:id/leave` removes an approved participant and decrements `current_players`
+  (clamped at 0 via `GREATEST`); pending requests use withdraw, not leave.
+
+**Event admins** = the organizer (always, from `events.organizer_id`) **plus** any approved
+participant whose `event_participants.role = co_organizer`. Multiple admins supported.
+- **Grant:** `POST /:id/admins` `{ user_id }` — **organizer (creator) only** (`NOT_EVENT_ORGANIZER`);
+  target must be an approved participant (`NOT_EVENT_PARTICIPANT`), not already an admin (`ALREADY_ADMIN`).
+  Sets role `co_organizer`; notifies the new admin + existing admins.
+- **Revoke:** `DELETE /:id/admins/:user_id` — organizer only; demotes `co_organizer` → `player`.
+- Frontend hooks: `useJoinEventMutation`, `useCancelJoinRequestMutation`, `useLeaveEventMutation`,
+  `useGetJoinRequestsQuery`, `useAcceptJoinRequestMutation`, `useRejectJoinRequestMutation`,
+  `useGrantEventAdminMutation`, `useRevokeEventAdminMutation`.
+
+> **Schema migration required:** adds `event_participants.role participant_role_type @default(player)`.
+> Run `npm run prisma:migrate` + `npm run prisma:generate` from `backend-engine/backend/` before these
+> endpoints work (the `role` reads/writes fail otherwise).
 
 **Auth changes:** create/update/delete now require `Authorization: Bearer`. Organizer identity
 is taken from the token on create (client no longer sends `organizer_id`); `organizer_id` is not
@@ -180,18 +229,71 @@ editable. Update/delete enforce organizer ownership.
 
 ### Bookings (`/bookings`)
 
-| method | path | auth | query | success `data` |
+| method | path | auth | body / query | success `data` |
 | --- | --- | --- | --- | --- |
-| GET | `/available-slots` | public | `ground`, `date` (YYYY-MM-DD) | `200` — slot availability row for that ground/date |
-| GET | `/quote` | public | `ground_id`, `slot`, `booking_date`, `promo_code?` | `200` — `{ isAvailable, slot, booking_date, base_rate, discount, final_price, is_peak, is_weekend, promotion }` |
+| GET | `/available-slots` | public | q `ground`, `date` (YYYY-MM-DD) | `200` — slot availability row for that ground/date |
+| GET | `/quote` | public | q `ground_id`, `slot`, `booking_date`, `promo_code?` | `200` — `{ isAvailable, slot, booking_date, base_rate, discount, final_price, is_peak, is_weekend, promotion }` |
+| POST | `/create` | **required** | `{ ground_id, booking_date, slot, paid?, transaction_id?, payment_proof_url?, event_id?, promo_code?, payment_method?, notes? }` | `201` — created booking |
+| GET | `/my` | **required** | — | `200` — `{ bookings:[...] }` (caller's bookings) |
+| GET | `/manage` | **required, turf_admin/super_admin** | q `status?` | `200` — `{ bookings:[ {...,event_trust,users_bookings_user_idTousers} ] }` (own turfs; super_admin = all) |
+| GET | `/:booking_id` | **required, owner or admin** | — | `200` — booking + `event_trust` (if event attached) |
+| POST | `/:booking_id/confirm-payment` | **required, turf_admin/super_admin** | `{ admin_notes? }` | `200` — booking → confirmed/completed |
+| POST | `/:booking_id/reject-payment` | **required, turf_admin/super_admin** | `{ admin_notes? }` | `200` — booking → reverts to unpaid hold (proof cleared, slot unlocked) |
+| POST | `/:booking_id/cancel` | **required, owner or admin** | `{ reason? }` | `200` — cancelled OR mutual-cancel request opened |
+| POST | `/:booking_id/cancel/respond` | **required, counterparty** | `{ accept: boolean }` | `200` — cancellation accepted (cancel + refund flag) or declined |
 
-**Errors:** `VALIDATION_ERROR` (missing query params — was wrongly a 405/500),
-`SLOT_NOT_FOUND`, `SLOT_UNAVAILABLE` (409, slot already booked), `GROUND_NOT_FOUND`.
+**Slot model:** 90-minute discrete grid — the 16 boolean columns on `slots` (`t0000`…`t2230`).
+The boolean = **admin master enable + paid-lock**: `false` means admin-disabled OR paid-locked, so
+it's not bookable; `true` means enabled (and possibly held by an *unpaid* booking, see below).
 
-Frontend hooks: `useGetAvailableSlotsQuery`, `useGetBookingQuoteQuery`.
+**Booking states** (reusing existing enums):
 
-> `POST /bookings/create` is a stub (`createBooking` is empty) and **not routed**. Booking
-> creation is not implemented yet.
+| meaning | `booking_status` | `payment_status` | locks slot? |
+| --- | --- | --- | --- |
+| unpaid soft hold | `pending` | `pending` | **no** (boolean stays `true`) |
+| paid claim (awaiting admin) | `pending` | `partial` | yes (boolean → `false`) |
+| admin-confirmed | `confirmed` | `completed` | yes |
+| cancelled | `cancelled` | — / `refunded` | slot freed (boolean → `true`) |
+
+**Rules enforced by `POST /create`:**
+- Only **verified turfs** (`turfs.verified`) + **available grounds** (`grounds.status='available'`) —
+  else `TURF_NOT_VERIFIED` / `GROUND_NOT_AVAILABLE`.
+- **Paid** = a `transaction_id` **or** a `payment_proof_url` is supplied (`paid:true` without either →
+  `PAYMENT_PROOF_REQUIRED`). A paid claim locks the slot and awaits admin verification.
+- **Unpaid doesn't lock:** another user may still take a held slot **with payment** — the paid
+  booking **auto-cancels** the unpaid holder (reason `superseded_by_paid_booking`) and notifies them.
+  A second **unpaid** request on a held slot is rejected (`SLOT_HELD_UNPAID`). A paid-locked slot is
+  fully unavailable (`SLOT_UNAVAILABLE`).
+- An attached `event_id` must be an event the caller **organized**; admins then see its trust
+  snapshot (`event_trust`: squad size `current_players`/`min`/`max`, `approved_count`, organizer).
+- `payment_proof_url` (uploaded via the frontend imgbb flow) is visible to the owner + turf admins.
+
+**Cancellation:**
+- **Unpaid** → cancellable any time, free (never locked a slot).
+- **Paid, not yet confirmed** → free cancel only **≥ 2 days** before `booking_date`, else
+  `CANCELLATION_WINDOW_CLOSED`.
+- **Paid + admin-confirmed** → payment is final: `POST /cancel` opens a **mutual cancellation
+  request** (`cancellation_requested_by`); the *other* party must `POST /cancel/respond {accept:true}`
+  to finalise (booking → cancelled, `payment_status='refunded'`). `accept:false` clears the request.
+
+**Schema migration required:** adds `bookings.payment_proof_url String?` and
+`bookings.cancellation_requested_by String? @db.Uuid`. Run `npm run prisma:migrate` +
+`npm run prisma:generate` from `backend-engine/backend/`.
+
+**Errors:** `VALIDATION_ERROR`, `INVALID_SLOT_CODE`, `SLOT_NOT_FOUND`, `SLOT_UNAVAILABLE`,
+`SLOT_HELD_UNPAID`, `TURF_NOT_VERIFIED`, `GROUND_NOT_AVAILABLE`, `GROUND_NOT_FOUND`,
+`PAYMENT_PROOF_REQUIRED`, `EVENT_NOT_FOUND`, `BOOKING_NOT_FOUND`, `NOT_BOOKING_OWNER`,
+`NOT_TURF_ADMIN`, `BOOKING_NOT_PAID_CLAIM`, `BOOKING_ALREADY_CANCELLED`,
+`CANCELLATION_WINDOW_CLOSED`, `CANCELLATION_NOT_REQUESTED`.
+
+**Notifications** (reuse `booking_confirmed`/`booking_cancelled`/`payment_received`/`payment_pending`):
+new booking → turf admin; superseded unpaid holder → user; confirm/reject payment → user;
+cancel request/accept/decline → counterparty.
+
+Frontend hooks: `useGetAvailableSlotsQuery`, `useGetBookingQuoteQuery`, `useCreateBookingMutation`,
+`useGetMyBookingsQuery`, `useGetBookingByIdQuery`, `useGetManageBookingsQuery`,
+`useConfirmBookingPaymentMutation`, `useRejectBookingPaymentMutation`, `useCancelBookingMutation`,
+`useRespondCancellationMutation`.
 
 ### Turfmates (`/turfmates`)
 
@@ -200,19 +302,88 @@ model (migrated off the deprecated mongoClient). A "turfmate" is an **accepted**
 
 | method | path | body / query | success `data` |
 | --- | --- | --- | --- |
-| POST | `/turfmate-request` | `{ receiverId }` | `201` — created pending connection |
-| GET | `/get-pending-requests` | — | `200` — incoming pending requests (with requester profile) |
+| POST | `/turfmate-request` | `{ receiverId, message? }` | `201` — created pending connection |
+| GET | `/get-pending-requests` | `page?`, `limit?` | `200` — `{ requests:[{connectionId,message,created_at,user}], pagination }` (incoming) |
+| GET | `/get-outgoing-requests` | `page?`, `limit?` | `200` — `{ requests:[{connectionId,created_at,user}], pagination }` (sent) |
 | POST | `/accept-turfmate-request` | `{ requestId }` | `200` — accepted connection |
-| GET | `/get-turfmates` | — | `200` — array of turfmate **user ids** |
-| GET | `/get-mutual-turfmates` | query `userTwo` | `200` — array of mutual turfmate ids |
+| POST | `/reject-turfmate-request` | `{ requestId }` | `200` — rejected connection |
+| POST | `/cancel-turfmate-request` | `{ requestId }` | `200` — `{ connectionId }` (requester deletes own pending) |
+| POST | `/remove-turfmate` | `{ userId }` | `200` — `{ userId }` (unfriend an accepted turfmate) |
+| GET | `/get-turfmates` | `page?`, `limit?` | `200` — `{ turfmates:[{...profile, connected_since}], pagination }` |
+| GET | `/connection-status/:userId` | path `userId` | `200` — `{ status: none\|pending\|accepted\|rejected\|blocked\|self, direction, connectionId }` |
+| GET | `/get-mutual-turfmates` | query `userTwo` | `200` — array of mutual turfmate **profiles** |
+| GET | `/recommendations` | `limit?` | `200` — `{ recommendations:[{...profile, mutual_turfmates, has_mutual, reason}] }` |
 
-**Errors:** `VALIDATION_ERROR` (missing `receiverId`/`requestId`/`userTwo`),
-`CANNOT_CONNECT_SELF`, `USER_NOT_FOUND` (receiver), `CONNECTION_ALREADY_EXISTS`
-(request/connection already exists in either direction), `CONNECTION_NOT_FOUND`
-(accept a non-pending/foreign request), `UNAUTHORIZED`/`INVALID_TOKEN`.
+**Production hardening (this pass):**
+- **Atomic create** — send relies on the `@@unique(requester_id,recipient_id)` index and
+  catches Prisma `P2002` → `CONNECTION_ALREADY_EXISTS` (no non-atomic check-then-create);
+  the reverse direction is still guarded explicitly.
+- **Pagination** on all list endpoints; `get-turfmates` returns **profiles** (not bare ids) with
+  `connected_since` — kills the client-side N+1.
+- New lifecycle: reject / cancel / remove / outgoing list / connection-status.
 
-Frontend hooks: `useSendTurfmateRequestMutation`, `useGetTurfmateRequestsQuery`,
-`useAcceptTurfmateRequestMutation`, `useGetTurfmatesQuery`, `useGetMutualTurfmatesQuery`.
+**Notifications & alignment:** `connection_request` (priority `high`) on send, `connection_accepted`
+(priority `high`) on accept. Turfmate **activity** is broadcast too (see Events): when a turfmate
+organizes or joins a match, their turfmates are notified with a priority that scales with how soon
+the match is (today=`urgent`, ≤3d=`high`, else `medium`), via `broadcastToTurfmates()`.
+
+**Recommendations (location-based):** `GET /recommendations` ranks non-connected users by
+**shared area** + **mutual turfmates**. Location = the user's home area (new optional
+`users.division` / `district` / `latitude` / `longitude` columns) **and** an activity fallback
+(cities of turfs from events they organized/joined). Each result carries `mutual_turfmates` +
+`has_mutual` so the UI can highlight when a turfmate is involved.
+
+**Errors:** `VALIDATION_ERROR`, `CANNOT_CONNECT_SELF`, `USER_NOT_FOUND`,
+`CONNECTION_ALREADY_EXISTS`, `CONNECTION_NOT_FOUND`, `UNAUTHORIZED`/`INVALID_TOKEN`.
+
+Frontend: hooks for every endpoint above, plus a `/turfmates` page (tabs: My Turfmates /
+Requests / Discover).
+
+> **Schema migration required:** this pass adds optional `division`, `district`, `latitude`,
+> `longitude` columns to `users`. Run `npm run prisma:migrate` (or `prisma db push`) **and**
+> `npm run prisma:generate` before starting the API, or the client will be out of sync.
 
 **Behaviour note:** `get-mutual-turfmates` was changed from reading a request body to a
 `userTwo` **query param** (GET requests carry no body).
+
+**Notifications:** sending a turfmate request now notifies the receiver
+(`connection_request`); accepting one notifies the original requester
+(`connection_accepted`) — both persisted **and** pushed over Socket.IO.
+
+### Notifications (`/notifications`)
+
+All routes require `Authorization: Bearer` and are **scoped to the caller** — a user can
+only read/mutate their own notifications (every query filters by `user_id`). Backed by the
+PostgreSQL `notifications` model (`type` = `notification_type` enum, `is_read`, `priority`,
+`data` JSON, `action_url`, …).
+
+| method | path | body / query | success `data` |
+| --- | --- | --- | --- |
+| GET | `/` | query `page?`, `limit?` | `200` — `{ notifications, unreadCount, pagination:{page,limit,total,hasMore} }` (newest first) |
+| GET | `/unread-count` | — | `200` — `{ unreadCount }` |
+| PATCH | `/read-all` | — | `200` — `{ updated }` (marks all unread read) |
+| PATCH | `/:id/read` | path `id` | `200` — updated notification |
+| DELETE | `/:id` | path `id` | `200` — `{ id }` |
+
+**Errors:** `NOTIFICATION_NOT_FOUND` (mark/delete an id you don't own), `UNAUTHORIZED`/`INVALID_TOKEN`.
+
+Frontend hooks: `useGetNotificationsQuery`, `useMarkNotificationReadMutation`,
+`useMarkAllNotificationsReadMutation`, `useDeleteNotificationMutation`.
+
+#### Real-time (Socket.IO)
+
+- The API server (Express) is wrapped in an HTTP server so **Socket.IO shares port 8080**.
+  Client connects to the server **origin** (strip `/api/v1` from `NEXT_PUBLIC_API_BASE_URL`).
+- **Handshake auth:** client sends the access token in `auth: { token }`; the server verifies
+  it with `ACCESS_TOKEN_SECRET` and joins the socket to a private room `user:<id>`.
+- **Server → client event:** `notification:new` with the full notification row, emitted to the
+  recipient's room by `createNotification()` (`src/utils/notificationService.js`) — the single
+  entry point every feature should use to notify a user (persists + delivers, never throws).
+- **Frontend integration:** `getNotifications` (RTK Query) is the single source of truth — an
+  initial REST fetch seeds the cache and `onCacheEntryAdded` streams `notification:new` into it
+  (prepend + bump `unreadCount`). Socket singleton in `src/lib/socket.js`; disconnected on logout.
+
+> **Production / multi-replica caveat:** the deploy runs **3 backend replicas behind nginx**.
+> Socket.IO connection state is in-process, so cross-replica delivery needs nginx **sticky
+> sessions** (`ip_hash`) **+** a Redis adapter (`@socket.io/redis-adapter`). Single-process dev
+> works as-is; this is **not** wired yet.

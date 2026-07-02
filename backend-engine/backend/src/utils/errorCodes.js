@@ -36,18 +36,39 @@ export const ERROR_CODES = Object.freeze({
     TOKEN_GENERATION_FAILED: { code: "TOKEN_GENERATION_FAILED", statusCode: 500, message: "Could not generate authentication tokens" },
 
     // ---- events ----
-    EVENT_NOT_FOUND:     { code: "EVENT_NOT_FOUND",     statusCode: 404, message: "Event not found" },
-    NOT_EVENT_ORGANIZER: { code: "NOT_EVENT_ORGANIZER", statusCode: 403, message: "Only the event organizer can perform this action" },
+    EVENT_NOT_FOUND:       { code: "EVENT_NOT_FOUND",       statusCode: 404, message: "Event not found" },
+    NOT_EVENT_ORGANIZER:   { code: "NOT_EVENT_ORGANIZER",   statusCode: 403, message: "Only the event organizer can perform this action" },
+    EVENT_FULL:            { code: "EVENT_FULL",            statusCode: 409, message: "This match is already full" },
+    ALREADY_JOINED:        { code: "ALREADY_JOINED",        statusCode: 409, message: "You have already joined this match" },
+    NOT_EVENT_PARTICIPANT: { code: "NOT_EVENT_PARTICIPANT", statusCode: 400, message: "You are not a participant of this match" },
+    NOT_EVENT_ADMIN:       { code: "NOT_EVENT_ADMIN",       statusCode: 403, message: "Only an event admin can perform this action" },
+    JOIN_REQUEST_NOT_FOUND:{ code: "JOIN_REQUEST_NOT_FOUND", statusCode: 404, message: "No pending join request found" },
+    ALREADY_ADMIN:         { code: "ALREADY_ADMIN",         statusCode: 409, message: "This user is already an event admin" },
 
     // ---- bookings / slots ----
     GROUND_NOT_FOUND: { code: "GROUND_NOT_FOUND", statusCode: 404, message: "Ground not found" },
     SLOT_NOT_FOUND:   { code: "SLOT_NOT_FOUND",   statusCode: 404, message: "No slots found for this ground and date" },
     SLOT_UNAVAILABLE: { code: "SLOT_UNAVAILABLE", statusCode: 409, message: "This slot is already booked" },
+    SLOT_HELD_UNPAID: { code: "SLOT_HELD_UNPAID", statusCode: 409, message: "This slot is held by an unpaid booking — book it with payment to take it" },
+    TURF_NOT_VERIFIED:{ code: "TURF_NOT_VERIFIED", statusCode: 403, message: "This turf is not verified for bookings yet" },
+    GROUND_NOT_AVAILABLE: { code: "GROUND_NOT_AVAILABLE", statusCode: 409, message: "This ground is not available for bookings" },
+    INVALID_SLOT_CODE: { code: "INVALID_SLOT_CODE", statusCode: 400, message: "Invalid slot code" },
+    BOOKING_NOT_FOUND: { code: "BOOKING_NOT_FOUND", statusCode: 404, message: "Booking not found" },
+    NOT_BOOKING_OWNER: { code: "NOT_BOOKING_OWNER", statusCode: 403, message: "You are not the owner of this booking" },
+    NOT_TURF_ADMIN:    { code: "NOT_TURF_ADMIN",    statusCode: 403, message: "Only a turf admin can perform this action" },
+    PAYMENT_PROOF_REQUIRED: { code: "PAYMENT_PROOF_REQUIRED", statusCode: 400, message: "A transaction number or payment proof is required for a paid booking" },
+    BOOKING_NOT_PAID_CLAIM: { code: "BOOKING_NOT_PAID_CLAIM", statusCode: 409, message: "This booking has no payment awaiting verification" },
+    BOOKING_ALREADY_CANCELLED: { code: "BOOKING_ALREADY_CANCELLED", statusCode: 409, message: "This booking is already cancelled" },
+    CANCELLATION_WINDOW_CLOSED: { code: "CANCELLATION_WINDOW_CLOSED", statusCode: 409, message: "Free cancellation is only allowed until 2 days before the booking" },
+    CANCELLATION_NOT_REQUESTED: { code: "CANCELLATION_NOT_REQUESTED", statusCode: 409, message: "No mutual cancellation has been requested for this booking" },
 
     // ---- turfmates / connections ----
     CANNOT_CONNECT_SELF:        { code: "CANNOT_CONNECT_SELF",        statusCode: 400, message: "You cannot send a turfmate request to yourself" },
     CONNECTION_ALREADY_EXISTS:  { code: "CONNECTION_ALREADY_EXISTS",  statusCode: 409, message: "A turfmate connection or request already exists" },
     CONNECTION_NOT_FOUND:       { code: "CONNECTION_NOT_FOUND",       statusCode: 404, message: "Turfmate request not found" },
+
+    // ---- notifications ----
+    NOTIFICATION_NOT_FOUND: { code: "NOTIFICATION_NOT_FOUND", statusCode: 404, message: "Notification not found" },
 });
 
 /**

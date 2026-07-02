@@ -7,12 +7,11 @@ import {
     MapPin,
     MessageCircle,
     Phone,
-    UserPlus,
-    Users,
 } from "lucide-react";
 import Image from "next/image";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
+import ConnectButton from "./ConnectButton";
 import EmptyState from "./EmptyState";
 
 function age(dob) {
@@ -105,10 +104,7 @@ export default async function ProfileCard({ userId }) {
 
                         {/* actions */}
                         <div className="flex shrink-0 items-center justify-center gap-2">
-                            <Button className="green-glow rounded-full">
-                                <UserPlus className="h-4 w-4" />
-                                Connect
-                            </Button>
+                            <ConnectButton userId={userId} />
                             <Button variant="outline" className="rounded-full">
                                 <MessageCircle className="h-4 w-4" />
                                 Message

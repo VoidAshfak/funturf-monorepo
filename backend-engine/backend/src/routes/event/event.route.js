@@ -5,14 +5,23 @@ import {
     deleteEvent,
     getEventById,
     editEvent,
-    getUserEvents
+    getUserEvents,
+    joinEvent,
+    leaveEvent,
+    getJoinRequests,
+    acceptJoinRequest,
+    rejectJoinRequest,
+    cancelJoinRequest,
+    grantEventAdmin,
+    revokeEventAdmin
 } from '../../controllers/event/event.controller.js'
-import { verifyJWT } from "../../middlewares/auth/auth.middleware.js"
+import { verifyJWT, attachUserIfPresent } from "../../middlewares/auth/auth.middleware.js"
 
 const router = Router();
 
-// Public reads
-router.route('/').get(getEvents)
+// Public read, but OPTIONALLY authenticated: when a token is present the feed
+// highlights which of the caller's turfmates are involved in each event.
+router.route('/').get(attachUserIfPresent, getEvents)
 // Static paths MUST be declared before the dynamic '/:event_id', otherwise
 // GET /my-events would be swallowed as event_id="my-events".
 // NOTE: getNearbyEvents is intentionally NOT routed yet — it relies on PostGIS
@@ -23,6 +32,23 @@ router.route('/my-events').get(verifyJWT, getUserEvents)
 router.route('/create-event').post(verifyJWT, createEvent)
 router.route('/update-event/:event_id').patch(verifyJWT, editEvent)
 router.route('/delete-event').delete(verifyJWT, deleteEvent)
+
+// Join flow (participant identity comes from the token):
+//   POST   /:id/join    -> request to join (pending admin approval)
+//   DELETE /:id/join    -> withdraw your own pending request
+//   DELETE /:id/leave   -> leave a match you were approved for
+router.route('/:event_id/join').post(verifyJWT, joinEvent).delete(verifyJWT, cancelJoinRequest)
+router.route('/:event_id/leave').delete(verifyJWT, leaveEvent)
+
+// Admin moderation of join requests (organizer + co_organizers). The controller
+// enforces the admin check; these must be declared before '/:event_id'.
+router.route('/:event_id/requests').get(verifyJWT, getJoinRequests)
+router.route('/:event_id/requests/:user_id/accept').post(verifyJWT, acceptJoinRequest)
+router.route('/:event_id/requests/:user_id/reject').post(verifyJWT, rejectJoinRequest)
+
+// Event-admin management — ORGANIZER (creator) only; enforced in the controller.
+router.route('/:event_id/admins').post(verifyJWT, grantEventAdmin)
+router.route('/:event_id/admins/:user_id').delete(verifyJWT, revokeEventAdmin)
 
 // Dynamic catch-all read — keep last
 router.route('/:event_id').get(getEventById)

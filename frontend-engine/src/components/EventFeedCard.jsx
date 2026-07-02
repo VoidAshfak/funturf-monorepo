@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ArrowUpRight, Clock, MapPin, Users } from "lucide-react";
 import Image from "next/image";
@@ -34,7 +35,10 @@ export default function EventFeedCard({ event }) {
         max_players,
         current_players,
         event_participants = [],
+        turfmates_involved = [],
     } = event;
+
+    const hasTurfmates = turfmates_involved.length > 0;
 
     const date = event_date ? new Date(event_date) : null;
     const isFull = current_players >= min_players && min_players > 0;
@@ -53,7 +57,13 @@ export default function EventFeedCard({ event }) {
         .join(" · ");
 
     return (
-        <Card className="group flex flex-col gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 will-change-transform hover:-translate-y-1 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] md:flex-row">
+        <Card
+            className={cn(
+                "group flex flex-col gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 will-change-transform hover:-translate-y-1 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] md:flex-row",
+                // Highlight matches a turfmate is involved in.
+                hasTurfmates && "ring-1 ring-primary/40"
+            )}
+        >
             {/* left poster panel — sport + big ticket date (frosted green) */}
             <div className="relative flex shrink-0 flex-row items-center gap-4 overflow-hidden border-b border-primary/15 bg-primary/10 p-5 backdrop-blur-xl dark:bg-[rgba(29,185,84,0.1)] md:w-52 md:flex-col md:items-start md:justify-between md:border-b-0 md:border-r">
                 {/* ambient glow */}
@@ -121,6 +131,26 @@ export default function EventFeedCard({ event }) {
 
                 {description && (
                     <p className="line-clamp-2 text-sm text-muted-foreground">{description}</p>
+                )}
+
+                {/* turfmate highlight: shows when one of your turfmates is involved */}
+                {hasTurfmates && (
+                    <div className="inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1">
+                        <div className="flex -space-x-2 *:ring-2 *:ring-background">
+                            {turfmates_involved.slice(0, 3).map((t) => (
+                                <Avatar key={t.id} className="h-5 w-5">
+                                    <AvatarImage src={t.profile_picture_url} alt={t.first_name} />
+                                    <AvatarFallback className="text-[9px]">
+                                        {initials(t.first_name)}
+                                    </AvatarFallback>
+                                </Avatar>
+                            ))}
+                        </div>
+                        <span className="text-xs font-semibold text-primary">
+                            {turfmates_involved.length} turfmate
+                            {turfmates_involved.length > 1 ? "s" : ""} involved
+                        </span>
+                    </div>
                 )}
 
                 {/* meta row */}

@@ -10,7 +10,8 @@
     "prisma:generate:mongo": "prisma generate --schema=prisma/mongodb/schema.prisma",
     "prisma:generate": "npm run prisma:generate:pg && npm run prisma:generate:mongo",
     "prisma:migrate": "prisma migrate dev --schema=prisma/postgresql/schema.prisma",
-    "prisma:push:mongo": "prisma db push --schema=prisma/mongodb/schema.prisma"
+    "prisma:push:mongo": "prisma db push --schema=prisma/mongodb/schema.prisma",
+    "prisma:push:pgsql": "prisma db push --schema=prisma/postgresql/schema.prisma"
   },
   "keywords": [
     "turf",
@@ -39,6 +40,7 @@
     "morgan": "^1.10.1",
     "multer": "^1.4.5-lts.1",
     "node-cache": "^5.1.2",
+    "socket.io": "^4.8.3",
     "winston": "^3.18.3"
   }
 }

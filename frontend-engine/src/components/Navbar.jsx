@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { gsap } from "@/lib/animations";
 import NavLink from "./NavLink";
+import NotificationBell from "./NotificationBell";
 import ProfileMenu from "./ProfileMenu";
 import ThemeToggle from "./ThemeToggle";
 
@@ -77,7 +78,8 @@ export default function Navbar({ session }) {
                             </Button>
                         </>
                     ) : (
-                        <div className="flex items-center gap-8">
+                        <div className="flex items-center gap-3">
+                            <NotificationBell />
                             <ProfileMenu session={session} />
                         </div>
                     )}

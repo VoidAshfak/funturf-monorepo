@@ -1,4 +1,4 @@
-import BookVenue from "@/components/BookVenue"
+import BookingDialog from "@/components/BookingDialog"
 import { ImageCarousel } from "@/components/ImageCarousel"
 import MapDialog from "@/components/MapDialog"
 import { Button } from "@/components/ui/button"
@@ -255,7 +255,7 @@ const VenueDetails = async ({ params }) => {
                                 <span className="text-sm text-muted-foreground">/ hr</span>
                             </div>
                         )}
-                        <BookVenue venue={venue} />
+                        <BookingDialog venue={venue} />
                         <Button variant="outline" className="mt-3 w-full">
                             <Share2 className="h-4 w-4" />
                             Share

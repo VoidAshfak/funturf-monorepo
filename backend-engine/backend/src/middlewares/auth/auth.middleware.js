@@ -36,6 +36,28 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
 })
 
 
+/**
+ * Optional authentication. If a valid Bearer token is present, sets `req.user`;
+ * otherwise continues as an anonymous request (never throws). Use on PUBLIC
+ * routes that show *extra* data to logged-in users (e.g. highlighting which of
+ * your turfmates are involved in an event) without gating the route itself.
+ */
+export const attachUserIfPresent = asyncHandler(async (req, _, next) => {
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            if (decoded?.id && decoded?.email) req.user = decoded;
+        } catch {
+            // Invalid/expired token on a public route -> just treat as anonymous.
+        }
+    }
+    next();
+});
+
+
 export const encryptPassword = asyncHandler(async (req, _, next) => {
     req.body.password_hash = await bcrypt.hash(req.body.password_hash, 10);
     next()

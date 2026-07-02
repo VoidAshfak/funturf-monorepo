@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/navigation-menu"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { Ticket, Users } from "lucide-react"
 
 export default function NavLink() {
 
@@ -45,6 +46,26 @@ export default function NavLink() {
                             height={20}
                             className="transition-[filter] duration-300 dark:invert"
                         /><span className="text-xl"> Book </span>
+                    </Link>
+                </NavigationMenuItem>
+
+                <NavigationMenuItem>
+                    <Link
+                        href="/turfmates"
+                        className={`flex items-center p-2 rounded-2xl gap-1 ${pathname.startsWith("/turfmates") ? "backdrop-blur-sm bg-green-700/10" : ""}`}
+                    >
+                        <Users className="h-6 w-6 text-foreground" />
+                        <span className="text-xl"> Turfmates </span>
+                    </Link>
+                </NavigationMenuItem>
+
+                <NavigationMenuItem>
+                    <Link
+                        href="/bookings"
+                        className={`flex items-center p-2 rounded-2xl gap-1 ${pathname.startsWith("/bookings") ? "backdrop-blur-sm bg-green-700/10" : ""}`}
+                    >
+                        <Ticket className="h-6 w-6 text-foreground" />
+                        <span className="text-xl"> Bookings </span>
                     </Link>
                 </NavigationMenuItem>
 

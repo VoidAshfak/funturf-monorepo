@@ -19,6 +19,12 @@ model users {
   gender                                             gender_type?
   profile_picture_url                                String?
   bio                                                String?
+  // Home location (Bangladesh-shaped, all optional). Powers turfmate
+  // recommendations; when null we fall back to the user's activity areas.
+  division                                           String?              @db.VarChar(100)
+  district                                           String?              @db.VarChar(100)
+  latitude                                           Decimal?             @db.Decimal(10, 7)
+  longitude                                          Decimal?             @db.Decimal(10, 7)
   user_type                                          user_type
   status                                             user_status?         @default(active)
   email_verified                                     Boolean?             @default(false)
@@ -91,6 +97,13 @@ model bookings {
   cancelled_at                       DateTime?            @db.Timestamp(6)
   payment_method                     payment_method_type?
   transaction_id                     String?              @db.VarChar(255)
+  // URL of the uploaded payment proof (client uploads via imgbb, sends the URL).
+  // Visible to the booking owner and turf admins for verification.
+  payment_proof_url                  String?
+  // Mutual-cancellation handshake: once a payment is admin-confirmed, neither
+  // side can cancel unilaterally. One party sets this to their user id (opens a
+  // cancel request); the other party must accept before the booking is cancelled.
+  cancellation_requested_by          String?              @db.Uuid
   notes                              String?
   admin_notes                        String?
   reminder_sent                      Boolean?             @default(false)
@@ -204,6 +217,10 @@ model event_participants {
   event_id        String                   @db.Uuid
   user_id         String                   @db.Uuid
   status          participant_status_type? @default(requested)
+  // Per-event role. organizer is tracked on events.organizer_id; a participant
+  // promoted to co_organizer is an "event admin" who can approve/reject join
+  // requests. Only the organizer (creator) can grant/revoke this.
+  role            participant_role_type?   @default(player)
   payment_status  payment_status_type?     @default(pending)
   joined_at       DateTime?                @default(now()) @db.Timestamp(6)
   approved_at     DateTime?                @db.Timestamp(6)

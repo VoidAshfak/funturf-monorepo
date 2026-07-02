@@ -1,26 +1,38 @@
-import {Router} from 'express'
+import { Router } from "express";
 import {
     sendTurfmateRequest,
-    acceptTurfmateRequest,
     getPendingRequests,
+    getOutgoingRequests,
+    acceptTurfmateRequest,
+    rejectTurfmateRequest,
+    cancelTurfmateRequest,
+    removeTurfmate,
+    getTurfmates,
+    getConnectionStatus,
     getMutualTurfmates,
-    getTurfmates
-} from '../../controllers/user-connection/turfmate.controller.js'
-import {verifyJWT} from '../../middlewares/auth/auth.middleware.js'
+    getRecommendations,
+} from "../../controllers/user-connection/turfmate.controller.js";
+import { verifyJWT } from "../../middlewares/auth/auth.middleware.js";
 
 const router = Router();
 
-// Protected routes
-router.route('/turfmate-request').post(verifyJWT, sendTurfmateRequest);
-router.route('/get-pending-requests').get(verifyJWT, getPendingRequests);
-router.route('/accept-turfmate-request').post(verifyJWT, acceptTurfmateRequest);
-router.route('/get-turfmates').get(verifyJWT, getTurfmates);
-router.route('/get-mutual-turfmates').get(verifyJWT, getMutualTurfmates);
+// Every turfmate route is private to the logged-in user.
+router.use(verifyJWT);
 
+// requests
+router.route("/turfmate-request").post(sendTurfmateRequest);
+router.route("/get-pending-requests").get(getPendingRequests);
+router.route("/get-outgoing-requests").get(getOutgoingRequests);
+router.route("/accept-turfmate-request").post(acceptTurfmateRequest);
+router.route("/reject-turfmate-request").post(rejectTurfmateRequest);
+router.route("/cancel-turfmate-request").post(cancelTurfmateRequest);
 
-// router.route('/reject-turfmate-request').post(verifyJWT, rejectTurfmateRequest);
-// router.route('/detach-with-turfmate').post(verifyJWT, ditachWithTurfmate);
+// turfmates
+router.route("/remove-turfmate").post(removeTurfmate);
+router.route("/get-turfmates").get(getTurfmates);
+router.route("/get-mutual-turfmates").get(getMutualTurfmates);
+router.route("/recommendations").get(getRecommendations);
+// Dynamic path last so it doesn't swallow the static ones above.
+router.route("/connection-status/:userId").get(getConnectionStatus);
 
-
-
-export default router
+export default router;

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Building2, CalendarCheck, LayoutDashboard, LogOut, Plus, User } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
+import { disconnectSocket } from "@/lib/socket";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -135,7 +136,10 @@ export default function AppSidebar() {
                             component that renders its own <button> — that nesting caused the
                             hydration error on click). signOut redirects home afterward. */}
                         <SidebarMenuButton
-                            onClick={() => signOut({ callbackUrl: "/" })}
+                            onClick={() => {
+                                disconnectSocket();
+                                signOut({ callbackUrl: "/" });
+                            }}
                             className="text-red-400 hover:bg-red-500/10 hover:text-red-400"
                         >
                             <LogOut className="text-red-400" />

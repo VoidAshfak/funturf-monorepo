@@ -45,6 +45,7 @@ import turfmateRoute from "./routes/user/turfmate.route.js";
 import eventRoute from "./routes/event/event.route.js";
 import venueRoute from "./routes/venue/venue.route.js";
 import bookingRoute from "./routes/venue/booking.route.js"
+import notificationRoute from "./routes/notification/notification.route.js";
 import { errorHandler } from "./utils/errorHandler.js";
 
 
@@ -54,6 +55,7 @@ app.use("/api/v1/turfmates", turfmateRoute);
 app.use("/api/v1/events", eventRoute);
 app.use("/api/v1/venues", venueRoute);
 app.use("/api/v1/bookings", bookingRoute);
+app.use("/api/v1/notifications", notificationRoute);
 
 app.use(errorHandler);
 
