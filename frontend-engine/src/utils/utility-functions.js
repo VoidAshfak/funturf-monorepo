@@ -9,10 +9,11 @@ export const getStatusColor = (status) => {
     }
 };
 
-export const getLocationString = (locationObject) => {
-    const { city, state, postal_code, country } = locationObject;
+export const getLocationString = (locationObject = {}) => {
+    const { area, city, state, postal_code, country } = locationObject;
     const parts = [];
 
+    if (area) parts.push(area);
     if (city) parts.push(city);
 
     if (state || postal_code) {

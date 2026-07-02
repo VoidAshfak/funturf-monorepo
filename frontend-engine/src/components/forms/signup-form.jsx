@@ -75,14 +75,16 @@ export function SignupForm({
                 throw new Error("Image URL not found");
             }
 
-            // Now register user via RTK Query mutation
+            // Now register user via RTK Query mutation. The backend whitelists
+            // user_type (only player/turf_admin accepted at signup).
             await registerUser({
                 ...rest,
                 password_hash: password,
                 profile_picture_url: imageUrl,
+                user_type: "player",
             }).unwrap();
 
-            alert("User registered successfully!");
+            alert("Account created successfully! Please log in.");
             router.push("/login");
         } catch (error) {
             console.error("Error submitting:", error);

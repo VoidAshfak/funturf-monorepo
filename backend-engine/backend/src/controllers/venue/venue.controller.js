@@ -242,49 +242,34 @@ const createVenue = asyncHandler(async (req, res) => {
     } = req.body;
 
     // ---- validation stays OUTSIDE the transaction ----
-    if (
-        !name
-        || !address_line_1
-        || !address_line_2
-        || !phone
-        || !email
-        || !cancellation_policy
-        || !sports_available
-        || !facilities
-        || !operating_hours
-        || !images
-        || !grounds
-    ) {
+    // Required set mirrors the DB NOT NULL columns only (everything else is
+    // nullable): turf name + address (area/district/division) + >=1 ground.
+    if (!name || !Array.isArray(grounds) || grounds.length === 0) {
         throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
-            message: "A required venue field is missing",
+            message: "Turf name and at least one ground are required",
         });
     }
 
-    const isArray = Array.isArray(grounds);
-    const isGroundsValid = Array.isArray(grounds) && grounds.every(ground => (
-        ground &&
-        typeof ground === "object" &&
-        ground.hasOwnProperty("name") &&
-        ground.hasOwnProperty("ground_type") &&
-        ground.hasOwnProperty("sport_type") &&
-        ground.hasOwnProperty("surface_type") &&
-        ground.hasOwnProperty("dimensions_length_m") &&
-        ground.hasOwnProperty("dimensions_width_m") &&
-        ground.hasOwnProperty("capacity_players") &&
-        ground.hasOwnProperty("hourly_rate") &&
-        ground.hasOwnProperty("weekend_hourly_rate") &&
-        ground.hasOwnProperty("peak_hour_rate") &&
-        ground.hasOwnProperty("off_peak_hour_rate") &&
-        ground.hasOwnProperty("minimum_booking_hours") &&
-        ground.hasOwnProperty("maximum_booking_hours") &&
-        ground.hasOwnProperty("amenities") &&
-        ground.hasOwnProperty("status") &&
-        ground.hasOwnProperty("images")
-    ));
-
-    if (!isArray || !isGroundsValid) {
+    if (!address_line_1 || !address_line_1.area || !address_line_1.city || !address_line_1.state) {
         throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
-            message: "Invalid ground data",
+            message: "Area/street, district and division are required",
+        });
+    }
+
+    // Per ground the DB only enforces name + hourly_rate; we also require a
+    // sport_type so the ground is discoverable/bookable.
+    const hasRate = (g) =>
+        g.hourly_rate !== undefined && g.hourly_rate !== null && g.hourly_rate !== "";
+    const hasSport = (g) =>
+        Array.isArray(g.sport_type) ? g.sport_type.length > 0 : Boolean(g.sport_type);
+
+    const isGroundsValid = grounds.every(
+        (g) => g && typeof g === "object" && g.name && hasSport(g) && hasRate(g)
+    );
+
+    if (!isGroundsValid) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "Each ground needs a name, at least one sport, and an hourly rate",
         });
     }
 
@@ -312,6 +297,17 @@ const createVenue = asyncHandler(async (req, res) => {
             }
         });
 
+        // Optional enum/text columns (ground_type, surface_type, status, notes…)
+        // arrive as "" when the owner leaves them blank. An empty string is an
+        // INVALID Prisma enum value and would abort grounds.createMany — and with
+        // it the whole venue+ground transaction. Coerce blanks to null so the
+        // column falls back to its default / stays null and the ground is created.
+        Object.keys(result).forEach((key) => {
+            if (result[key] === "") {
+                result[key] = null;
+            }
+        });
+
         return result;
     }
 
@@ -324,11 +320,14 @@ const createVenue = asyncHandler(async (req, res) => {
             name,
             slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
             description,
-            address_line_1: `${address_line_1.city}, ${address_line_1.state}`,
+            // BD address maps onto existing columns: area -> address_line_1,
+            // district -> city, division -> state. Fall back to the old
+            // "city, state" string if a legacy payload has no `area`.
+            address_line_1: address_line_1.area || `${address_line_1.city}, ${address_line_1.state}`,
             address_line_2,
             city: address_line_1.city,
             state: address_line_1.state,
-            country: address_line_1.country,
+            country: address_line_1.country || "Bangladesh",
             postal_code: address_line_1.postal_code,
             // Number("") is 0 and Number(undefined) is NaN, so `?? null` wouldn't
             // catch a bad value — guard explicitly with isFinite.
@@ -337,7 +336,9 @@ const createVenue = asyncHandler(async (req, res) => {
             phone,
             email,
             website_url,
-            establishment_year: Number(establishment_year),
+            establishment_year: Number.isFinite(Number(establishment_year)) && establishment_year
+                ? Number(establishment_year)
+                : null,
             total_grounds: grounds.length,
             facilities,
             sports_available,
@@ -345,12 +346,15 @@ const createVenue = asyncHandler(async (req, res) => {
             cancellation_policy,
             status: "pending_approval",
             verified: false,
-            rating: Number(rating),
+            rating: Number.isFinite(Number(rating)) ? Number(rating) : 0,
             total_bookings: 0,
-            operating_hours: {
-                open: operating_hours.opening_time,
-                close: operating_hours.closing_time,
-            },
+            // operating_hours is optional now — only build the JSON when provided.
+            operating_hours: operating_hours
+                ? {
+                    open: operating_hours.opening_time,
+                    close: operating_hours.closing_time,
+                }
+                : null,
             images,
         };
 

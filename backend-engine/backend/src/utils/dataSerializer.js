@@ -63,8 +63,8 @@ export class VenueSerializer {
             facilities: venue.facilities,
             rating: Number(venue.rating) || 0,
             operating_hours: {
-                opening_time: venue.operating_hours.open,
-                closing_time: venue.operating_hours.close,
+                opening_time: venue.operating_hours?.open ?? null,
+                closing_time: venue.operating_hours?.close ?? null,
             },
             images: venue.images,
             grounds: groundsSource, //.map((ground) => this.toGroundDto(ground)),
@@ -97,8 +97,8 @@ export class VenueSerializer {
             sports_available: venue.sports_available,
             rating: Number(venue.rating) || 0,
             operating_hours: {
-                opening_time: venue.operating_hours.open,
-                closing_time: venue.operating_hours.close,
+                opening_time: venue.operating_hours?.open ?? null,
+                closing_time: venue.operating_hours?.close ?? null,
             },
             images: venue.images,
             grounds: venue.grounds

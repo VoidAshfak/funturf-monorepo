@@ -91,49 +91,158 @@ const createEvent = asyncHandler(async (req, res) => {
 
 })
 
+// Paginated + filtered events feed (powers the infinite-scroll /events page).
+//
+// Query params (all optional):
+//   page      1-based page number            (default 1)
+//   limit     page size, clamped 1..50        (default 12)
+//   sport     exact sport_type, "all" = any
+//   timeframe all | today | week | month      (filters event_date forward)
+//   q         search term (title or turf name, case-insensitive)
+//   openOnly  "true" -> only events still needing players
+//
+// Response data: { events, pagination, stats }.
+// `stats` (global, unfiltered) is only computed on page 1 to save queries — the
+// client keeps it from the first load to render the hero + sport chips.
 const getEvents = asyncHandler(async (req, res) => {
-    const events = await pgClient.events.findMany({
-        select: {
-            id: true,
-            title: true,
-            description: true,
-            grounds: {
-                select: {
-                    id: true,
-                    name: true,
-                    turfs: {
-                        select: {
-                            id: true,
-                            name: true,
-                            address_line_1: true
-                        }
-                    }
-                }
-            },
-            organizer_id: true,
-            sport_type: true,
-            event_date: true,
-            start_time: true,
-            end_time: true,
-            min_players: true,
-            max_players: true,
-            current_players: true,
-            event_participants: {
-                select: {
-                    user_id: true,
-                    status: true
-                }
-            },
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 50);
+    const skip = (page - 1) * limit;
 
-        }
-    })
+    const { sport, timeframe, q, openOnly } = req.query;
 
-    if (!events) {
-        throw new ApiError(404, "No events found");
+    // Build the Prisma `where` from the active filters.
+    const where = {};
+
+    if (sport && sport !== "all") {
+        where.sport_type = sport;
     }
 
-    return res.status(200).json(new ApiResponse(200, `${events.length} events found`, events));
-})
+    // timeframe -> event_date window (from the start of today, forward).
+    if (timeframe && timeframe !== "all") {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        let end;
+        if (timeframe === "today") {
+            end = new Date(start);
+            end.setDate(end.getDate() + 1);
+        } else if (timeframe === "week") {
+            end = new Date(start);
+            end.setDate(end.getDate() + 7);
+        } else if (timeframe === "month") {
+            end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        }
+        where.event_date = { gte: start, ...(end ? { lt: end } : {}) };
+    }
+
+    if (q && q.trim()) {
+        const term = q.trim();
+        where.OR = [
+            { title: { contains: term, mode: "insensitive" } },
+            { grounds: { turfs: { name: { contains: term, mode: "insensitive" } } } },
+        ];
+    }
+
+    // "Open" = still short of the minimum squad size. This compares two columns,
+    // which Prisma supports via field references (needs Prisma 5.x+; we're on 6.x).
+    if (openOnly === "true") {
+        where.min_players = { gt: pgClient.events.fields.current_players };
+    }
+
+    const select = {
+        id: true,
+        title: true,
+        description: true,
+        grounds: {
+            select: {
+                id: true,
+                name: true,
+                turfs: {
+                    select: {
+                        id: true,
+                        name: true,
+                        address_line_1: true,
+                    },
+                },
+            },
+        },
+        organizer_id: true,
+        // Organizer profile — powers the "Organized by" line on the feed card.
+        users: {
+            select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                profile_picture_url: true,
+            },
+        },
+        sport_type: true,
+        event_date: true,
+        start_time: true,
+        end_time: true,
+        min_players: true,
+        max_players: true,
+        current_players: true,
+        event_participants: {
+            select: {
+                user_id: true,
+                status: true,
+                // participant avatars for the card
+                users: {
+                    select: {
+                        id: true,
+                        first_name: true,
+                        profile_picture_url: true,
+                    },
+                },
+            },
+        },
+    };
+
+    // Soonest matches first; id as a stable tie-breaker for deterministic paging.
+    const [events, total] = await Promise.all([
+        pgClient.events.findMany({
+            where,
+            select,
+            orderBy: [{ event_date: "asc" }, { id: "asc" }],
+            skip,
+            take: limit,
+        }),
+        pgClient.events.count({ where }),
+    ]);
+
+    const hasMore = skip + events.length < total;
+
+    // Global stats for the hero + sport chips — computed once (page 1) only.
+    let stats;
+    if (page === 1) {
+        const [globalTotal, openTotal, sportGroups] = await Promise.all([
+            pgClient.events.count(),
+            pgClient.events.count({
+                where: { min_players: { gt: pgClient.events.fields.current_players } },
+            }),
+            pgClient.events.groupBy({
+                by: ["sport_type"],
+                _count: { _all: true },
+            }),
+        ]);
+
+        const sports = sportGroups
+            .filter((g) => g.sport_type)
+            .map((g) => ({ name: g.sport_type, count: g._count._all }))
+            .sort((a, b) => b.count - a.count);
+
+        stats = { total: globalTotal, open: openTotal, sports };
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, `${events.length} events found`, {
+            events,
+            pagination: { page, limit, total, hasMore },
+            ...(stats ? { stats } : {}),
+        })
+    );
+});
 
 const getEventById = asyncHandler(async (req, res) => {
     const { event_id } = req.params;

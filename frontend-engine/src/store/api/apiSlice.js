@@ -48,13 +48,40 @@ export const apiSlice = createApi({
         }),
 
         // ---- Events ----
+        // Paginated infinite-scroll feed. Args: { page, limit, sport, timeframe, q, openOnly }.
+        // Pages accumulate into one cache entry per filter set: `serializeQueryArgs`
+        // drops `page` from the cache key, `merge` appends each new page, and
+        // `forceRefetch` re-runs the query whenever `page` changes.
         getEvents: builder.query({
-            query: () => "events",
-            transformResponse: (res) => res?.data ?? [],
+            query: ({ page = 1, limit = 12, sport, timeframe, q, openOnly } = {}) => ({
+                url: "events",
+                params: { page, limit, sport, timeframe, q, openOnly },
+            }),
+            transformResponse: (res) => res?.data ?? { events: [], pagination: { page: 1, hasMore: false, total: 0 } },
+            serializeQueryArgs: ({ queryArgs, endpointName }) => {
+                // Cache key = endpoint + filters (NOT page), so pages of the same
+                // filter set share one growing cache entry.
+                const { page, ...filters } = queryArgs ?? {};
+                return `${endpointName}(${JSON.stringify(filters)})`;
+            },
+            merge: (currentCache, incoming, { arg }) => {
+                // Page 1 (fresh load / filter change) replaces; later pages append.
+                if (!arg || arg.page === 1 || arg.page === undefined) {
+                    currentCache.events = incoming.events;
+                } else {
+                    const seen = new Set(currentCache.events.map((e) => e.id));
+                    currentCache.events.push(...incoming.events.filter((e) => !seen.has(e.id)));
+                }
+                currentCache.pagination = incoming.pagination;
+                // stats only comes back on page 1 — keep the last known copy otherwise.
+                if (incoming.stats) currentCache.stats = incoming.stats;
+            },
+            forceRefetch: ({ currentArg, previousArg }) =>
+                currentArg?.page !== previousArg?.page,
             providesTags: (result) =>
-                result
+                result?.events
                     ? [
-                          ...result.map((e) => ({ type: "Event", id: e.id })),
+                          ...result.events.map((e) => ({ type: "Event", id: e.id })),
                           { type: "Events", id: "LIST" },
                       ]
                     : [{ type: "Events", id: "LIST" }],

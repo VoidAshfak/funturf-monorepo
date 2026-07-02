@@ -1,5 +1,5 @@
 import { Clock, Star, MapPin, ArrowUpRight } from "lucide-react";
-import Image from "next/image";
+import ImageWithFallback from "@/components/ImageWithFallback";
 import { Card } from "@/components/ui/card";
 import { getLocationString } from "@/utils/utility-functions";
 
@@ -12,8 +12,8 @@ export function VenueCard({ className, venue }) {
         >
             {/* Media */}
             <div className="relative h-52 w-full overflow-hidden">
-                <Image
-                    src={images?.[0] || "/assets/images/banner1.jpg"}
+                <ImageWithFallback
+                    src={images?.[0]}
                     alt={name}
                     fill
                     sizes="(max-width: 768px) 100vw, 33vw"

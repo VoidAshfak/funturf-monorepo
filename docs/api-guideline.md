@@ -70,7 +70,7 @@ Protected routes require `Authorization: Bearer <accessToken>`. The token is iss
 
 | method | path | auth | body / params | success `data` |
 | --- | --- | --- | --- | --- |
-| POST | `/register` | public | `{ first_name, last_name, email, password_hash, phone?, date_of_birth?, gender?, profile_picture_url?, bio?, sports? }` | `201` — user fields + `accessToken`, `refreshToken`, `tokenExpiresIn` |
+| POST | `/register` | public | `{ first_name, last_name, email, password_hash, phone?, date_of_birth?, gender?, profile_picture_url?, bio?, sports?, user_type? }` | `201` — user fields + `accessToken`, `refreshToken`, `tokenExpiresIn` |
 | POST | `/login` | public | `{ email, password }` | `200` — `{ user: { ...profile, sports, teamsJoined, eventsJoined, friends, username, accessToken, refreshToken, tokenExpiresIn } }` |
 | POST | `/refresh` | public | `{ refresh_token }` | `200` — `{ accessToken, refreshToken, tokenExpiresIn }` |
 | GET | `/:user_id` | public | path `user_id` | `200` — `{ id, email, phone, first_name, last_name, ..., sports, teamsJoined, eventsJoined, friends, username }` |
@@ -85,6 +85,10 @@ Notes:
   middleware hashes it before the controller runs (field name is historical).
 - Register returns `201` (was `200`).
 - Login does **not** reveal whether an email exists — always `INVALID_CREDENTIALS`.
+- `user_type` at register is **whitelisted**: only `player` (default) or `turf_admin` are
+  honored; any other value (notably `super_admin`) falls back to `player`. The frontend
+  onboarding routes `/signup` (chooser) → `/signup/player` / `/signup/turf-admin` set it.
+  A `turf_admin` account unlocks the venue/ground create endpoints and dashboard.
 
 ### Venues (`/venues`)
 
@@ -101,7 +105,30 @@ Notes:
 a `turf_admin`/`super_admin` role. The owner (`admin_user_id`) is taken from the token —
 the old anonymous hardcoded-admin fallback is removed.
 
-**Errors:** `VALIDATION_ERROR` (missing/invalid venue or ground fields), `UNAUTHORIZED` /
+**`create-venue` payload (BD address + required set):** required fields now mirror the DB
+`NOT NULL` columns only. The `address_line_1` object is Bangladesh-shaped and maps to columns:
+
+```
+address_line_1: {
+  area,            // required -> column address_line_1 (street/area)
+  city,            // required -> district
+  state,           // required -> division
+  country,         // defaults to "Bangladesh"
+  postal_code,     // optional
+  latitude, longitude  // optional, set from the map picker
+}
+```
+
+- **Required:** `name`, `address_line_1.area`, `address_line_1.city`, `address_line_1.state`,
+  and at least one ground with `name` + `sport_type` + `hourly_rate`.
+- **Optional (nullable in DB):** description, address_line_2 (landmark), postal_code, lat/lng,
+  phone, email, website_url, establishment_year, facilities, sports_available,
+  rules_and_regulations, cancellation_policy, operating_hours, images, and all other ground fields.
+- Ground `amenities` are inherited from the venue's `facilities` on the client.
+- Ground `status` (`available` | `maintenance` | `unavailable`) controls booking availability.
+- Phone numbers are validated Bangladesh-format on the client (`01[3-9]XXXXXXXX`).
+
+**Errors:** `VALIDATION_ERROR` (missing name/address/ground essentials), `UNAUTHORIZED` /
 `MISSING_TOKEN` / `INVALID_TOKEN` (no/bad token), `FORBIDDEN` (logged in but not an admin role),
 `NOT_FOUND` (venue id not found).
 
@@ -109,12 +136,35 @@ the old anonymous hardcoded-admin fallback is removed.
 
 | method | path | auth | body / params | success `data` |
 | --- | --- | --- | --- | --- |
-| GET | `/` | public | — | `200` — list of events with ground/venue + participants |
+| GET | `/` | public | query `page?`, `limit?`, `sport?`, `timeframe?`, `q?`, `openOnly?` | `200` — `{ events, pagination, stats? }` (paginated feed) |
 | GET | `/my-events` | **required** | query `status?` | `200` — `{ events: [ { ...event, my_participation:{status,payment_status,joined_at} } ] }` |
 | POST | `/create-event` | **required** | event fields + `current_players[]` | `200` — created event (organizer = token user) |
 | PATCH | `/update-event/:event_id` | **required, organizer only** | editable event fields | `200` — updated event |
 | DELETE | `/delete-event` | **required, organizer only** | `{ event_id }` | `200` — deleted event |
 | GET | `/:event_id` | public | path `event_id` | `200` — full event DTO |
+
+**`GET /events` is a paginated, filterable feed** (powers the infinite-scroll `/events` page):
+
+- **Query params (all optional):** `page` (1-based, default 1), `limit` (1–50, default 12),
+  `sport` (exact `sport_type`, `"all"` = any), `timeframe` (`all` | `today` | `week` | `month`,
+  filters `event_date` forward), `q` (search — matches event title or turf name, case-insensitive),
+  `openOnly` (`"true"` = only events still short of `min_players`).
+- **Response `data`:**
+  ```
+  {
+    events: [ { ...event, users: {organizer}, grounds:{name,turfs}, event_participants:[{users}] } ],
+    pagination: { page, limit, total, hasMore },
+    stats: { total, open, sports:[{name,count}] }   // ONLY on page 1
+  }
+  ```
+- Events are ordered soonest-first (`event_date asc`, `id` tiebreak). Each event embeds the
+  **organizer profile** (`users`) and **participant avatars** (`event_participants[].users`).
+- `stats` (global, unfiltered) is returned only on `page === 1` to save queries; the frontend
+  caches it for the hero + sport chips. `openOnly` uses a Prisma **field reference**
+  (`min_players > current_players`).
+- Frontend: `useGetEventsQuery({page,limit,sport,timeframe,q,openOnly})` accumulates pages via
+  RTK Query `merge` (cache key excludes `page`); the server component pre-fetches `page 1` only
+  for `stats`.
 
 **Auth changes:** create/update/delete now require `Authorization: Bearer`. Organizer identity
 is taken from the token on create (client no longer sends `organizer_id`); `organizer_id` is not

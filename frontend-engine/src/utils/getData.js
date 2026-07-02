@@ -54,12 +54,17 @@ export async function getIndividualVenueByVenueId(venueId) {
     }
 };
 
-export async function getAllEvents() {
+// GET /events is now paginated + filtered. `data` is { events, pagination, stats }.
+// Pass params like { page, limit, sport, timeframe, q, openOnly }.
+export async function getAllEvents(params = {}) {
     try {
-        const res = await fetch(`${API_BASE_URL}/events`);
+        const qs = new URLSearchParams(
+            Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
+        ).toString();
+        const res = await fetch(`${API_BASE_URL}/events${qs ? `?${qs}` : ""}`);
         return res.json();
     } catch (error) {
-        return { data: [] }
+        return { data: { events: [], pagination: { page: 1, hasMore: false, total: 0 } } };
     }
 };
 

@@ -4,7 +4,10 @@ import EventCard from "./EventCard";
 import Link from "next/link";
 
 export default async function EventList({ max }) {
-    const { data: events } = await getAllEvents();
+    // GET /events is paginated now: data = { events, pagination, stats }.
+    // These non-feed usages (featured/profile/related) just want the first N.
+    const { data } = await getAllEvents(max ? { limit: max } : {});
+    const events = data?.events ?? [];
 
     if (!events || events.length === 0) {
         return (

@@ -1,18 +1,17 @@
-import { CalendarDays, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { getAllEvents } from "@/utils/getData";
-import EventsExplorer from "@/components/EventsExplorer";
+import EventsFeed from "@/components/EventsFeed";
 import CreateNewEvent from "./_components/CreateNewEvent";
 
 export default async function AllEvents() {
-    const { data: events = [] } = await getAllEvents();
+    // Fetch page 1 just for the global stats (the backend only returns `stats`
+    // on page 1). The feed list itself is loaded client-side by <EventsFeed>.
+    const { data } = await getAllEvents({ page: 1, limit: 1 });
+    const stats = data?.stats ?? { total: 0, open: 0, sports: [] };
 
-    const openCount = events.filter((e) => {
-        const min = e.min_players ?? 0;
-        const cur = e.current_players ?? 0;
-        return !(min > 0 && cur >= min);
-    }).length;
-
-    const sportCount = new Set(events.map((e) => e.sport_type).filter(Boolean)).size;
+    const matchCount = stats.total ?? 0;
+    const openCount = stats.open ?? 0;
+    const sportCount = stats.sports?.length ?? 0;
 
     return (
         <div className="mx-auto max-w-7xl px-4 pb-16 pt-6 md:px-8 md:pt-24">
@@ -53,7 +52,7 @@ export default async function AllEvents() {
 
                         {/* quick stats */}
                         <div className="mt-6 flex items-center gap-6">
-                            <Stat value={events.length} label="Matches" />
+                            <Stat value={matchCount} label="Matches" />
                             <span className="h-8 w-px bg-border" />
                             <Stat value={openCount} label="Open" />
                             <span className="h-8 w-px bg-border" />
@@ -67,19 +66,9 @@ export default async function AllEvents() {
                 </div>
             </section>
 
-            {/* filter + grid */}
+            {/* sticky filter rail + infinite-scroll feed */}
             <div className="relative mt-8">
-                {events.length === 0 ? (
-                    <div className="glass-neutral flex flex-col items-center gap-3 rounded-3xl border border-border p-12 text-center">
-                        <CalendarDays className="h-10 w-10 text-muted-foreground" />
-                        <h3 className="text-xl font-bold text-foreground">No matches yet</h3>
-                        <p className="text-muted-foreground">
-                            Be the first — create a match and rally your squad.
-                        </p>
-                    </div>
-                ) : (
-                    <EventsExplorer events={events} />
-                )}
+                <EventsFeed initialStats={stats} />
             </div>
         </div>
     );

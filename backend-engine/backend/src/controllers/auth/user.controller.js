@@ -114,7 +114,14 @@ const registerUser = asyncHandler(async (req, res) => {
     const eventsJoined = 0;
     const friends = 0;
     const username = email.split("@")[0];
-    const user_type = "player";
+
+    // Self-service account type, but whitelisted: a signup may only choose
+    // "player" or "turf_admin". "super_admin" is NEVER assignable via public
+    // register (must be granted out-of-band). Anything else falls back to player.
+    const ALLOWED_SIGNUP_ROLES = ["player", "turf_admin"];
+    const user_type = ALLOWED_SIGNUP_ROLES.includes(req.body.user_type)
+        ? req.body.user_type
+        : "player";
 
     // email and phone are each individually unique, so findUnique can't take both
     // as one locator — use findFirst with OR to detect a clash on either field.

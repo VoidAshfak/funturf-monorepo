@@ -6,7 +6,9 @@ import { getApiErrorMessage } from "@/utils/apiError";
 import { uploadImageObjArray, uploadSingleImageObj } from "@/utils/image-upload";
 import { getLocationString, getStatusColor } from "@/utils/utility-functions";
 import {
+    ArrowLeft,
     Building2,
+    CheckCircle2,
     Clock,
     DollarSign,
     Globe,
@@ -18,7 +20,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function StepFive({ formdata, setStep }) {
+export default function StepFive({ formdata, setStep, redirectTo = "/dashboard/turfs" }) {
     const router = useRouter();
     const [createVenueMutation, { isLoading }] = useCreateVenueMutation();
     const [submitError, setSubmitError] = useState(null);
@@ -49,7 +51,7 @@ export default function StepFive({ formdata, setStep }) {
             const data = await createVenueMutation(finalPayload).unwrap();
 
             if (data.success) {
-                router.push('/dashboard/turfs');
+                router.push(redirectTo);
             };
 
         } catch (error) {
@@ -325,16 +327,25 @@ export default function StepFive({ formdata, setStep }) {
                 </div>
             )}
 
-            <div className="flex justify-between">
+            <div className="mt-8 flex items-center justify-between gap-4 border-t border-border pt-6">
                 <Button
                     type="button"
+                    variant="outline"
+                    className="rounded-full"
                     onClick={() => setStep(prev => prev - 1)}
-                >Previous</Button>
+                >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Previous
+                </Button>
 
                 <Button
                     onClick={createVenue}
                     disabled={isLoading}
-                >{isLoading ? "Submitting…" : "Submit"}</Button>
+                    className="green-glow rounded-full"
+                >
+                    {isLoading ? "Submitting…" : "Create Turf"}
+                    {!isLoading && <CheckCircle2 className="ml-2 h-4 w-4" />}
+                </Button>
             </div>
         </div>
     );

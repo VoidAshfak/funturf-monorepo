@@ -38,6 +38,26 @@ export const SURFACE_TYPES = ['natural_grass', 'artificial_grass', 'clay', 'conc
 
 export const STATUS_TYPES = ['available', 'maintenance', 'unavailable'];
 
+// The 8 administrative divisions of Bangladesh (used instead of "state").
+export const BD_DIVISIONS = [
+    'Dhaka',
+    'Chattogram',
+    'Rajshahi',
+    'Khulna',
+    'Barishal',
+    'Sylhet',
+    'Rangpur',
+    'Mymensingh',
+];
+
+// Ground booking-availability options, framed around whether the ground accepts
+// bookings. Maps to the grounds.status DB column.
+export const GROUND_BOOKING_STATUS = [
+    { value: 'available', label: 'Open for booking', hint: 'Players can book this ground' },
+    { value: 'maintenance', label: 'Under maintenance', hint: 'Temporarily not bookable' },
+    { value: 'unavailable', label: 'Unavailable', hint: 'Hidden and not bookable' },
+];
+
 export const FORM_STEPS = [
     { number: 1, title: 'Basic Info', icon: Building2 },
     { number: 2, title: 'Venue Details', icon: MapPin },
@@ -71,11 +91,15 @@ export const venuedata = {
     admin_user_id: '',
     name: '',
     description: '',
+    // BD-friendly address. Keys map to DB columns:
+    //   area   -> address_line_1 (street/area)   | city  -> district
+    //   state  -> division                        | country defaults to Bangladesh
     address_line_1: {
+        area: '',
         city: '',
         state: '',
         postal_code: '',
-        country: '',
+        country: 'Bangladesh',
         latitude: '',
         longitude: '',
     },

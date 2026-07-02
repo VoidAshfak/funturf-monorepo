@@ -1,174 +1,117 @@
 import InputField from "@/components/InputField";
-import RequiredSign from "@/components/RequiredSign";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FACILITIES, SPORTS } from "@/utils/constants";
+import { stepTwoSchema } from "@/utils/turf-schemas";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Upload, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import ButtonContainer from "./ButtonContainer";
 
 export default function StepTwo({ formdata, setFormdata, step, setStep }) {
-
     const {
         register,
         handleSubmit,
-        formState: { errors },
         watch,
-        setValue
+        setValue,
+        formState: { errors },
     } = useForm({
-        defaultValues: { ...formdata }
+        resolver: zodResolver(stepTwoSchema),
+        defaultValues: { ...formdata },
     });
 
-    const selectedSports = watch('sports_available') || [];
-    const selectedAmenities = watch('facilities') || [];
-    const inputImage = watch('images');
+    const selectedSports = watch("sports_available") || [];
+    const selectedFacilities = watch("facilities") || [];
+    const inputImage = watch("images");
 
     const submitHandler = (values) => {
-        setFormdata(prev => ({ ...prev, ...values }));
-        setStep(prev => prev + 1);
+        setFormdata((prev) => ({ ...prev, ...values }));
+        setStep((prev) => prev + 1);
     };
 
-    const toggleSport = (sport) => {
-        const current = selectedSports;
-        const updated = current.includes(sport)
-            ? current.filter(s => s !== sport)
-            : [...current, sport];
-        setValue('sports_available', updated);
-    };
-
-    const toggleAmenity = (amenity) => {
-        const current = selectedAmenities;
-        const updated = current.includes(amenity)
-            ? current.filter(a => a !== amenity)
-            : [...current, amenity];
-        setValue('facilities', updated);
-    };
+    const toggleFrom = (list, item) =>
+        list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 
     const handleImageUpload = (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
-        const imageObj = {
-            file,
-            preview: URL.createObjectURL(file),
-            name: file.name,
-        };
-
-        setValue("images", imageObj);
+        setValue("images", { file, preview: URL.createObjectURL(file), name: file.name });
     };
 
     return (
-        <form
-            className="space-y-4"
-            onSubmit={handleSubmit(submitHandler)}
-        >
-
+        <form className="space-y-6" onSubmit={handleSubmit(submitHandler)}>
+            {/* Operating hours (native clock inputs) */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="openingTime">Opening Time <RequiredSign /> </Label>
-                    <Input
-                        id="openingTime"
-                        type="time"
-                        className={`${errors?.operating_hours?.opening_time ? 'border-2 border-red-500' : ''}`}
-                        {...register('operating_hours.opening_time', { required: 'Opening time is required' })}
-                    />
-                    {errors.operating_hours?.opening_time && (
-                        <span className="text-red-500 text-sm">{errors.operating_hours?.opening_time.message}</span>
-                    )}
+                    <Label htmlFor="openingTime">Opening Time</Label>
+                    <Input id="openingTime" type="time" {...register("operating_hours.opening_time")} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="closingTime">Closing Time <RequiredSign /> </Label>
-                    <Input
-                        id="closingTime"
-                        type="time"
-                        className={`${errors?.operating_hours?.closing_time ? 'border-2 border-red-500' : ''}`}
-                        {...register('operating_hours.closing_time', { required: 'Closing time is required' })}
-                    />
-                    {errors.operating_hours?.closing_time && (
-                        <span className="text-red-500 text-sm">{errors.operating_hours?.closing_time.message}</span>
-                    )}
+                    <Label htmlFor="closingTime">Closing Time</Label>
+                    <Input id="closingTime" type="time" {...register("operating_hours.closing_time")} />
                 </div>
             </div>
+            {errors?.operating_hours?.message && (
+                <span className="text-sm text-red-500">{errors.operating_hours.message}</span>
+            )}
 
+            {/* Sports */}
             <div>
-                <Label>Sports Available <RequiredSign /></Label>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                    {SPORTS.map(sport => (
-                        <div
+                <Label>Sports Available</Label>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {SPORTS.map((sport) => (
+                        <button
+                            type="button"
                             key={sport}
-                            onClick={() => toggleSport(sport)}
-                            className={`cursor-pointer p-3 rounded-lg border-2 text-center transition-all ${selectedSports.includes(sport)
-                                ? 'border-primary bg-primary/15 text-primary'
-                                : 'border-border hover:border-primary/40'
-                                }`}
+                            onClick={() => setValue("sports_available", toggleFrom(selectedSports, sport))}
+                            className={`rounded-lg border-2 p-3 text-center text-sm transition-all ${
+                                selectedSports.includes(sport)
+                                    ? "border-primary bg-primary/15 text-primary"
+                                    : "border-border hover:border-primary/40"
+                            }`}
                         >
                             {sport}
-                        </div>
+                        </button>
                     ))}
                 </div>
-                <input
-                    type="hidden"
-                    {...register('sports_available', {
-                        validate: v => v.length > 0 || 'Select at least one sport'
-                    })}
-                />
-                {errors.sports_available && (
-                    <span className="text-red-500 text-sm">{errors.sports_available.message}</span>
-                )}
             </div>
 
+            {/* Facilities */}
             <div>
-                <Label>Facilities <RequiredSign /> </Label>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                    {FACILITIES.map(amenity => (
-                        <div key={amenity} className="flex items-center space-x-2">
+                <Label>Facilities</Label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                    {FACILITIES.map((facility) => (
+                        <div key={facility} className="flex items-center space-x-2">
                             <Checkbox
-                                id={amenity}
-                                checked={selectedAmenities.includes(amenity)}
-                                onCheckedChange={() => toggleAmenity(amenity)}
+                                id={facility}
+                                checked={selectedFacilities.includes(facility)}
+                                onCheckedChange={() => setValue("facilities", toggleFrom(selectedFacilities, facility))}
                             />
-                            <label htmlFor={amenity} className="text-sm cursor-pointer">
-                                {amenity}
-                            </label>
+                            <label htmlFor={facility} className="cursor-pointer text-sm">{facility}</label>
                         </div>
                     ))}
                 </div>
-                <input type="hidden" {...register('facilities', {
-                    validate: facilities => facilities.length > 0 || 'Select at least one facility'
-                })} />
-                {errors.facilities && (
-                    <span className="text-red-500 text-sm">{errors.facilities.message}</span>
-                )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="advanceBookingDays">Advance Booking (days)</Label>
+                    <InputField errors={errors}>
+                        <Input id="advanceBookingDays" type="number" placeholder="7" {...register("advance_booking_days")} />
+                    </InputField>
+                </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-                <Label htmlFor="advanceBookingDays">Advance Booking (days)</Label>
-                <InputField errors={errors}>
-                    <Input
-                        id="advanceBookingDays"
-                        type="number"
-                        placeholder="7"
-                        {...register('advance_booking_days', {
-                            min: { value: 1, message: 'Min 1 day' }
-                        })}
-                    />
-                </InputField>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cancellation_policy">Cancellation Policy <RequiredSign /></Label>
+                <Label htmlFor="cancellation_policy">Cancellation Policy</Label>
                 <InputField errors={errors}>
                     <Textarea
                         id="cancellation_policy"
-                        placeholder="e.g., Free cancellation up to 24 hours before booking time..."
                         rows={3}
-                        className={`${errors?.cancellation_policy ? 'border-2 border-red-500' : ''}`}
-                        {...register('cancellation_policy', {
-                            required: ' Enter cancelation policy'
-                        })}
+                        placeholder="e.g., Free cancellation up to 24 hours before booking time…"
+                        {...register("cancellation_policy")}
                     />
                 </InputField>
             </div>
@@ -178,81 +121,52 @@ export default function StepTwo({ formdata, setFormdata, step, setStep }) {
                 <InputField errors={errors}>
                     <Textarea
                         id="rules_and_regulations"
-                        placeholder="e.g., No outside food, proper sports attire required..."
                         rows={3}
-                        {...register('rules_and_regulations')}
+                        placeholder="e.g., No outside food, proper sports attire required…"
+                        {...register("rules_and_regulations")}
                     />
                 </InputField>
             </div>
 
+            {/* Venue cover image */}
             <div>
-                <h4 className="font-semibold text-foreground mb-4">Venue Image <RequiredSign /> </h4>
-
-                <div className="mb-4">
-                    <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e)}
-                        className="hidden"
-                        id={`image-upload`}
-                    />
-                    <Label
-                        htmlFor={`image-upload`}
-                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-accent transition-colors"
-                    >
-                        <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                        <span className="text-sm text-muted-foreground">Click to upload images</span>
-                        <span className="text-xs text-muted-foreground mt-1">PNG, JPG, WEBP up to 10MB</span>
-                    </Label>
-                </div>
-
+                <h4 className="mb-3 font-semibold text-foreground">Venue Image</h4>
                 <input
-                    type="hidden"
-                    {...register("images", {
-                        required: "Venue image is required",
-                    })}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    id="venue-image-upload"
                 />
+                <Label
+                    htmlFor="venue-image-upload"
+                    className="flex h-32 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border transition-colors hover:bg-accent"
+                >
+                    <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Click to upload a cover image</span>
+                    <span className="mt-1 text-xs text-muted-foreground">PNG, JPG, WEBP up to 10MB</span>
+                </Label>
 
-                {errors.images && (
-                    <span className="text-red-500 text-sm">{errors.images.message}</span>
-                )}
-
-                {inputImage ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="relative group">
-                            <div className="aspect-square rounded-lg overflow-hidden bg-muted">
-                                <img
-                                    src={inputImage.preview || inputImage}
-                                    alt={inputImage.name || "Image"}
-                                    className="w-full h-full object-cover"
-                                />
+                {inputImage && (
+                    <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+                        <div className="group relative">
+                            <div className="aspect-square overflow-hidden rounded-lg bg-muted">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={inputImage.preview || inputImage} alt={inputImage.name || "Venue"} className="h-full w-full object-cover" />
                             </div>
-
-                            <Button
+                            <button
                                 type="button"
                                 onClick={() => setValue("images", null)}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-600"
+                                className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white opacity-0 shadow-lg transition-opacity hover:bg-red-600 group-hover:opacity-100"
                             >
                                 <X className="h-4 w-4" />
-                            </Button>
-
-                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                                {inputImage.name}
-                            </div>
+                            </button>
                         </div>
                     </div>
-                ) : (
-                    <div className="text-center py-4 text-muted-foreground text-sm">
-                        No image uploaded yet
-                    </div>
                 )}
-
             </div>
 
-            <ButtonContainer
-                currentStep={step}
-                setStep={setStep}
-            />
+            <ButtonContainer currentStep={step} setStep={setStep} />
         </form>
-    )
+    );
 }
