@@ -1,6 +1,7 @@
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
+import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { pgClient } from "../../prisma.js";
 import { EventSerializer } from "../../utils/dataSerializer.js";
 
@@ -40,13 +41,15 @@ const createEvent = asyncHandler(async (req, res) => {
         || !skill_level_required
         || !total_cost
         || !cost_split_type) {
-        throw new ApiError(400, "A required field is missing");
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "A required event field is missing",
+        });
     }
 
     const createdEvents = await pgClient.$queryRaw
         `
     SELECT * FROM fn_create_event(
-        ${organizer_id || req.user?.id || "8806583a-1630-4ab3-a93b-94f5f432cc14"}::uuid,
+        ${req.user.id}::uuid,
         ${title}::varchar, 
         ${description || ""}::text, 
         ${sport_type}::varchar, 
@@ -136,7 +139,9 @@ const getEventById = asyncHandler(async (req, res) => {
     const { event_id } = req.params;
 
     if (!event_id) {
-        throw new ApiError(400, "Bad request. You need to provide a event id.")
+        throw ApiError.fromCode(ERROR_CODES.BAD_REQUEST, {
+            message: "An event id is required",
+        });
     }
 
     const event = await pgClient.events.findUnique({
@@ -191,7 +196,7 @@ const getEventById = asyncHandler(async (req, res) => {
     })
 
     if (!event) {
-        throw new ApiError(404, "Event not found.")
+        throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
     }
 
     const players_joined = await pgClient.event_participants.findMany({
@@ -225,23 +230,18 @@ const deleteEvent = asyncHandler(async (req, res) => {
     })
 
     if (!existingEvent) {
-        throw new ApiError(400, "The event doesn't exiss.")
+        throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
     }
 
     if (existingEvent.organizer_id !== user_id) {
-        throw new ApiError(400, "You are not authorized to delete this event.")
+        throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ORGANIZER);
     }
 
     const deletedEventResponse = await pgClient.events.delete({
         where: {
             id: event_id,
-            // organizerId: user_id
         }
     })
-
-    if (!deletedEventResponse) {
-        throw new ApiError(400, "There was an error deleting  the event");
-    }
 
     return res.status(200).json(new ApiResponse(200, "Event deleted successfully", deletedEventResponse));
 });
@@ -249,68 +249,66 @@ const deleteEvent = asyncHandler(async (req, res) => {
 const getUserEvents = asyncHandler(async (req, res) => {
 
     const userId = req.user.id;
-    const { role, status } = req.query;
+    const { status } = req.query;
 
-    const where = {
-        user_id: userId
-    };
-
-    if (role) where.role = role;
+    // Relation/column names must match the Prisma schema:
+    //   event_participants -> events (relation "events")
+    //   events -> users (organizer, relation "users")
+    //   events -> grounds -> turfs
+    // (event_participants has no role/team columns, so we don't filter/return them.)
+    const where = { user_id: userId };
     if (status) where.status = status;
 
-    try {
-        const participations = await pgClient.event_participants.findMany({
-            where,
-            include: {
-                event: {
-                    include: {
-                        organizer: {
-                            select: {
-                                id: true,
-                                first_name: true,
-                                last_name: true,
-                                profile_picture_url: true
-                            }
-                        },
-                        ground: {
-                            include: {
-                                turf: {
-                                    select: {
-                                        name: true,
-                                        city: true
-                                    }
+    const participations = await pgClient.event_participants.findMany({
+        where,
+        include: {
+            events: {
+                include: {
+                    users: {
+                        select: {
+                            id: true,
+                            first_name: true,
+                            last_name: true,
+                            profile_picture_url: true
+                        }
+                    },
+                    grounds: {
+                        include: {
+                            turfs: {
+                                select: {
+                                    name: true,
+                                    city: true
                                 }
                             }
                         }
                     }
                 }
-            },
-            orderBy: {
-                event: {
-                    event_date: 'asc'
-                }
             }
-        });
-
-        const events = participations.map(p => ({
-            ...p.event,
-            my_participation: {
-                status: p.status,
-                role: p.role,
-                team: p.team,
-                joined_at: p.joined_at
+        },
+        orderBy: {
+            events: {
+                event_date: 'asc'
             }
-        }));
+        }
+    });
 
-        return res.status(200).json(
-            new ApiResponse(200, "User events fetched successfully", { events })
-        );
+    const events = participations.map((p) => ({
+        ...p.events,
+        my_participation: {
+            status: p.status,
+            payment_status: p.payment_status,
+            joined_at: p.joined_at
+        }
+    }));
 
-    } catch (error) {
-        throw new ApiError(500, "Error fetching user events");
-    }
+    return res.status(200).json(
+        new ApiResponse(200, "User events fetched successfully", { events })
+    );
 });
 
+// NOT ROUTED YET (see routes/event/event.route.js): depends on the PostGIS
+// ST_Distance_Sphere function and on event status/visibility enum values that
+// haven't been verified against this database. Kept for when geo-search lands.
 const getNearbyEvents = asyncHandler(async (req, res) => {
     const { lat, lng, radius = 10 } = req.query; // radius in km
 
@@ -377,7 +375,9 @@ const editEvent = asyncHandler(async (req, res) => {
     const { event_id } = req.params;
 
     if (!event_id) {
-        throw new ApiError(400, "Bad request. You need to provide a event id.")
+        throw ApiError.fromCode(ERROR_CODES.BAD_REQUEST, {
+            message: "An event id is required",
+        });
     }
 
     const event = await pgClient.events.findUnique({
@@ -387,11 +387,17 @@ const editEvent = asyncHandler(async (req, res) => {
     })
 
     if (!event) {
-        throw new ApiError(404, "Event not found.")
+        throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
     }
 
+    // Only the organizer may edit the event.
+    if (event.organizer_id !== req.user.id) {
+        throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ORGANIZER);
+    }
+
+    // NOTE: organizer_id is intentionally NOT editable — ownership can't be
+    // transferred through this endpoint.
     const editableFields = [
-        "organizer_id",
         "title",
         "description",
         "sport_type",

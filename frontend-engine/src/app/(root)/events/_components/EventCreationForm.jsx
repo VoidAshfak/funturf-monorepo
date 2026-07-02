@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateEventMutation, useGetVenuesQuery } from "@/store/api/apiSlice";
+import { getApiErrorMessage } from "@/utils/apiError";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -27,6 +28,7 @@ export default function EventCreationForm({ setOpen }) {
     const { status } = useSession();
     const { data: venues = [] } = useGetVenuesQuery();
     const [createEvent] = useCreateEventMutation();
+    const [submitError, setSubmitError] = useState(null);
 
     const [grounds, setGrounds] = useState([]);
     const [sports, setSports] = useState([]);
@@ -59,13 +61,17 @@ export default function EventCreationForm({ setOpen }) {
     });
 
     const onSubmit = async (values) => {
+        setSubmitError(null);
         try {
+            // organizer identity comes from the auth token on the backend — no
+            // organizer_id is sent from the client.
             const data = await createEvent(values).unwrap();
             if (data?.success) {
                 setOpen(false)
             }
         } catch (error) {
             console.error(error)
+            setSubmitError(getApiErrorMessage(error, "Failed to create event."));
         }
     };
 
@@ -77,6 +83,12 @@ export default function EventCreationForm({ setOpen }) {
             className="space-y-5"
             onSubmit={handleSubmit(onSubmit)}
         >
+
+            {submitError && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-center text-sm font-medium text-destructive">
+                    {submitError}
+                </div>
+            )}
 
             {/* title */}
             <div className="space-y-2">

@@ -1,6 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Commands
 
@@ -10,8 +7,6 @@ npm run build    # Production build (Turbopack)
 npm run start    # Serve production build
 npm run lint     # ESLint (eslint-config-next)
 ```
-
-No test runner is configured.
 
 ## Stack
 
@@ -25,7 +20,7 @@ No test runner is configured.
 - **Use server components by default**
 
 ### Backend API
-The frontend talks to an external backend at `https://app4-osju.onrender.com/api/v1`. This base URL is **hardcoded** throughout (in `src/utils/getData.js`, the NextAuth route, and the RTK Query base query) — it is not read from an env var. When adding API calls, follow the existing pattern; if centralizing, update all call sites.
+The frontend talks to the backend at the base URL in **`NEXT_PUBLIC_API_BASE_URL`** (`.env`), defaulting to `http://localhost:8080/api/v1` — the local backend dev server (`npm run dev` from `backend-engine/backend/`). Read via `process.env.NEXT_PUBLIC_API_BASE_URL` in `src/utils/getData.js`, the NextAuth route, and the RTK Query base query (`src/store/api/apiSlice.js`); the `NEXT_PUBLIC_` prefix is required because `apiSlice` runs client-side. Point it at the deployed API `https://app4-osju.onrender.com/api/v1` for production. When adding API calls, follow the same pattern — do not hardcode the host.
 
 **Hybrid data strategy** (server reads + client RTK Query):
 - **Server components** still fetch initial page data via `src/utils/getData.js` (`getAllVenues`, `getIndividualVenueByVenueId`, `getAllEvents`, `getUserByUserId`, etc.) so SSR/streaming/`loading.jsx` keep working. These `fetch` server-side and swallow errors into empty-shape fallbacks (`{ data: [] }` / `{ data: {} }`).
@@ -65,5 +60,5 @@ Client calls `src/utils/image-upload.js` (`uploadSingleImageObj`, `uploadImageOb
 `next.config.mjs` allows remote images from any host (http/https) — needed because venue/ground images come from imgbb and arbitrary backend URLs.
 
 ## Notes
-- `.env` holds `IMGBB_API_KEY`, `NEXT_PUBLIC_BASE_URL`, and `NEXTAUTH_SECRET`. It is committed with a real imgbb key but a placeholder `NEXTAUTH_SECRET` — set a real secret for auth to work.
+- `.env` holds `IMGBB_API_KEY`, `NEXT_PUBLIC_BASE_URL` (the frontend's own origin), `NEXT_PUBLIC_API_BASE_URL` (backend API base), and `NEXTAUTH_SECRET`. It is committed with a real imgbb key but a placeholder `NEXTAUTH_SECRET` — set a real secret for auth to work.
 

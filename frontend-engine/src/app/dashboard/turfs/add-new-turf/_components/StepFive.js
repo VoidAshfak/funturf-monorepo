@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useCreateVenueMutation } from "@/store/api/apiSlice";
+import { getApiErrorMessage } from "@/utils/apiError";
 import { uploadImageObjArray, uploadSingleImageObj } from "@/utils/image-upload";
 import { getLocationString, getStatusColor } from "@/utils/utility-functions";
 import {
@@ -15,12 +16,15 @@ import {
     Users
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function StepFive({ formdata, setStep }) {
     const router = useRouter();
     const [createVenueMutation, { isLoading }] = useCreateVenueMutation();
+    const [submitError, setSubmitError] = useState(null);
 
     const createVenue = async () => {
+        setSubmitError(null);
 
         try {
             const mainImgUrl = await uploadSingleImageObj(formdata.images);
@@ -50,6 +54,9 @@ export default function StepFive({ formdata, setStep }) {
 
         } catch (error) {
             console.error("Error submitting:", error);
+            // Surface the backend reason — e.g. FORBIDDEN when the logged-in user
+            // isn't a turf_admin/super_admin, or a VALIDATION_ERROR message.
+            setSubmitError(getApiErrorMessage(error, "Failed to create venue."));
         }
     };
 
@@ -311,6 +318,12 @@ export default function StepFive({ formdata, setStep }) {
                     ))}
                 </div>
             </div>
+
+            {submitError && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-center text-sm font-medium text-destructive">
+                    {submitError}
+                </div>
+            )}
 
             <div className="flex justify-between">
                 <Button

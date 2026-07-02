@@ -22,6 +22,7 @@ import RequiredSign from "../RequiredSign"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useRegisterUserMutation } from "@/store/api/apiSlice"
+import { getApiErrorMessage } from "@/utils/apiError"
 
 const sportsOptions = [
     { id: 1, value: 'football', label: 'Football' },
@@ -85,7 +86,9 @@ export function SignupForm({
             router.push("/login");
         } catch (error) {
             console.error("Error submitting:", error);
-            alert("Something went wrong.");
+            // Surface the backend's real reason (e.g. "A user with this email or
+            // phone already exists") instead of a generic message.
+            alert(getApiErrorMessage(error, "Something went wrong."));
         }
     };
 

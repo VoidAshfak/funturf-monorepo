@@ -19,7 +19,7 @@ export const authOptions = {
                     return null;
                 }
 
-                const res = await fetch('https://app4-osju.onrender.com/api/v1/users/login', {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/users/login`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -29,11 +29,13 @@ export const authOptions = {
 
                 const data = await res.json();
 
-                if (data.success) {
+                if (res.ok && data.success) {
                     return data.data.user
                 }
 
-                return null;
+                // Surface the backend's error message to the client. NextAuth
+                // exposes a thrown Error's message on `result.error` (redirect:false).
+                throw new Error(data?.message || "Invalid email or password");
             }
         })
     ],

@@ -1,6 +1,7 @@
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
+import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { uploadMedia } from "../../utils/mediaUpload.js"
 import jwt from "jsonwebtoken"
 import { mongoClient, pgClient } from "../../prisma.js"
@@ -54,7 +55,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
         })
 
         if (!user) {
-            throw new ApiError(404, "User not found");
+            throw ApiError.fromCode(ERROR_CODES.USER_NOT_FOUND);
         }
 
         const accessToken = generateAccessToken(user);
@@ -71,13 +72,15 @@ const generateAccessAndRefreshTokens = async (userId) => {
         })
 
         if (!refreshTokenUpdateResponse) {
-            throw new ApiError(500, "Token update failed");
+            throw ApiError.fromCode(ERROR_CODES.TOKEN_GENERATION_FAILED);
         }
 
         return { accessToken, refreshToken }
 
     } catch (error) {
-        throw new ApiError(500, "Something went wrong while generating tokens", error);
+        // Preserve a meaningful ApiError; only wrap truly unexpected failures.
+        if (error instanceof ApiError) throw error;
+        throw ApiError.fromCode(ERROR_CODES.TOKEN_GENERATION_FAILED);
     }
 }
 
@@ -101,10 +104,11 @@ const registerUser = asyncHandler(async (req, res) => {
 
 
     if (!first_name || !last_name || !email || !password_hash) {
-        throw new ApiError(400, "All fields are required");
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "first_name, last_name, email and password are required",
+        });
     }
 
-    console.log("Request Body: ", req.body);
     const sports = req.body.sports || [];
     const teamsJoined = 0;
     const eventsJoined = 0;
@@ -112,15 +116,19 @@ const registerUser = asyncHandler(async (req, res) => {
     const username = email.split("@")[0];
     const user_type = "player";
 
-    const existingUser = await pgClient.users.findUnique({
+    // email and phone are each individually unique, so findUnique can't take both
+    // as one locator — use findFirst with OR to detect a clash on either field.
+    const existingUser = await pgClient.users.findFirst({
         where: {
-            email: email,
-            phone: phone
-        }
-    })
+            OR: [
+                { email },
+                ...(phone ? [{ phone }] : []),
+            ],
+        },
+    });
 
     if (existingUser) {
-        throw new ApiError(409, "User already exists");
+        throw ApiError.fromCode(ERROR_CODES.USER_ALREADY_EXISTS);
     }
 
     // const profilePictureLocalPath = req.files?.profilePicture[0].path;
@@ -184,8 +192,8 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     return res
-        .status(200)
-        .json(new ApiResponse(200, "User created successfully", serverResponse));
+        .status(201)
+        .json(new ApiResponse(201, "User created successfully", serverResponse));
 
 })
 
@@ -195,7 +203,9 @@ const loginUser = asyncHandler(async (req, res) => {
     // console.log("REQUEST: ",req);
 
     if (!email || !password) {
-        throw new ApiError(400, "All fields are required");
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "email and password are required",
+        });
     }
 
     const user = await pgClient.users.findUnique({
@@ -217,8 +227,10 @@ const loginUser = asyncHandler(async (req, res) => {
         }
     })
 
+    // Use the same generic error for "no such user" and "wrong password" so the
+    // API doesn't leak which emails are registered (user-enumeration guard).
     if (!user) {
-        throw new ApiError(404, "User not found. Talking from user controller");
+        throw ApiError.fromCode(ERROR_CODES.INVALID_CREDENTIALS);
     }
 
     const { password_hash, ...response } = user
@@ -226,7 +238,7 @@ const loginUser = asyncHandler(async (req, res) => {
     const isPasswordValid = await isPasswordCorrect(password, user.password_hash);
 
     if (!isPasswordValid) {
-        throw new ApiError(401, "Invalid user credentials");
+        throw ApiError.fromCode(ERROR_CODES.INVALID_CREDENTIALS);
     }
 
     const sports = req.body.sports || [];
@@ -360,60 +372,49 @@ const tokenRefresh = asyncHandler(async (req, res) => {
 const getUserById = asyncHandler(async (req, res) => {
     const { user_id } = req.params;
 
-    try {
-        const user = await pgClient.users.findUnique({
-            where: { id: user_id },
-            select: {
-                email: true,
-                phone: true,
-                first_name: true,
-                last_name: true,
-                date_of_birth: true,
-                gender: true,
-                profile_picture_url: true,
-                bio: true,
-                user_type: true,
-                status: true,
-                email_verified: true,
-                phone_verified: true,
-                preferred_language: true,
-                last_login_at: true,
-                created_at: true,
-                updated_at: true
-            }
-        });
-
-        if (!user) {
-            res.status(404).json({ error: "User not found" });
+    const user = await pgClient.users.findUnique({
+        where: { id: user_id },
+        select: {
+            id: true,
+            email: true,
+            phone: true,
+            first_name: true,
+            last_name: true,
+            date_of_birth: true,
+            gender: true,
+            profile_picture_url: true,
+            bio: true,
+            user_type: true,
+            status: true,
+            email_verified: true,
+            phone_verified: true,
+            preferred_language: true,
+            last_login_at: true,
+            created_at: true,
+            updated_at: true
         }
+    });
 
-        const sports = [];
-        const teamsJoined = 0;
-        const eventsJoined = 0;
-        const friends = 0;
-        const username = user.email.split("@")[0];
-
-        const userResponse = {
-            ...user,
-            sports,
-            teamsJoined,
-            eventsJoined,
-            friends,
-            username,
-        }
-        
-
-        return res
-            .status(200)
-            .json(new ApiResponse(
-                200,
-                "User found",
-                userResponse
-            ));
-
-    } catch (error) {
-        throw new ApiError(500, "Error getting the user");
+    // Must return here — falling through on a missing user would crash on
+    // `user.email` below and mask the real 404 as a 500.
+    if (!user) {
+        throw ApiError.fromCode(ERROR_CODES.USER_NOT_FOUND);
     }
+
+    // TODO: replace these placeholders with real aggregates once the
+    // teams / events / connections features land.
+    const userResponse = {
+        ...user,
+        sports: [],
+        teamsJoined: 0,
+        eventsJoined: 0,
+        friends: 0,
+        username: user.email.split("@")[0],
+    };
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "User found", userResponse));
 })
 
 

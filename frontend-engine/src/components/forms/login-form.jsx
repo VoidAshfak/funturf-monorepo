@@ -29,7 +29,8 @@ export function LoginForm({ className }) {
 
         if (!result.ok) {
             setError('root.response', {
-                message: 'Invalid Email/Password'
+                // result.error carries the backend message (see NextAuth authorize).
+                message: result.error || 'Invalid Email/Password'
             });
         } else {
             window.location.href = '/';

@@ -1,6 +1,7 @@
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
+import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { logger } from "../../../logs/logger.js";
 import { pgClient } from "../../prisma.js";
 import { minutesToTimeString, slotKeyToMinutes, parseSlotCodeToTime } from "../../utils/timeAndDateFormatting.js";
@@ -10,8 +11,12 @@ export const getAvailableSlots = asyncHandler(async (req, res) => {
     logger.info(`Received request to get available slots for ground ${ground} on ${date}`);
 
     if (!ground || !date) {
-        logger.warning(`Did not received query parameters properly`);
-        throw new ApiError(405, "Invalid Request")
+        // NOTE: winston's method is `warn`, not `warning` — calling `warning`
+        // throws a TypeError and turned this into a 500 instead of a 400.
+        logger.warn(`Did not receive query parameters properly`);
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "ground and date query parameters are required",
+        });
     } else {
         logger.info(`Received request to get available slots for ground ${ground} on ${date}`);
     }
@@ -26,8 +31,8 @@ export const getAvailableSlots = asyncHandler(async (req, res) => {
     });
 
     if (!availableSlots) {
-        logger.warning(`No available slots found for ground ${ground} on ${date}`);
-        throw new ApiError(404, "No available slots found");
+        logger.warn(`No available slots found for ground ${ground} on ${date}`);
+        throw ApiError.fromCode(ERROR_CODES.SLOT_NOT_FOUND);
     } else {
         logger.info(`Available slots found for ground ${ground} on ${date}`);
     }
@@ -44,8 +49,10 @@ export const calculateBookingPrice = asyncHandler(async (req, res) => {
     // const user_id = req.user?.id || '8806583a-1630-4ab3-a93b-94f5f432cc14'
 
     if (!ground_id || !slot || !booking_date) {
-        logger.warning(`Did not received query parameters properly`);
-        throw new ApiError(405, "Invalid Request")
+        logger.warn(`Did not receive query parameters properly`);
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "ground_id, slot and booking_date query parameters are required",
+        });
     } else {
         logger.info(`Received request to get booking price for ground ${ground_id} on ${booking_date}`);
     }
@@ -61,13 +68,13 @@ export const calculateBookingPrice = asyncHandler(async (req, res) => {
 
     if (!slot_row) {
         logger.error(JSON.stringify({ isAvailable: false, reason: "slot_disabled" }));
-        throw new ApiError(404, "Slot not found");
+        throw ApiError.fromCode(ERROR_CODES.SLOT_NOT_FOUND);
     }
 
     const slot_available = Boolean((slot_row)[slot]);
     if (!slot_available) {
         logger.info(JSON.stringify({ isAvailable: false, reason: "slot_already_booked" }))
-        throw new ApiError(404, "Slot already booked");
+        throw ApiError.fromCode(ERROR_CODES.SLOT_UNAVAILABLE);
     }
 
     const slot_time = parseSlotCodeToTime(slot);
@@ -80,7 +87,7 @@ export const calculateBookingPrice = asyncHandler(async (req, res) => {
 
     if (!ground) {
         logger.error(JSON.stringify({ isAvailable: false, reason: "ground_not_found" }));
-        throw new ApiError(404, "Ground not found");
+        throw ApiError.fromCode(ERROR_CODES.GROUND_NOT_FOUND);
     }
 
     const hourly_rate = Number(ground.hourly_rate);

@@ -1,11 +1,6 @@
-# CLAUDE.md
-
 ## Project
 
 FunTurf — turf (sports ground) booking and game-organizing platform. This repo currently holds the **backend only**: an Express REST API (`/api/v1`) backed by Prisma, deployed as 3 replicas behind Nginx. All app code lives in `backend/`.
-
-## About The Platform
-Many people in Bangladesh uses turfs for playing sports. Specially in crowded cities where fields are rarely available to play sports. Dhaka, Chittagong, Rajshahi. 
 
 ## Commands
 
@@ -26,7 +21,7 @@ There is **no test runner, linter, or build step** configured. Formatting is Pre
 
 ### Docker / local cluster
 
-`docker-compose.yml` (run from repo root) brings up postgres + 3 backend replicas (`app1/2/3`) + nginx. Prisma against the dockerized DB (`docker_commands.txt`):
+`docker-compose.yml` (run from repo root) brings up postgres + 3 backend replicas (`app1/2/3`) + nginx. Prisma against the dockerized DB:
 
 ```bash
 docker compose run --rm app1 npx prisma generate --schema=prisma/postgresql/schema.prisma
@@ -36,16 +31,16 @@ docker compose up -d
 
 Postgres is exposed to the host at `127.0.0.1:8000`; nginx serves on port 80.
 
-## Architecture
+
 
 ### Prisma datasource
 
 **Use `pgClient` only.** `mongoClient` is deprecated — do not write new code against it, and prefer migrating any remaining usage to `pgClient`.
 
-- **PostgreSQL (active)** — `prisma/postgresql/schema.prisma` → generated to `src/generated/prisma/pg/`, exported as `pgClient` from `src/prisma.js`. The authoritative domain model (~30 models, ~55 enums: users, venues, grounds, bookings, slots, payments, promotions, reviews, events, connections, wallets, …).
+- **PostgreSQL (active)** — `prisma/postgresql/schema.prisma` → generated to `src/generated/prisma/pg/`, exported as `pgClient` from `src/prisma.js`. The authoritative domain model (~27 models, ~35 enums: users, venues, grounds, bookings, slots, payments, promotions, reviews, events, connections, wallets, …).
 - **MongoDB (deprecated)** — `prisma/mongodb/schema.prisma` → `src/generated/prisma/mongo/`, exported as `mongoClient`. Still referenced by `user.controller.js` and `turfmate.controller.js`; treat as legacy.
 
-Clients are singletons in `src/prisma.js`. `src/generated/` is committed and contains Windows query engine binaries; regenerate with the prisma scripts rather than hand-editing.
+Clients are singletons in `src/prisma.js`. `src/generated/` is **not** committed — it's absent on a fresh clone, so run `npm run prisma:generate` before `npm run dev` or the `prisma.js` client imports crash. Never hand-edit the generated output; regenerate with the prisma scripts.
 
 ### Request flow
 
@@ -63,6 +58,8 @@ Route mounts (`app.js`): `/api/v1/{users, turfmates, events, venues, bookings}`.
 - **DTO shaping**: `utils/dataSerializer.js` (e.g. `VenueSerializer`) converts Prisma rows to API DTOs before responding.
 - **File uploads**: `multer` middleware (`middlewares/file-upload/`) + Cloudinary (`utils/mediaUpload.js`).
 - **Time/slots**: `utils/timeAndDateFormatting.js` and `middlewares/venue/booking.middleware.js` back slot-availability/pricing logic.
+- 
+
 
 ### Layout
 
@@ -74,6 +71,15 @@ Routes, controllers, and middlewares are grouped by domain folder (`auth/`, `eve
 
 ## Notes & data model reference
 
-- `funturf-schema.md`, `postgresql-turf-schema.sql`, and `request-handling.md` (repo root) document the intended data model and request handling in depth — consult them before large schema or flow changes.
+- The authoritative data model lives in `backend/prisma/postgresql/schema.prisma` — consult it before large schema or flow changes.
 - CORS is currently wide open (`origin: '*'`) in `app.js`; the intended whitelist (localhost + Vercel frontend) is commented out.
 - Work lands on `main` via PRs (typically from `test-api`/feature branches); active dev branch is `dev`.
+
+
+# Additional Instructions
+
+- Always use best practices convention
+- Write comments
+- Each change should reflect on the website (Real-Time)
+- keep an api documentation in the repo-root `docs/api-guideline.md` file (umbrella root, one level above `backend-engine/`)
+- Use centralized error codes

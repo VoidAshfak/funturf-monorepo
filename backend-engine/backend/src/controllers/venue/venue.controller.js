@@ -2,6 +2,7 @@ import { pgClient } from '../../prisma.js';
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
+import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { VenueSerializer } from "../../utils/dataSerializer.js"
 
 
@@ -254,7 +255,9 @@ const createVenue = asyncHandler(async (req, res) => {
         || !images
         || !grounds
     ) {
-        throw new ApiError(400, "A required field is missing");
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "A required venue field is missing",
+        });
     }
 
     const isArray = Array.isArray(grounds);
@@ -280,7 +283,9 @@ const createVenue = asyncHandler(async (req, res) => {
     ));
 
     if (!isArray || !isGroundsValid) {
-        throw new ApiError(400, "Invalid ground data");
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "Invalid ground data",
+        });
     }
 
     const numericFields = [
@@ -313,7 +318,9 @@ const createVenue = asyncHandler(async (req, res) => {
     // ------------- TRANSACTION STARTS HERE -------------
     const venueCreated = await pgClient.$transaction(async (tx) => {
         const venueData = {
-            admin_user_id: req.user?.id || "8806583a-1630-4ab3-a93b-94f5f432cc14",
+            // Owner is the authenticated admin — guaranteed by verifyJWT +
+            // authorizeRoles on the route (no anonymous/hardcoded fallback).
+            admin_user_id: req.user.id,
             name,
             slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
             description,
@@ -323,8 +330,10 @@ const createVenue = asyncHandler(async (req, res) => {
             state: address_line_1.state,
             country: address_line_1.country,
             postal_code: address_line_1.postal_code,
-            latitude: Number(address_line_1.latitude) ?? null,
-            longitude: Number(address_line_1.longitude) ?? null,
+            // Number("") is 0 and Number(undefined) is NaN, so `?? null` wouldn't
+            // catch a bad value — guard explicitly with isFinite.
+            latitude: Number.isFinite(Number(address_line_1.latitude)) ? Number(address_line_1.latitude) : null,
+            longitude: Number.isFinite(Number(address_line_1.longitude)) ? Number(address_line_1.longitude) : null,
             phone,
             email,
             website_url,
@@ -461,7 +470,9 @@ const createGround = asyncHandler(async (req, res) => {
         || !images
         || !notes
     ) {
-        throw new ApiError(400, "A required field for ground is missing.");
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "A required ground field is missing",
+        });
     }
 
     const groundCreated = await pgClient.grounds.create({

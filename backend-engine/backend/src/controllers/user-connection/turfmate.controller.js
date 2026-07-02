@@ -1,294 +1,180 @@
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
-import {mongoClient} from "../../prisma.js"
+import { ERROR_CODES } from "../../utils/errorCodes.js";
+import { pgClient } from "../../prisma.js";
+
+/**
+ * "Turfmates" = accepted user-to-user connections. Backed by the PostgreSQL
+ * `connections` model (migrated off the deprecated mongoClient):
+ *   requester_id -> recipient_id, status: pending | accepted | rejected | blocked.
+ *
+ * All routes here are mounted behind verifyJWT, so `req.user.id` is always set.
+ */
+
+/** Given a connection row and the current user, return the OTHER party's id. */
+const otherPartyId = (connection, myId) =>
+    connection.requester_id === myId ? connection.recipient_id : connection.requester_id;
 
 const sendTurfmateRequest = asyncHandler(async (req, res) => {
-    const { receiverId } = req.body
+    const requesterId = req.user.id;
+    const { receiverId } = req.body;
 
-    // Check if sender and receiver are the same
-    if (req.user.id === receiverId) {
-        throw new ApiError(400, "You cannot send a friend request to yourself")
+    if (!receiverId) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, { message: "receiverId is required" });
+    }
+    if (requesterId === receiverId) {
+        throw ApiError.fromCode(ERROR_CODES.CANNOT_CONNECT_SELF);
     }
 
-    try {
-        // Already checked sender exists through auth middleware
-        // Check if receiver exists. If not, then the receiver might have been deleted.
-        const receiverExists = await mongoClient.user.findUnique({
-            where: {
-                id: receiverId
-            }
-        })
-
-        if (!receiverExists) {
-            throw new ApiError(400, "Receiver does not exist")
-        }
-
-        // Check if turfmate request already exists
-        const turfmateRequest = await mongoClient.turfmateRequests.findFirst({
-            where: {
-                sender: req.user.id,
-                receiver: receiverId
-            }
-        })
-        if (turfmateRequest) {
-            switch (turfmateRequest.status) {
-                case "PENDING":
-                    return res.status(204).json(new ApiResponse(401, "Request has already been sent and is in pending state.", turfmateRequest));
-
-                case "ACCEPTED":
-                    return res.status(200).json(new ApiResponse(401, "Already a turfmate.", turfmateRequest));
-
-                case "REJECTED":
-                    return res.status(200).json(new ApiResponse(401, "Receiver already rejected", turfmateRequest));
-
-                default:
-                    throw new ApiError(400, "Bad state")
-            }
-        }
-
-        // Check if the receiver has already sent a turfmate request
-        const turfmateReverseRequest = await mongoClient.turfmateRequests.findFirst({
-            where: {
-                sender: receiverId,
-                receiver: req.user.id
-            }
-        })
-
-        if (turfmateReverseRequest) {
-            switch (turfmateReverseRequest.status) {
-                case "PENDING":
-                    return res.status(200).json(new ApiResponse(400, "There is already a pending request from the receiver."));
-
-                case "ACCEPTED":
-                    return res.status(200).json(new ApiResponse(401, "Already a turfmate.", turfmateReverseRequest));
-
-                case "REJECTED":
-                    return res.status(200).json(new ApiResponse(401, "You already rejected", turfmateReverseRequest));
-
-                default:
-                    throw new ApiError(400, "Bad state")
-            }
-        }
-
-
-        const createdTurfmateRequest = await mongoClient.turfmateRequests.create({
-            data: {
-                sender: req.user.id,
-                receiver: receiverId,
-                status: "PENDING"
-            }
-        })
-        return res.status(200).json(new ApiResponse(200, "Friend request sent", createdTurfmateRequest))
-    } catch (error) {
-        console.log("Something went wrong while sending turfmate request", error);
+    // Receiver must exist (sender is guaranteed by the auth middleware).
+    const receiver = await pgClient.users.findUnique({
+        where: { id: receiverId },
+        select: { id: true },
+    });
+    if (!receiver) {
+        throw ApiError.fromCode(ERROR_CODES.USER_NOT_FOUND, { message: "Receiver does not exist" });
     }
 
+    // A connection may already exist in EITHER direction.
+    const existing = await pgClient.connections.findFirst({
+        where: {
+            OR: [
+                { requester_id: requesterId, recipient_id: receiverId },
+                { requester_id: receiverId, recipient_id: requesterId },
+            ],
+        },
+    });
+
+    if (existing) {
+        const messageByStatus = {
+            accepted: "You are already turfmates",
+            pending: "A turfmate request is already pending between you two",
+            rejected: "A previous turfmate request between you two was rejected",
+            blocked: "This connection is blocked",
+        };
+        throw ApiError.fromCode(ERROR_CODES.CONNECTION_ALREADY_EXISTS, {
+            message: messageByStatus[existing.status] ?? undefined,
+        });
+    }
+
+    const created = await pgClient.connections.create({
+        data: {
+            requester_id: requesterId,
+            recipient_id: receiverId,
+            status: "pending",
+            connection_type: "friend",
+        },
+    });
+
+    return res
+        .status(201)
+        .json(new ApiResponse(201, "Turfmate request sent", created));
 });
 
-
-// const sendTurfmateRequest = asyncHandler( async (req, res) => {
-//   const senderId   = req.user.id;
-//   const { receiverId } = req.body;
-
-//   if (!receiverId) throw new ApiError(400, "receiverId is required");
-//   if (senderId === receiverId) throw new ApiError(400, "Cannot send request to yourself");
-
-//   // Verify receiver exists
-//   const receiver = await mongoClient.user.findUnique({ where: { id: receiverId }, select: { id: true }});
-//   if (!receiver) throw new ApiError(404, "Receiver not found");
-
-//   // Atomic block: handle duplicates & create request
-//   try {
-//     const result = await mongoClient.$transaction(async (tx) => {
-
-//       // Check reverse-pending
-//       const reverse = await tx.turfmateRequest.findFirst({
-//         where: {
-//           senderId: receiverId,
-//           receiverId: senderId,
-//           status: 'PENDING'
-//         }
-//       });
-//       if (reverse) {
-//         // Accept it atomically
-//         await tx.turfmateRequest.update({
-//           where: { id: reverse.id },
-//           data: { status: 'ACCEPTED' }
-//         });
-//         await tx.turfmate.createMany({
-//           data: [
-//             { userId: senderId,   turfmateId: receiverId },
-//             { userId: receiverId, turfmateId: senderId }
-//           ],
-//           skipDuplicates: true
-//         });
-//         return { accepted: true };
-//       }
-
-//       // Otherwise insert new request; unique constraint will raise error if duplicate
-//       await tx.turfmateRequest.create({
-//         data: {
-//           senderId,
-//           receiverId,
-//           status: 'PENDING'
-//         }
-//       });
-//       return { accepted: false };
-//     });
-
-//     if (result.accepted) {
-//       return res.status(200).json({ message: "Request mutually accepted" });
-//     }
-//     return res.status(201).json({ message: "Request sent" });  // 201 Created
-
-//   } catch (err) {
-//     if (err instanceof mongoClient.mongoClientClientKnownRequestError && err.code === "P2002") {
-//       // unique(senderId,receiverId) violated
-//       throw new ApiError(409, "Request already exists");
-//     }
-//     throw err; // bubble up to global error handler
-//   }
-// });
-
-
 const getPendingRequests = asyncHandler(async (req, res) => {
+    // Incoming requests awaiting THIS user's response.
+    const pendingRequests = await pgClient.connections.findMany({
+        where: {
+            recipient_id: req.user.id,
+            status: "pending",
+        },
+        include: {
+            users_connections_requester_idTousers: {
+                select: { id: true, first_name: true, last_name: true, profile_picture_url: true },
+            },
+        },
+        orderBy: { created_at: "desc" },
+    });
 
-    try {
-        const pendingRequests = await mongoClient.turfmateRequests.findMany({
-            where: {
-                receiver: req.user.id,
-                status: "PENDING"
-            }
-        })
-
-        return res.status(200).json(new ApiResponse(200, "Pending turfmate requests", pendingRequests))
-    } catch (error) {
-        throw new ApiError(400, 'Something went wrong while getting pending turfmate requests', error);
-    }
-})
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Pending turfmate requests", pendingRequests));
+});
 
 const acceptTurfmateRequest = asyncHandler(async (req, res) => {
     const { requestId } = req.body;
-    const receiver = req.user.id;
-    try {
-        const state = await mongoClient.turfmateRequests.findFirst({
-            where: {
-                id: requestId,
-                receiver: receiver
-            }
-        })
-        
-        if (state && state.status === 'PENDING') {
-            const acceptRequest = await mongoClient.turfmateRequests.update({
-                where: {
-                    id: requestId,
-                    receiver: receiver
-                },
-                data: {
-                    status: 'ACCEPTED'
-                }
-            })
-            if (acceptRequest) {
-                await mongoClient.turfmates.create({
-                    data: {
-                        userId: receiver,
-                        turfmateId: acceptRequest.sender
-                    }
-                })
 
-                return res.status(200).json({
-                    success: true,
-                    message: "Friend request accepted",
-                    data: acceptRequest
-                })
-            }
-        } else {
-            return res.status(400).json({
-                success: false,
-                message: "Bad state"
-            })
-        }
-    } catch (error) {
-        throw new ApiError(400, 'Something went wrong while accepting turfmate request', error);
+    if (!requestId) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, { message: "requestId is required" });
     }
-})
+
+    // Only the recipient of a still-pending request may accept it.
+    const connection = await pgClient.connections.findFirst({
+        where: {
+            id: requestId,
+            recipient_id: req.user.id,
+            status: "pending",
+        },
+    });
+
+    if (!connection) {
+        throw ApiError.fromCode(ERROR_CODES.CONNECTION_NOT_FOUND);
+    }
+
+    const accepted = await pgClient.connections.update({
+        where: { id: connection.id },
+        data: { status: "accepted", responded_at: new Date() },
+    });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Turfmate request accepted", accepted));
+});
 
 const getTurfmates = asyncHandler(async (req, res) => {
-    try {
-        const turfmates = await mongoClient.turfmates.findMany({
-            where: {
-                OR: [
-                    { userId: req.user.id },
-                    { turfmateId: req.user.id }
-                ]
-            }
-        })
-        return res.status(200).json(new ApiResponse(200, "Turfmates", turfmates))
-    } catch (error) {
-        throw new ApiError(400, 'Something went wrong while getting turfmates', error);
-    }
-})
+    const myId = req.user.id;
+
+    // Accepted connections in either direction.
+    const connections = await pgClient.connections.findMany({
+        where: {
+            status: "accepted",
+            OR: [{ requester_id: myId }, { recipient_id: myId }],
+        },
+    });
+
+    const turfmateIds = connections.map((c) => otherPartyId(c, myId));
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Turfmates", turfmateIds));
+});
 
 const getMutualTurfmates = asyncHandler(async (req, res) => {
+    const myId = req.user.id;
+    // This is a GET route, so read the other user's id from the query string
+    // (a GET request carries no body).
+    const { userTwo } = req.query;
 
-    const { userTwo } = req.body
-    try {
-        const userOneFriend = await mongoClient.turfmate.findMany({
-            where: {
-                status: "FRIEND",
-                OR: [
-                    {
-                        sender: req.user.id
-                    },
-                    {
-                        receiver: req.user.id
-                    }
-                ]
-            }
-        })
-
-        const userTwoFriend = await mongoClient.turfmate.findMany({
-            where: {
-                status: "FRIEND",
-                OR: [
-                    {
-                        sender: userTwo
-                    },
-                    {
-                        receiver: userTwo
-                    }
-                ]
-            }
-        })
-
-        const turfmatesOfUserOne = userOneFriend.map((friend) => (
-            friend.sender === req.user.id ? friend.receiver : friend.sender
-        ))
-
-        const turfmatesOfUserTwo = userTwoFriend.map((friend) => (
-            friend.sender === userTwo ? friend.receiver : friend.sender
-        ))
-
-        const mutualFriendIds = turfmatesOfUserOne.filter(id =>
-            turfmatesOfUserTwo.includes(id)
-        );
-
-        return res.status(200).json(new ApiResponse(200, "Mutual turfmates", mutualFriendIds))
-    } catch (error) {
-        throw new ApiError(400, 'Something went wrong while getting mutual turfmates', error);
+    if (!userTwo) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, { message: "userTwo query parameter is required" });
     }
 
-})
+    // Fetch accepted connections for both users, reduce to the "other party"
+    // id sets, then intersect.
+    const [myConnections, theirConnections] = await Promise.all([
+        pgClient.connections.findMany({
+            where: { status: "accepted", OR: [{ requester_id: myId }, { recipient_id: myId }] },
+        }),
+        pgClient.connections.findMany({
+            where: { status: "accepted", OR: [{ requester_id: userTwo }, { recipient_id: userTwo }] },
+        }),
+    ]);
 
-// const rejectTurfmateRequest = asyncHandler((req, res) => { })
-// const ditachWithTurfmate = asyncHandler((req, res) => { })
+    const myTurfmates = new Set(myConnections.map((c) => otherPartyId(c, myId)));
+    const theirTurfmates = theirConnections.map((c) => otherPartyId(c, userTwo));
 
+    const mutual = theirTurfmates.filter((id) => myTurfmates.has(id) && id !== myId && id !== userTwo);
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Mutual turfmates", mutual));
+});
 
 export {
     sendTurfmateRequest,
     getPendingRequests,
     acceptTurfmateRequest,
     getTurfmates,
-    getMutualTurfmates
-}
+    getMutualTurfmates,
+};

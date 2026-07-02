@@ -1,5 +1,7 @@
 import users from '@/../public/data/users.json';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 export async function getAllUser() {
     // const userResponse = await fetch(`/data/users.json`);
     // return userResponse.json();
@@ -7,7 +9,7 @@ export async function getAllUser() {
 };
 
 export async function getUserByUserId(userId) {
-    const res = await fetch(`https://app4-osju.onrender.com/api/v1/users/${userId}`);
+    const res = await fetch(`${API_BASE_URL}/users/${userId}`);
 
     if (!res.ok) {
         return {
@@ -27,7 +29,7 @@ export async function getUserByUserId(userId) {
 
 export async function getAllVenues() {
     try {
-        const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues`);
+        const res = await fetch(`${API_BASE_URL}/venues`);
         return res.json();
     } catch (error) {
         return { data: [] }
@@ -36,7 +38,7 @@ export async function getAllVenues() {
 
 export async function getAllVenuesByAdminId(adminId) {
     try {
-        const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues/get-venues-by-admin/${adminId}`);
+        const res = await fetch(`${API_BASE_URL}/venues/get-venues-by-admin/${adminId}`);
         return res.json();
     } catch (error) {
         return { data: [] }
@@ -45,7 +47,7 @@ export async function getAllVenuesByAdminId(adminId) {
 
 export async function getIndividualVenueByVenueId(venueId) {
     try {
-        const res = await fetch(`https://app4-osju.onrender.com/api/v1/venues/${venueId}`);
+        const res = await fetch(`${API_BASE_URL}/venues/${venueId}`);
         return res.json();
     } catch (error) {
         return { data: {} }
@@ -54,7 +56,7 @@ export async function getIndividualVenueByVenueId(venueId) {
 
 export async function getAllEvents() {
     try {
-        const res = await fetch(`https://app4-osju.onrender.com/api/v1/events`);
+        const res = await fetch(`${API_BASE_URL}/events`);
         return res.json();
     } catch (error) {
         return { data: [] }
@@ -63,7 +65,7 @@ export async function getAllEvents() {
 
 export async function getIndividualEventByEventId(eventId) {
     try {
-        const res = await fetch(`https://app4-osju.onrender.com/api/v1/events/${eventId}`);
+        const res = await fetch(`${API_BASE_URL}/events/${eventId}`);
         return res.json();
     } catch (error) {
         return { data: {} }
