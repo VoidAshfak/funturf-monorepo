@@ -1,5 +1,6 @@
 "use client";
 
+import { notifyError } from "@/lib/notify";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -17,6 +18,7 @@ import {
     BookingStatusBadge,
     PaymentStatusBadge,
     EventTrustPanel,
+    HoldExpiryBadge,
 } from "@/components/BookingStatus";
 import EmptyState from "@/components/EmptyState";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -43,7 +45,7 @@ export default function MyBookingsPage() {
         try {
             await fn(arg).unwrap();
         } catch (err) {
-            alert(getApiErrorMessage(err, "Something went wrong."));
+            notifyError(getApiErrorMessage(err, "Something went wrong."));
         }
     };
 
@@ -131,6 +133,8 @@ export default function MyBookingsPage() {
                                     <div className="flex flex-col items-end gap-1.5">
                                         <BookingStatusBadge status={b.booking_status} />
                                         <PaymentStatusBadge status={b.payment_status} />
+                                        {/* Unpaid holds die after 2h — show the clock. */}
+                                        <HoldExpiryBadge expiresAt={b.hold_expires_at} />
                                     </div>
                                 </div>
 

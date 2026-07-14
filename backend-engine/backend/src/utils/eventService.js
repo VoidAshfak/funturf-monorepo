@@ -45,6 +45,29 @@ export async function isEventAdmin(eventId, userId) {
 }
 
 /**
+ * May `userId` post in this event's discussion?
+ *
+ * The squad's discussion is for the squad: only people who are actually IN the
+ * match may write. That means the organizer, a co_organizer, or a participant
+ * whose join request was APPROVED. A `requested` (pending) or `rejected` user
+ * can read the thread but not post — reading is public, writing is earned.
+ *
+ * @returns {Promise<boolean>}
+ */
+export async function canCommentOnEvent(eventId, userId) {
+    if (!userId) return false;
+
+    // Organizer and co_organizers are admins — always allowed.
+    if (await isEventAdmin(eventId, userId)) return true;
+
+    const participant = await pgClient.event_participants.findFirst({
+        where: { event_id: eventId, user_id: userId, status: "approved" },
+        select: { id: true },
+    });
+    return Boolean(participant);
+}
+
+/**
  * Fan a notification out to every admin of an event, minus any excluded ids
  * (typically the actor themselves, so they don't get notified of their own
  * action). Best-effort per recipient — createNotification never throws.

@@ -1,5 +1,6 @@
 "use client";
 
+import { notifyError } from "@/lib/notify";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
@@ -66,7 +67,7 @@ export default function DashboardBookingsPage() {
         try {
             await fn(arg).unwrap();
         } catch (err) {
-            alert(getApiErrorMessage(err, "Something went wrong."));
+            notifyError(getApiErrorMessage(err, "Something went wrong."));
         }
     };
 

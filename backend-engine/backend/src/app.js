@@ -23,6 +23,13 @@ const corsOptions = {
     origin: '*'
 }
 
+// We run behind nginx (see ../nginx/nginx.conf and render.yaml), so without this
+// every request looks like it came from the proxy — rate limiters keyed on
+// `req.ip` would put the whole internet in one bucket. `1` = trust exactly one
+// hop (our nginx); do NOT set `true`, which would let a client spoof
+// X-Forwarded-For and dodge the limiter entirely.
+app.set("trust proxy", 1);
+
 app.use(cors(corsOptions));
 
 

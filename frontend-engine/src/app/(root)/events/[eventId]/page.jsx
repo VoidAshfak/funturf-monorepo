@@ -200,7 +200,9 @@ export default async function EventDetails({ params }) {
                     </div>
 
                     <div className="glass-card rounded-3xl p-5 md:p-7">
-                        <RulesAndComments rules={rules} />
+                        {/* Comments read publicly; posting is gated server-side to
+                            approved players (the API returns `can_comment`). */}
+                        <RulesAndComments rules={rules} eventId={event.id} />
                     </div>
                 </div>
 

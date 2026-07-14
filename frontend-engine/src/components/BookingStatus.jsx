@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users } from "lucide-react";
+import { Hourglass, ShieldCheck, Users } from "lucide-react";
 
 // Booking status -> chip colour. Uses design tokens (green = good, destructive = bad).
 const BOOKING_STYLES = {
@@ -46,6 +46,42 @@ export function PaymentStatusBadge({ status }) {
             )}
         >
             {PAYMENT_LABEL[status] ?? status}
+        </span>
+    );
+}
+
+/**
+ * Countdown on an unpaid hold.
+ *
+ * An unpaid booking is only a 2-hour soft hold: it never locks the slot, anyone
+ * can take it by paying, and it self-cancels when the timer runs out. Showing
+ * the deadline is the difference between "my booking vanished" and "I knew I had
+ * to pay". `expiresAt` comes from the API as `hold_expires_at`.
+ */
+export function HoldExpiryBadge({ expiresAt }) {
+    if (!expiresAt) return null;
+
+    const msLeft = new Date(expiresAt).getTime() - Date.now();
+    if (msLeft <= 0) return null;
+
+    const minutes = Math.round(msLeft / 60000);
+    const label =
+        minutes >= 60
+            ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+            : `${minutes}m`;
+
+    // Under 30 minutes left is worth alarming about.
+    const urgent = minutes < 30;
+
+    return (
+        <span
+            className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold",
+                urgent ? "bg-destructive/15 text-destructive" : "bg-amber-500/15 text-amber-500"
+            )}
+        >
+            <Hourglass className="h-3 w-3" />
+            Hold expires in {label}
         </span>
     );
 }

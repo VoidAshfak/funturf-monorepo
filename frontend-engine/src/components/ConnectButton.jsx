@@ -1,5 +1,6 @@
 "use client";
 
+import { notifyError } from "@/lib/notify";
 import { useSession } from "next-auth/react";
 import { Check, Clock, Loader2, UserCheck, UserPlus, X } from "lucide-react";
 import { Button } from "./ui/button";
@@ -45,7 +46,7 @@ export default function ConnectButton({ userId }) {
         try {
             await fn(arg).unwrap();
         } catch (err) {
-            alert(getApiErrorMessage(err, "Something went wrong."));
+            notifyError(getApiErrorMessage(err, "Something went wrong."));
         }
     };
 

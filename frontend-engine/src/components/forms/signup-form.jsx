@@ -1,5 +1,6 @@
 "use client"
 
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
@@ -85,13 +86,13 @@ export function SignupForm({
                 user_type: "player",
             }).unwrap();
 
-            alert("Account created successfully! Please log in.");
+            notifySuccess("Account created", "You can log in now.");
             router.push("/login");
         } catch (error) {
             console.error("Error submitting:", error);
             // Surface the backend's real reason (e.g. "A user with this email or
             // phone already exists") instead of a generic message.
-            alert(getApiErrorMessage(error, "Something went wrong."));
+            notifyError(getApiErrorMessage(error, "Something went wrong."));
         }
     };
 

@@ -126,6 +126,10 @@ model bookings {
   @@index([ground_id], map: "idx_bookings_ground_id")
   @@index([booking_status], map: "idx_bookings_status")
   @@index([user_id], map: "idx_bookings_user_id")
+  // Every slot-availability check filters on (ground, date) together — the two
+  // single-column indexes above force a scan/merge. This is the hot path of the
+  // whole booking flow, so index the pair.
+  @@index([ground_id, booking_date], map: "idx_bookings_ground_date")
 }
 
 model comment_likes {

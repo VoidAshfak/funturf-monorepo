@@ -6,9 +6,9 @@ import {
     NavigationMenuItem,
     NavigationMenuList
 } from "@/components/ui/navigation-menu"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Ticket, Users } from "lucide-react"
+import { LandPlot, Ticket, Users } from "lucide-react"
+import SoccerBall from "@/components/icons/SoccerBall"
 
 export default function NavLink() {
 
@@ -21,15 +21,9 @@ export default function NavLink() {
                 <NavigationMenuItem>
                     <Link
                         href="/events"
-                        className={`flex p-2 rounded-2xl gap-1 ${pathname.startsWith("/events") ? "backdrop-blur-sm bg-green-700/10" : ""}`}
+                        className={`flex items-center p-2 rounded-2xl gap-1 ${pathname.startsWith("/events") ? "backdrop-blur-sm bg-green-700/10" : ""}`}
                     >
-                        <Image
-                            src="/assets/icons/play.png"
-                            alt="play"
-                            width={25}
-                            height={25}
-                            className="transition-[filter] duration-300 dark:invert"
-                        />
+                        <SoccerBall className="h-6 w-6 text-foreground" />
                         <span className="text-xl"> Play </span>
                     </Link>
                 </NavigationMenuItem>
@@ -37,15 +31,10 @@ export default function NavLink() {
                 <NavigationMenuItem>
                     <Link
                         href="/venues"
-                        className={`flex p-2 rounded-2xl gap-1 ${pathname.startsWith("/venues") ? "backdrop-blur-sm bg-green-700/10" : ""}`}
+                        className={`flex items-center p-2 rounded-2xl gap-1 ${pathname.startsWith("/venues") ? "backdrop-blur-sm bg-green-700/10" : ""}`}
                     >
-                        <Image
-                            src="/assets/icons/book.png"
-                            alt="book"
-                            width={25}
-                            height={20}
-                            className="transition-[filter] duration-300 dark:invert"
-                        /><span className="text-xl"> Book </span>
+                        <LandPlot className="h-6 w-6 text-foreground" />
+                        <span className="text-xl"> Book </span>
                     </Link>
                 </NavigationMenuItem>
 

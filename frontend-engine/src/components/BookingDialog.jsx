@@ -1,5 +1,6 @@
 "use client";
 
+import { notifyError } from "@/lib/notify";
 import { useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
@@ -11,6 +12,7 @@ import {
     CreditCard,
     Loader2,
     LogIn,
+    ShieldAlert,
     Upload,
 } from "lucide-react";
 import Link from "next/link";
@@ -48,9 +50,19 @@ import {
 // Booking flow for a venue. Booking is per-GROUND; the user picks ground → date →
 // 90-min slot, sees a live price, then either places an unpaid soft hold or a
 // paid claim (transaction id and/or proof) that locks the slot for admin review.
+//
+// Two hard gates mirror the backend (`TURF_NOT_VERIFIED` / `GROUND_NOT_AVAILABLE`)
+// so an un-bookable turf never gets as far as the form:
+//   1. the turf must be verified,
+//   2. only grounds with status "available" can be picked.
+// The backend stays the source of truth — this just fails fast in the UI.
 export default function BookingDialog({ venue }) {
     const { data: session } = useSession();
-    const grounds = venue?.grounds ?? [];
+    const isVerified = Boolean(venue?.verified);
+    const grounds = useMemo(
+        () => (venue?.grounds ?? []).filter((g) => g.status === "available"),
+        [venue?.grounds]
+    );
 
     const [open, setOpen] = useState(false);
     const [groundId, setGroundId] = useState(grounds[0]?.id ?? "");
@@ -84,13 +96,34 @@ export default function BookingDialog({ venue }) {
         [myEvents, session?.user?.id]
     );
 
+    // Slots currently held by someone's UNPAID booking. They're still bookable —
+    // but only with payment, which supersedes the holder (backend: SLOT_HELD_UNPAID).
+    const heldSlots = slotRow?.held_slots ?? [];
+
+    // The caller's OWN active bookings on this ground/date, keyed by slot code.
+    // Without this a user's own slot is indistinguishable from a stranger's —
+    // their paid booking just looks "booked", their unpaid one just looks "held".
+    const mySlots = useMemo(() => {
+        const map = new Map();
+        for (const b of slotRow?.my_slots ?? []) map.set(b.code, b);
+        return map;
+    }, [slotRow?.my_slots]);
+
+    // A slot you already booked isn't "held by someone else" — don't nag about payment.
+    const slotIsHeld = slot ? heldSlots.includes(slot) && !mySlots.has(slot) : false;
+
+    // A held slot can only be taken by paying, so don't let the user sit on the
+    // "unpaid hold" option and get rejected at submit.
+    const effectivePayMode = slotIsHeld ? "paid" : payMode;
+    const isPaidMode = effectivePayMode === "paid";
+
     const resetSlot = () => setSlot(null);
 
     const onSubmit = async () => {
         if (!slot || !dateStr) return;
-        const paid = payMode === "paid";
+        const paid = isPaidMode;
         if (paid && !transactionId.trim() && !proof) {
-            alert("Add a transaction number or upload a payment proof.");
+            notifyError("Add a transaction number or upload a payment proof.");
             return;
         }
 
@@ -120,7 +153,7 @@ export default function BookingDialog({ venue }) {
             setPromoCode("");
             setPayMode("unpaid");
         } catch (err) {
-            alert(getApiErrorMessage(err, "Booking failed."));
+            notifyError(getApiErrorMessage(err, "Booking failed."));
         } finally {
             setSubmitting(false);
         }
@@ -131,6 +164,20 @@ export default function BookingDialog({ venue }) {
             <CalendarCheck2 className="h-4 w-4" /> Book Now
         </Button>
     );
+
+    // Unverified turf: bookings are rejected by the API, so don't open the flow.
+    if (!isVerified) {
+        return (
+            <div className="space-y-2">
+                <Button className="w-full" disabled>
+                    <ShieldAlert className="h-4 w-4" /> Not open for booking
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                    This turf is awaiting verification. Only verified turfs can take bookings.
+                </p>
+            </div>
+        );
+    }
 
     // Signed-out: send to login rather than opening the flow.
     if (!session) {
@@ -146,7 +193,7 @@ export default function BookingDialog({ venue }) {
     if (grounds.length === 0) {
         return (
             <Button className="w-full" disabled>
-                No grounds to book
+                No grounds available to book
             </Button>
         );
     }
@@ -234,34 +281,98 @@ export default function BookingDialog({ venue }) {
                                     <Loader2 className="h-4 w-4 animate-spin" /> Loading slots…
                                 </p>
                             ) : !slotRow ? (
+                                // Only reachable if the slots request itself failed — the API
+                                // returns an all-open grid when no slot row exists for the date.
                                 <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                                    No slots configured for this date.
+                                    Couldn&apos;t load slots for this date. Try again.
                                 </p>
                             ) : (
                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                                     {SLOT_CODES.map((code) => {
+                                        // Booked/disabled slots have the boolean off. A slot merely
+                                        // HELD by someone's unpaid booking stays `true` — it's still
+                                        // takeable, but only with payment.
                                         const available = Boolean(slotRow[code]);
+                                        const mine = mySlots.get(code);
+                                        const held = !mine && heldSlots.includes(code);
                                         const active = slot === code;
+
+                                        // You can't book the same slot twice (backend: ALREADY_BOOKED_SLOT),
+                                        // so your own slot is a status, not a choice.
+                                        const disabled = !available || Boolean(mine);
+                                        const mineIsPaid =
+                                            mine && ["partial", "completed"].includes(mine.payment_status);
+
                                         return (
                                             <button
                                                 key={code}
                                                 type="button"
-                                                disabled={!available}
+                                                disabled={disabled}
                                                 onClick={() => setSlot(code)}
+                                                title={
+                                                    mine
+                                                        ? mineIsPaid
+                                                            ? "You already booked this slot (paid)"
+                                                            : "You're holding this slot with an unpaid booking"
+                                                        : held
+                                                            ? "Held by an unpaid booking — pay to take it"
+                                                            : undefined
+                                                }
                                                 className={cn(
                                                     "rounded-lg border px-2 py-2 text-xs font-semibold transition-colors",
                                                     active
                                                         ? "border-primary bg-primary text-primary-foreground"
-                                                        : available
-                                                            ? "border-border bg-card text-foreground hover:border-primary/60"
-                                                            : "cursor-not-allowed border-border/50 bg-muted/40 text-muted-foreground/50 line-through"
+                                                        : mine
+                                                            ? "cursor-default border-primary/60 bg-primary/10 text-primary"
+                                                            : !available
+                                                                ? "cursor-not-allowed border-border/50 bg-muted/40 text-muted-foreground/50 line-through"
+                                                                : held
+                                                                    ? "border-amber-500/50 bg-amber-500/10 text-amber-600 hover:border-amber-500 dark:text-amber-400"
+                                                                    : "border-border bg-card text-foreground hover:border-primary/60"
                                                 )}
                                             >
                                                 {slotRangeLabel(code)}
+                                                {mine ? (
+                                                    <span className="mt-0.5 flex items-center justify-center gap-1 text-[10px] font-medium">
+                                                        <Check className="h-3 w-3" />
+                                                        {mineIsPaid ? "your booking" : "your hold"}
+                                                    </span>
+                                                ) : (
+                                                    held &&
+                                                    !active && (
+                                                        <span className="mt-0.5 block text-[10px] font-medium opacity-80">
+                                                            held
+                                                        </span>
+                                                    )
+                                                )}
                                             </button>
                                         );
                                     })}
                                 </div>
+                            )}
+
+                            {/* Your own slots on this date -> point at the bookings page. */}
+                            {mySlots.size > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    You already have {mySlots.size} booking
+                                    {mySlots.size === 1 ? "" : "s"} on this date.{" "}
+                                    <Link
+                                        href="/bookings"
+                                        className="font-semibold text-primary hover:underline"
+                                    >
+                                        Manage bookings
+                                    </Link>
+                                </p>
+                            )}
+
+                            {/* Selecting a held slot forces payment — say so up front rather than
+                                failing on submit with SLOT_HELD_UNPAID. */}
+                            {slotIsHeld && (
+                                <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
+                                    <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    Someone is holding this slot with an unpaid booking. You can still
+                                    take it — but only by paying now. Their hold is then released.
+                                </p>
                             )}
                         </div>
                     )}
@@ -325,10 +436,13 @@ export default function BookingDialog({ venue }) {
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 type="button"
+                                // A held slot is paid-only — the unpaid option would just be rejected.
+                                disabled={slotIsHeld}
                                 onClick={() => setPayMode("unpaid")}
                                 className={cn(
                                     "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors",
-                                    payMode === "unpaid"
+                                    slotIsHeld && "cursor-not-allowed opacity-40",
+                                    !isPaidMode
                                         ? "border-primary bg-primary/10 text-foreground"
                                         : "border-border text-muted-foreground hover:border-primary/50"
                                 )}
@@ -340,7 +454,7 @@ export default function BookingDialog({ venue }) {
                                 onClick={() => setPayMode("paid")}
                                 className={cn(
                                     "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors",
-                                    payMode === "paid"
+                                    isPaidMode
                                         ? "border-primary bg-primary/10 text-foreground"
                                         : "border-border text-muted-foreground hover:border-primary/50"
                                 )}
@@ -349,14 +463,14 @@ export default function BookingDialog({ venue }) {
                             </button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            {payMode === "unpaid"
-                                ? "An unpaid booking doesn't lock the slot — someone can take it with payment."
+                            {!isPaidMode
+                                ? "An unpaid hold doesn't lock the slot — someone can take it with payment, and it expires after 2 hours."
                                 : "A paid booking locks the slot and awaits the turf admin's verification."}
                         </p>
                     </div>
 
                     {/* Paid details */}
-                    {payMode === "paid" && (
+                    {isPaidMode && (
                         <div className="space-y-3 rounded-xl border border-border/60 bg-muted/30 p-4">
                             <div className="space-y-1.5">
                                 <Label>Transaction number</Label>
@@ -398,7 +512,7 @@ export default function BookingDialog({ venue }) {
                         ) : (
                             <Check className="h-4 w-4" />
                         )}
-                        {payMode === "paid" ? "Place paid booking" : "Place unpaid hold"}
+                        {isPaidMode ? "Place paid booking" : "Place unpaid hold"}
                     </Button>
                 </div>
             </DialogContent>

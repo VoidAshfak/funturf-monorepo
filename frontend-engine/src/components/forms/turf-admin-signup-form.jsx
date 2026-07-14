@@ -1,5 +1,6 @@
 "use client"
 
+import { notifySuccess } from "@/lib/notify";
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -41,7 +42,7 @@ export function TurfAdminSignupForm({ className, ...props }) {
                 user_type: "turf_admin",
             }).unwrap();
 
-            alert("Turf owner account created! Please log in to set up your turf.");
+            notifySuccess("Turf owner account created", "Log in to set up your turf.");
             router.push("/login");
         } catch (error) {
             console.error("Error submitting:", error);

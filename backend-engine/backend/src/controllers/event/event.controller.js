@@ -694,22 +694,18 @@ const joinEvent = asyncHandler(async (req, res) => {
     });
     const joinerName = displayName(joiner);
 
-    // Notify every admin there is a request to review, plus the requester.
+    // Notify every admin there is a request to review.
+    //
+    // The REQUESTER gets no notification: sending the request was their own
+    // action, so the client toasts it. Persisting "you did the thing you just
+    // did" to their bell is noise — see the notification policy in
+    // docs/api-guideline.md. They'll get a HIGH-priority one when it's decided.
     await notifyEventAdmins(event_id, {
         type: "event_join_request",
         title: "New join request",
         message: `${joinerName} wants to join "${event.title}"`,
         data: { eventId: event_id, userId },
         priority: "medium",
-        action_url: `/events/${event_id}`,
-    });
-    await createNotification({
-        user_id: userId,
-        type: "event_join_request",
-        title: "Request sent",
-        message: `Your request to join "${event.title}" is awaiting approval`,
-        data: { eventId: event_id },
-        priority: "low",
         action_url: `/events/${event_id}`,
     });
 
@@ -845,13 +841,16 @@ const rejectJoinRequest = asyncHandler(async (req, res) => {
         data: { status: "rejected" },
     });
 
+    // High, like the approval: this is the decision the requester has been waiting
+    // on, so it earns a toast as well as a bell entry. (Their own "request sent"
+    // action does NOT — the client toasts that locally.)
     await createNotification({
         user_id,
         type: "event_join_request",
         title: "Request declined",
         message: `Your request to join "${event.title}" was declined`,
         data: { eventId: event_id },
-        priority: "low",
+        priority: "high",
         action_url: `/events/${event_id}`,
     });
     await notifyEventAdmins(

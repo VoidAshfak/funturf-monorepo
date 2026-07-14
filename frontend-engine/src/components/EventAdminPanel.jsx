@@ -1,5 +1,6 @@
 "use client";
 
+import { notifyError } from "@/lib/notify";
 import { useSession } from "next-auth/react";
 import {
     Check,
@@ -65,7 +66,7 @@ export default function EventAdminPanel({ event }) {
         try {
             await fn(arg).unwrap();
         } catch (err) {
-            alert(getApiErrorMessage(err, "Something went wrong."));
+            notifyError(getApiErrorMessage(err, "Something went wrong."));
         }
     };
 

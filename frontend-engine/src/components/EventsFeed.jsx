@@ -84,8 +84,8 @@ export default function EventsFeed({ initialStats }) {
         dispatch(resetEventFilters());
     };
 
-    // Shared props for the filter control set (rendered in 3 places: desktop top bar,
-    // desktop floating rail, mobile/tablet drawer).
+    // Shared props for the filter control set (rendered in 2 places: the desktop
+    // left rail and the mobile/tablet drawer).
     const filterProps = {
         searchInput,
         setSearchInput,
@@ -99,21 +99,6 @@ export default function EventsFeed({ initialStats }) {
         hasActiveFilters,
         onClear: clearAll,
     };
-
-    // ---- Desktop: dock filters on top, then float them to a sticky left rail on scroll ----
-    const [floating, setFloating] = useState(false);
-    const floatSentinelRef = useRef(null);
-    useEffect(() => {
-        const node = floatSentinelRef.current;
-        if (!node) return;
-        const io = new IntersectionObserver(
-            ([entry]) => setFloating(!entry.isIntersecting),
-            // fire once the sentinel passes under the sticky navbar (~top-24 = 96px)
-            { rootMargin: "-96px 0px 0px 0px", threshold: 0 }
-        );
-        io.observe(node);
-        return () => io.disconnect();
-    }, []);
 
     // ---- Mobile/tablet drawer ----
     const [sheetOpen, setSheetOpen] = useState(false);
@@ -162,9 +147,6 @@ export default function EventsFeed({ initialStats }) {
 
     return (
         <div ref={scope}>
-            {/* trips the top->left float once it scrolls under the navbar */}
-            <div ref={floatSentinelRef} className="h-px w-full" />
-
             {/* mobile + tablet: filters live behind a button (slide-over drawer).
                 sticky so the button stays reachable the whole way down the feed. */}
             <div className="sticky top-20 z-30 mb-4 lg:hidden">
@@ -188,42 +170,20 @@ export default function EventsFeed({ initialStats }) {
                             </SheetTitle>
                         </SheetHeader>
                         <div className="p-4">
-                            <EventFilters orientation="vertical" {...filterProps} />
+                            <EventFilters {...filterProps} />
                         </div>
                     </SheetContent>
                 </Sheet>
             </div>
 
-            {/* desktop: docked-on-top bar, collapses as it floats left */}
-            <div
-                className={cn(
-                    "hidden overflow-hidden transition-all duration-500 ease-out lg:block",
-                    floating
-                        ? "max-h-0 -translate-y-2 opacity-0"
-                        : "mb-6 max-h-[400px] translate-y-0 opacity-100"
-                )}
-            >
-                <div className="glass-neutral rounded-3xl border border-border p-4 md:p-5">
-                    <EventFilters orientation="horizontal" {...filterProps} />
-                </div>
-            </div>
-
-            {/* row: floating left rail (desktop) + feed */}
-            <div className="lg:flex lg:items-start">
-                {/* left rail — width animates 0 -> 18rem as it floats in; sticky while scrolling */}
-                <aside
-                    className={cn(
-                        "hidden overflow-hidden transition-all duration-500 ease-out lg:sticky lg:top-24 lg:block",
-                        floating
-                            ? "translate-x-0 opacity-100 lg:w-72"
-                            : "pointer-events-none -translate-x-3 opacity-0 lg:w-0"
-                    )}
-                >
-                    {/* fixed inner width so content doesn't squish during the width transition */}
-                    <div className="w-72 pr-6">
-                        <div className="glass-neutral rounded-3xl border border-border p-4 md:p-5">
-                            <EventFilters orientation="vertical" {...filterProps} />
-                        </div>
+            {/* row: permanent left filter rail (desktop) + feed */}
+            <div className="lg:flex lg:items-start lg:gap-6">
+                {/* Left rail. Sticks under the navbar and fills the rest of the viewport,
+                    so the filter menu owns the full column height; if the controls
+                    outgrow the screen the rail scrolls on its own, not the page. */}
+                <aside className="hidden lg:sticky lg:top-24 lg:block lg:w-72 lg:shrink-0">
+                    <div className="glass-neutral flex h-[calc(100vh-8rem)] flex-col overflow-y-auto rounded-3xl border border-border p-4 md:p-5">
+                        <EventFilters {...filterProps} />
                     </div>
                 </aside>
 
@@ -280,11 +240,11 @@ export default function EventsFeed({ initialStats }) {
 }
 
 // ---------------------------------------------------------------------------
-// Filter control set — one component, two layouts. State is fully controlled
-// by the parent so every instance (top bar / floating rail / drawer) stays in sync.
+// Filter control set — a single vertical column, rendered in the desktop left
+// rail and in the mobile drawer. State is fully controlled by the parent so both
+// instances stay in sync.
 // ---------------------------------------------------------------------------
 function EventFilters({
-    orientation = "vertical",
     searchInput,
     setSearchInput,
     sport,
@@ -297,8 +257,6 @@ function EventFilters({
     hasActiveFilters,
     onClear,
 }) {
-    const horizontal = orientation === "horizontal";
-
     const search = (
         <div className="group flex items-center gap-2.5 rounded-full border border-border bg-card/60 px-4 py-2.5 backdrop-blur-md transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(29,185,84,0.12)]">
             <Search className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-focus-within:text-primary" />
@@ -320,24 +278,7 @@ function EventFilters({
         </div>
     );
 
-    const timeframeControl = horizontal ? (
-        <div className="flex items-center gap-1 rounded-full border border-border bg-card/60 p-1 backdrop-blur-md">
-            {TIMEFRAMES.map((t) => (
-                <button
-                    key={t.id}
-                    onClick={() => setTimeframe(t.id)}
-                    className={cn(
-                        "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-300",
-                        timeframe === t.id
-                            ? "bg-primary text-primary-foreground shadow-[0_0_18px_rgba(29,185,84,0.4)]"
-                            : "text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    {t.label}
-                </button>
-            ))}
-        </div>
-    ) : (
+    const timeframeControl = (
         <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 When
@@ -365,38 +306,24 @@ function EventFilters({
         <button
             onClick={toggleOpenOnly}
             className={cn(
-                "inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all duration-300",
-                horizontal ? "shrink-0" : "w-full",
+                "inline-flex w-full items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all duration-300",
                 openOnly
                     ? "border-primary bg-primary text-primary-foreground shadow-[0_0_18px_rgba(29,185,84,0.4)]"
                     : "border-border bg-card/60 text-muted-foreground hover:text-foreground"
             )}
         >
             <Users className="h-4 w-4" />
-            {horizontal ? "Open spots" : "Open spots only"}
+            Open spots only
         </button>
     );
 
     const sports = (
         <div>
-            {!horizontal && (
-                <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    Sport
-                </p>
-            )}
-            <div
-                className={cn(
-                    "flex gap-2",
-                    horizontal ? "scrollbar-hide -mx-1 overflow-x-auto px-1 pb-1" : "flex-wrap"
-                )}
-            >
-                {horizontal && (
-                    <span className="mr-1 hidden shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground sm:inline-flex">
-                        <SlidersHorizontal className="h-3.5 w-3.5" />
-                        Sport
-                    </span>
-                )}
+            <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Sport
+            </p>
+            <div className="flex flex-wrap gap-2">
                 <Chip active={sport === "all"} onClick={() => setSport("all")} label="All" />
                 {sportOptions.map((s) => (
                     <Chip
@@ -422,21 +349,6 @@ function EventFilters({
         </button>
     ) : null;
 
-    if (horizontal) {
-        return (
-            <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex-1">{search}</div>
-                    {timeframeControl}
-                    {openToggle}
-                    {clear}
-                </div>
-                {sports}
-            </div>
-        );
-    }
-
-    // vertical
     return (
         <div className="flex flex-col gap-5">
             {search}

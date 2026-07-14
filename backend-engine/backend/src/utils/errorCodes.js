@@ -45,6 +45,14 @@ export const ERROR_CODES = Object.freeze({
     JOIN_REQUEST_NOT_FOUND:{ code: "JOIN_REQUEST_NOT_FOUND", statusCode: 404, message: "No pending join request found" },
     ALREADY_ADMIN:         { code: "ALREADY_ADMIN",         statusCode: 409, message: "This user is already an event admin" },
 
+    // ---- event comments ----
+    COMMENT_NOT_FOUND:   { code: "COMMENT_NOT_FOUND",   statusCode: 404, message: "Comment not found" },
+    NOT_COMMENT_AUTHOR:  { code: "NOT_COMMENT_AUTHOR",  statusCode: 403, message: "You can only edit your own comment" },
+    CANNOT_COMMENT:      { code: "CANNOT_COMMENT",      statusCode: 403, message: "Only players in this match can post. Join the match to take part in the discussion" },
+    COMMENT_EMPTY:       { code: "COMMENT_EMPTY",       statusCode: 400, message: "A comment cannot be empty" },
+    COMMENT_TOO_LONG:    { code: "COMMENT_TOO_LONG",    statusCode: 400, message: "A comment cannot be longer than 2000 characters" },
+    REPLY_DEPTH_EXCEEDED:{ code: "REPLY_DEPTH_EXCEEDED", statusCode: 400, message: "You can only reply to a top-level comment" },
+
     // ---- bookings / slots ----
     GROUND_NOT_FOUND: { code: "GROUND_NOT_FOUND", statusCode: 404, message: "Ground not found" },
     SLOT_NOT_FOUND:   { code: "SLOT_NOT_FOUND",   statusCode: 404, message: "No slots found for this ground and date" },
@@ -61,6 +69,14 @@ export const ERROR_CODES = Object.freeze({
     BOOKING_ALREADY_CANCELLED: { code: "BOOKING_ALREADY_CANCELLED", statusCode: 409, message: "This booking is already cancelled" },
     CANCELLATION_WINDOW_CLOSED: { code: "CANCELLATION_WINDOW_CLOSED", statusCode: 409, message: "Free cancellation is only allowed until 2 days before the booking" },
     CANCELLATION_NOT_REQUESTED: { code: "CANCELLATION_NOT_REQUESTED", statusCode: 409, message: "No mutual cancellation has been requested for this booking" },
+    // anti-spam / integrity
+    TOO_MANY_UNPAID_HOLDS:  { code: "TOO_MANY_UNPAID_HOLDS",  statusCode: 429, message: "You already hold the maximum number of unpaid bookings. Pay for one or cancel it before holding another slot" },
+    BOOKING_DATE_IN_PAST:   { code: "BOOKING_DATE_IN_PAST",   statusCode: 400, message: "You cannot book a date in the past" },
+    BOOKING_TOO_FAR_AHEAD:  { code: "BOOKING_TOO_FAR_AHEAD",  statusCode: 400, message: "This date is beyond the turf's advance booking window" },
+    DUPLICATE_TRANSACTION:  { code: "DUPLICATE_TRANSACTION",  statusCode: 409, message: "This transaction number is already used by another booking" },
+    INVALID_PAYMENT_PROOF:  { code: "INVALID_PAYMENT_PROOF",  statusCode: 400, message: "The payment proof must be an image uploaded through FunTurf" },
+    ALREADY_BOOKED_SLOT:    { code: "ALREADY_BOOKED_SLOT",    statusCode: 409, message: "You already have a booking on this slot" },
+    RATE_LIMITED:           { code: "RATE_LIMITED",           statusCode: 429, message: "Too many requests — slow down and try again shortly" },
 
     // ---- turfmates / connections ----
     CANNOT_CONNECT_SELF:        { code: "CANNOT_CONNECT_SELF",        statusCode: 400, message: "You cannot send a turfmate request to yourself" },

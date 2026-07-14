@@ -227,6 +227,59 @@ editable. Update/delete enforce organizer ownership.
 > `GET /events/nearby` (geo-search) is implemented in the controller but **not routed** —
 > it needs PostGIS + verified status enums. Do not rely on it yet.
 
+### Event comments (`/events/:event_id/comments`)
+
+| method | path | auth | body | success `data` |
+| --- | --- | --- | --- | --- |
+| GET | `/` | optional | — | `200` — `{ comments:[...], can_comment }` |
+| POST | `/` | **required, approved player** | `{ content, parent_comment_id? }` | `201` — created comment |
+| PATCH | `/:comment_id` | **required, author** | `{ content }` | `200` — updated comment |
+| DELETE | `/:comment_id` | **required, author or event admin** | — | `200` — soft-deleted |
+| POST | `/:comment_id/like` | **required, approved player** | — | `200` — `{ liked, likes_count }` |
+
+**Access model — read public, write earned.** Anyone (incl. signed-out) can read the thread; it's
+social proof that a match is real. Only people actually IN the match may post, reply, or like:
+the organizer, a `co_organizer`, or a participant with `status='approved'` (`canCommentOnEvent` in
+`utils/eventService.js`). A user with a *pending* or *rejected* join request can read but not post.
+`GET` returns **`can_comment`** so the client renders a composer or a "join to comment" prompt
+without re-deriving the rule.
+
+**Threading is one level deep.** Replying to a reply re-parents onto the same root, so a thread can
+never become a staircase. **Deletes are soft** (`is_deleted`): the row survives so its replies keep a
+parent, but `content` and `author` are nulled out of every response — the client renders a tombstone.
+An event admin may delete any comment (moderation); only the author may edit.
+
+Likes live in `comment_likes` (unique per `comment_id + user_id`); the toggle and the `likes_count`
+counter update in one transaction so a double-tap can't drift the count. Writes are rate limited to
+**20/min/user** (`commentWriteLimiter`).
+
+**Errors:** `EVENT_NOT_FOUND`, `COMMENT_NOT_FOUND`, `CANNOT_COMMENT` (403 — not an approved player),
+`NOT_COMMENT_AUTHOR`, `COMMENT_EMPTY`, `COMMENT_TOO_LONG` (2000 chars), `RATE_LIMITED`.
+
+**Notifications:** a reply notifies the parent's author (`comment_reply`, priority `medium`); a new
+top-level comment notifies the organizer (`comment_added`, priority `low`). Neither toasts — see below.
+
+**Frontend hooks:** `useGetCommentsQuery`, `useCreateCommentMutation`, `useUpdateCommentMutation`,
+`useDeleteCommentMutation`, `useToggleCommentLikeMutation` (the like is optimistic and self-reverting).
+
+### Notification policy — bell vs toast
+
+One rule, decided by the `priority` the backend already sets on every notification. The client never
+guesses from the type string.
+
+| surface | what | why |
+| --- | --- | --- |
+| **Bell only** | every persisted notification (`priority: medium`/`low`) — comment replies, event reminders, connection accepted, ratings, announcements | matters, but interrupting is rude |
+| **Bell + toast** | `priority: high` — join request accepted/rejected, payment confirmed/rejected, your unpaid slot got taken, cancellation requested/accepted, a new join request (for admins) | you did not cause it and must act now |
+| **Toast only** (never persisted) | the result of the user's *own* action — "Booking placed", "Comment posted", and all errors | you already have the context; a bell entry would be noise |
+
+Implemented in `frontend-engine/src/lib/notify.js`. Live notifications arrive over the Socket.IO
+`notification:new` stream (`apiSlice` `onCacheEntryAdded`), which adds every one to the bell and calls
+`toastIncomingNotification` — that function is the single place the high-priority filter is applied.
+`notifySuccess` / `notifyError` / `notifyInfo` are the toast-only helpers; they replaced every blocking
+`window.alert()` in the app. Toast surface is `sonner`, mounted once in the root layout
+(`components/Toaster.jsx`, themed off the design tokens).
+
 ### Bookings (`/bookings`)
 
 | method | path | auth | body / query | success `data` |
@@ -245,6 +298,12 @@ editable. Update/delete enforce organizer ownership.
 **Slot model:** 90-minute discrete grid — the 16 boolean columns on `slots` (`t0000`…`t2230`).
 The boolean = **admin master enable + paid-lock**: `false` means admin-disabled OR paid-locked, so
 it's not bookable; `true` means enabled (and possibly held by an *unpaid* booking, see below).
+
+A `slots` row is an **exceptions record, not a precondition**. Every column defaults to `true`, so
+**no row for a (ground, date) = the whole day is open** — a newly created ground is bookable with no
+seeding step. Rows are created lazily, only to *close* a slot (paid-lock). `GET /available-slots`
+returns a virtual all-open grid when no row exists; it never 404s. (`getSlotGrid` / `lockSlot` /
+`unlockSlot` in `utils/bookingService.js` are the only way slot state is read or written.)
 
 **Booking states** (reusing existing enums):
 
@@ -276,15 +335,56 @@ it's not bookable; `true` means enabled (and possibly held by an *unpaid* bookin
   request** (`cancellation_requested_by`); the *other* party must `POST /cancel/respond {accept:true}`
   to finalise (booking → cancelled, `payment_status='refunded'`). `accept:false` clears the request.
 
-**Schema migration required:** adds `bookings.payment_proof_url String?` and
-`bookings.cancellation_requested_by String? @db.Uuid`. Run `npm run prisma:migrate` +
-`npm run prisma:generate` from `backend-engine/backend/`.
+### Spam-proofing & concurrency
 
-**Errors:** `VALIDATION_ERROR`, `INVALID_SLOT_CODE`, `SLOT_NOT_FOUND`, `SLOT_UNAVAILABLE`,
+**`slot_locks` is the concurrency referee.** Every active claim — unpaid hold *and* paid claim —
+owns a `slot_locks` row, whose DB-level `@@unique([ground_id, date, slot_code])` is what makes
+double-booking impossible. `createBooking` does the claim, the supersede-cancel and the booking
+INSERT in **one `$transaction`**: if a concurrent request claims the slot first, our INSERT raises
+P2002, the whole transaction rolls back, and the caller gets `SLOT_UNAVAILABLE`. There is no window
+where a slot is sold twice, and no state where a paid booking exists with an unlocked slot.
+Notifications are sent only *after* the transaction commits.
+
+**Unpaid holds expire.** An unpaid booking costs nothing but blocks every other unpaid user, so:
+
+| lever | value | where |
+| --- | --- | --- |
+| hold TTL | **2 hours** (`slot_locks.locked_until`) | `UNPAID_HOLD_TTL_MS` |
+| max concurrent unpaid holds per user | **3** | `MAX_UNPAID_HOLDS_PER_USER` → `TOO_MANY_UNPAID_HOLDS` (429) |
+| booking writes | **10 / min / user** | `bookingWriteLimiter` → `RATE_LIMITED` (429) |
+| availability + quote reads | **120 / min** | `bookingReadLimiter` |
+
+Expiry is keyed on `locked_until`, **not** `created_at` — so a payment rejected hours later restarts
+a fresh 2h hold instead of dying instantly. Stale holds are reaped lazily on the availability/create/
+`/my` paths *and* by a background sweeper (`jobs/holdSweeper.js`, every 10 min).
+
+**Other gates on `POST /create`:** date must be ≥ today (`BOOKING_DATE_IN_PAST`) and within the
+turf's `advance_booking_days` (`BOOKING_TOO_FAR_AHEAD`); a `transaction_id` may back only one active
+booking (`DUPLICATE_TRANSACTION`); `payment_proof_url` must be an https imgbb URL we hosted
+(`INVALID_PAYMENT_PROOF` — the admin clicks that link, so an arbitrary URL is a phishing vector);
+one booking per user per slot (`ALREADY_BOOKED_SLOT`, makes a double-click safe).
+
+**RBAC:** `authorizeRoles` only gates who may *reach* the admin endpoints. Confirm/reject/cancel and
+`GET /:booking_id` are further scoped to **the admin of that specific turf** (`isBookingAdmin`) —
+previously any `turf_admin` could verify payments and read payment proofs on a competitor's turf.
+`super_admin` stays global.
+
+`GET /available-slots` also returns **`held_slots: string[]`** — slot codes held by an unpaid
+booking. Their grid boolean is still `true` (unpaid doesn't lock), so the client needs this to show
+"held — pay to take it". `GET /my` returns **`hold_expires_at`** on unpaid bookings for the countdown.
+
+**Schema migration required:** adds `bookings.payment_proof_url String?`,
+`bookings.cancellation_requested_by String? @db.Uuid`, and the composite index
+`@@index([ground_id, booking_date])`. All additive. Run `npm run prisma:push:pgsql` +
+`npm run prisma:generate:pg` from `backend-engine/backend/`.
+
+**Errors:** `VALIDATION_ERROR`, `INVALID_SLOT_CODE`, `SLOT_UNAVAILABLE`,
 `SLOT_HELD_UNPAID`, `TURF_NOT_VERIFIED`, `GROUND_NOT_AVAILABLE`, `GROUND_NOT_FOUND`,
 `PAYMENT_PROOF_REQUIRED`, `EVENT_NOT_FOUND`, `BOOKING_NOT_FOUND`, `NOT_BOOKING_OWNER`,
 `NOT_TURF_ADMIN`, `BOOKING_NOT_PAID_CLAIM`, `BOOKING_ALREADY_CANCELLED`,
-`CANCELLATION_WINDOW_CLOSED`, `CANCELLATION_NOT_REQUESTED`.
+`CANCELLATION_WINDOW_CLOSED`, `CANCELLATION_NOT_REQUESTED`, `TOO_MANY_UNPAID_HOLDS`,
+`BOOKING_DATE_IN_PAST`, `BOOKING_TOO_FAR_AHEAD`, `DUPLICATE_TRANSACTION`, `INVALID_PAYMENT_PROOF`,
+`ALREADY_BOOKED_SLOT`, `RATE_LIMITED`.
 
 **Notifications** (reuse `booking_confirmed`/`booking_cancelled`/`payment_received`/`payment_pending`):
 new booking → turf admin; superseded unpaid holder → user; confirm/reject payment → user;

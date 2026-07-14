@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { getSocket } from "@/lib/socket";
+import { toastIncomingNotification } from "@/lib/notify";
 
 // Backend base from env (NEXT_PUBLIC_ so it's exposed client-side); see getData.js / NextAuth route.
 const BASE_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/`;
@@ -15,7 +16,7 @@ export const apiSlice = createApi({
             return headers;
         },
     }),
-    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications"],
+    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications"],
     endpoints: (builder) => ({
         // ---- Venues ----
         getVenues: builder.query({
@@ -143,6 +144,9 @@ export const apiSlice = createApi({
                 params: { ground, date },
             }),
             transformResponse: (res) => res?.data ?? null,
+            // The grid shows the caller's own bookings (`my_slots`) and other
+            // people's unpaid holds, so any booking write makes it stale.
+            providesTags: [{ type: "Bookings", id: "SLOTS" }],
         }),
         // Price quote for a single slot (GET /bookings/quote?ground_id=&slot=&booking_date=&promo_code=).
         getBookingQuote: builder.query({
@@ -174,14 +178,28 @@ export const apiSlice = createApi({
 
                     // Live push: prepend the new notification + bump unread count.
                     const onNew = (notification) => {
+                        let isNew = false;
                         updateCachedData((draft) => {
                             if (draft.notifications.some((n) => n.id === notification.id)) return;
+                            isNew = true;
                             draft.notifications.unshift(notification);
                             draft.unreadCount = (draft.unreadCount || 0) + 1;
                             if (draft.pagination) {
                                 draft.pagination.total = (draft.pagination.total || 0) + 1;
                             }
                         });
+
+                        // Everything lands in the bell (above). Only HIGH-priority
+                        // items also interrupt with a toast — see lib/notify.js for
+                        // the policy. Guarded by `isNew` so a duplicate socket
+                        // delivery can't toast twice.
+                        if (isNew) {
+                            toastIncomingNotification(notification, {
+                                onAction: (url) => {
+                                    if (typeof window !== "undefined") window.location.href = url;
+                                },
+                            });
+                        }
                     };
                     socket.on("notification:new", onNew);
 
@@ -451,6 +469,7 @@ export const apiSlice = createApi({
             invalidatesTags: [
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "SLOTS" }, // the slot grid shows own bookings + holds
             ],
         }),
         // My bookings (GET /bookings/my).
@@ -482,6 +501,7 @@ export const apiSlice = createApi({
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MANAGE" },
                 { type: "Bookings", id: "MINE" },
+                { type: "Bookings", id: "SLOTS" }, // payment state changes the grid too
             ],
         }),
         // Turf admin rejects a paid claim (reverts to unpaid hold).
@@ -495,6 +515,7 @@ export const apiSlice = createApi({
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MANAGE" },
                 { type: "Bookings", id: "MINE" },
+                { type: "Bookings", id: "SLOTS" }, // payment state changes the grid too
             ],
         }),
         // Cancel a booking (owner or admin). May open a mutual-cancel request.
@@ -508,6 +529,7 @@ export const apiSlice = createApi({
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "SLOTS" }, // the slot grid shows own bookings + holds
             ],
         }),
         // Respond to a mutual cancellation request ({ accept: boolean }).
@@ -521,7 +543,63 @@ export const apiSlice = createApi({
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "SLOTS" }, // the slot grid shows own bookings + holds
             ],
+        }),
+
+        // ---- Event comments ----
+        // Reading is public; the payload also carries `can_comment`, the server's
+        // verdict on whether this caller may post (approved player / organizer).
+        getComments: builder.query({
+            query: (eventId) => `events/${eventId}/comments`,
+            transformResponse: (res) => res?.data ?? { comments: [], can_comment: false },
+            providesTags: (r, e, eventId) => [{ type: "Comments", id: eventId }],
+        }),
+        createComment: builder.mutation({
+            query: ({ eventId, content, parent_comment_id }) => ({
+                url: `events/${eventId}/comments`,
+                method: "POST",
+                body: { content, parent_comment_id },
+            }),
+            invalidatesTags: (r, e, { eventId }) => [{ type: "Comments", id: eventId }],
+        }),
+        updateComment: builder.mutation({
+            query: ({ eventId, commentId, content }) => ({
+                url: `events/${eventId}/comments/${commentId}`,
+                method: "PATCH",
+                body: { content },
+            }),
+            invalidatesTags: (r, e, { eventId }) => [{ type: "Comments", id: eventId }],
+        }),
+        deleteComment: builder.mutation({
+            query: ({ eventId, commentId }) => ({
+                url: `events/${eventId}/comments/${commentId}`,
+                method: "DELETE",
+            }),
+            invalidatesTags: (r, e, { eventId }) => [{ type: "Comments", id: eventId }],
+        }),
+        toggleCommentLike: builder.mutation({
+            query: ({ eventId, commentId }) => ({
+                url: `events/${eventId}/comments/${commentId}/like`,
+                method: "POST",
+            }),
+            // Optimistic: a like must feel instant. Patch the cached thread, and
+            // roll back if the server disagrees.
+            async onQueryStarted({ eventId, commentId }, { dispatch, queryFulfilled }) {
+                const patch = dispatch(
+                    apiSlice.util.updateQueryData("getComments", eventId, (draft) => {
+                        const c = draft.comments?.find((x) => x.id === commentId);
+                        if (!c) return;
+                        c.liked_by_me = !c.liked_by_me;
+                        c.likes_count = Math.max((c.likes_count ?? 0) + (c.liked_by_me ? 1 : -1), 0);
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patch.undo();
+                }
+            },
         }),
     }),
 });
@@ -572,4 +650,10 @@ export const {
     useRejectBookingPaymentMutation,
     useCancelBookingMutation,
     useRespondCancellationMutation,
+    // comments
+    useGetCommentsQuery,
+    useCreateCommentMutation,
+    useUpdateCommentMutation,
+    useDeleteCommentMutation,
+    useToggleCommentLikeMutation,
 } = apiSlice;

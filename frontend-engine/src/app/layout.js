@@ -3,6 +3,7 @@ import "./globals.css";
 import NextAuthSessionProvider from "@/providers/NextAuthSessionProvider";
 import ReduxProvider from "@/providers/ReduxProvider";
 import ThemeProvider from "@/components/ThemeProvider";
+import Toaster from "@/components/Toaster";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -28,6 +29,8 @@ export default function RootLayout({ children }) {
           <ReduxProvider>
             <ThemeProvider>
               {children}
+              {/* Toasts: action feedback + high-priority live notifications. */}
+              <Toaster />
             </ThemeProvider>
           </ReduxProvider>
         </body>

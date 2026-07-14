@@ -15,7 +15,15 @@ import {
     grantEventAdmin,
     revokeEventAdmin
 } from '../../controllers/event/event.controller.js'
+import {
+    getComments,
+    createComment,
+    updateComment,
+    deleteComment,
+    toggleCommentLike,
+} from '../../controllers/event/comment.controller.js'
 import { verifyJWT, attachUserIfPresent } from "../../middlewares/auth/auth.middleware.js"
+import { commentWriteLimiter } from "../../middlewares/rateLimit.middleware.js"
 
 const router = Router();
 
@@ -49,6 +57,20 @@ router.route('/:event_id/requests/:user_id/reject').post(verifyJWT, rejectJoinRe
 // Event-admin management — ORGANIZER (creator) only; enforced in the controller.
 router.route('/:event_id/admins').post(verifyJWT, grantEventAdmin)
 router.route('/:event_id/admins/:user_id').delete(verifyJWT, revokeEventAdmin)
+
+// ---- Discussion ----
+// Reading is PUBLIC (optional auth so we can flag the caller's own likes and
+// tell them whether they may post). Writing is limited to approved players —
+// enforced in the controller via canCommentOnEvent.
+router
+    .route('/:event_id/comments')
+    .get(attachUserIfPresent, getComments)
+    .post(verifyJWT, commentWriteLimiter, createComment)
+router
+    .route('/:event_id/comments/:comment_id')
+    .patch(verifyJWT, commentWriteLimiter, updateComment)
+    .delete(verifyJWT, deleteComment)
+router.route('/:event_id/comments/:comment_id/like').post(verifyJWT, commentWriteLimiter, toggleCommentLike)
 
 // Dynamic catch-all read — keep last
 router.route('/:event_id').get(getEventById)

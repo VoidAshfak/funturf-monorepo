@@ -2,6 +2,7 @@ import "dotenv/config"
 import { createServer } from "http";
 import { app } from "./app.js";
 import { initSocket } from "./socket.js";
+import { startHoldSweeper } from "./jobs/holdSweeper.js";
 
 const PORT = process.env.PORT || 8080;
 
@@ -10,6 +11,9 @@ const server = createServer(app);
 
 // Attach the real-time layer (JWT-authed notification sockets).
 initSocket(server);
+
+// Reap expired unpaid booking holds in the background.
+startHoldSweeper();
 
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
