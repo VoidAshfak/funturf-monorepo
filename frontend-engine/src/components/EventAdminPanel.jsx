@@ -20,6 +20,7 @@ import {
     useRejectJoinRequestMutation,
     useGrantEventAdminMutation,
     useRevokeEventAdminMutation,
+    useGetEventByIdQuery,
 } from "@/store/api/apiSlice";
 
 const fullName = (u) =>
@@ -30,10 +31,15 @@ const initials = (u) => fullName(u).slice(0, 2).toUpperCase();
 // (organizer or an approved co_organizer). Lists pending join requests with
 // accept/reject; the ORGANIZER additionally gets make/remove-admin controls over
 // the approved roster.
-export default function EventAdminPanel({ event }) {
+export default function EventAdminPanel({ event: initialEvent }) {
     const { data: session } = useSession();
     const me = session?.user?.id;
-    const eventId = event?.id;
+    const eventId = initialEvent?.id;
+
+    // Live event so the approved roster (admin detection, manage-admins list)
+    // reflects real-time changes. Seeded by the server's initial fetch.
+    const { data } = useGetEventByIdQuery(eventId, { skip: !eventId });
+    const event = data ?? initialEvent;
     const organizerId = event?.organizer?.id;
     const participants = event?.participants || [];
 

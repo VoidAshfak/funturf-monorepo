@@ -10,6 +10,7 @@ import {
     useJoinEventMutation,
     useCancelJoinRequestMutation,
     useLeaveEventMutation,
+    useGetEventByIdQuery,
 } from "@/store/api/apiSlice";
 
 // Stateful join CTA for the event page. Joining is an approval flow, so the
@@ -19,11 +20,22 @@ import {
 //   approved            -> Leave match
 //   requested (pending) -> Requested — tap to cancel
 //   none / rejected     -> Request to Join (disabled when full)
-export default function EventJoinButton({ event, isFull }) {
+export default function EventJoinButton({ event: initialEvent, isFull: initialIsFull }) {
     const { data: session } = useSession();
     const me = session?.user?.id;
-    const eventId = event?.id;
+    const eventId = initialEvent?.id;
+
+    // Read the event LIVE so the button reflects real-time roster changes (my
+    // request accepted elsewhere, the squad filling up) without a refresh. Seeded
+    // by the server's initial fetch passed in as `initialEvent`.
+    const { data } = useGetEventByIdQuery(eventId, { skip: !eventId });
+    const event = data ?? initialEvent;
     const organizerId = event?.organizer?.id;
+
+    // Recompute fullness from live data; fall back to the server's value.
+    const min = event?.min_players ?? 0;
+    const cur = event?.current_players ?? 0;
+    const isFull = min > 0 ? cur >= min : Boolean(initialIsFull);
 
     const [join, joinState] = useJoinEventMutation();
     const [cancel, cancelState] = useCancelJoinRequestMutation();

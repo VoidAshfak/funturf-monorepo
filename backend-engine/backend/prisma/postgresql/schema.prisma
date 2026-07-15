@@ -49,6 +49,7 @@ model users {
   events                                             events[]
   messages_messages_recipient_idTousers              messages[]           @relation("messages_recipient_idTousers")
   messages_messages_sender_idTousers                 messages[]           @relation("messages_sender_idTousers")
+  message_reactions                                  message_reactions[]
   notifications                                      notifications[]
   payments                                           payments[]
   player_profiles                                    player_profiles[]
@@ -337,15 +338,36 @@ model messages {
   edited_at                          DateTime?     @db.Timestamp(6)
   is_deleted                         Boolean?      @default(false)
   deleted_at                         DateTime?     @db.Timestamp(6)
+  // The message this one replies to (self-reference). Null for top-level messages.
+  reply_to_id                        String?       @db.Uuid
   created_at                         DateTime?     @default(now()) @db.Timestamp(6)
   events                             events?       @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   users_messages_recipient_idTousers users?        @relation("messages_recipient_idTousers", fields: [recipient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   users_messages_sender_idTousers    users         @relation("messages_sender_idTousers", fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Self-relation for replies: `reply_to` is the parent, `replies` the children.
+  reply_to                           messages?     @relation("message_replies", fields: [reply_to_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies                            messages[]    @relation("message_replies")
+  message_reactions                  message_reactions[]
 
   @@index([created_at], map: "idx_messages_created_at")
   @@index([event_id], map: "idx_messages_event")
   @@index([recipient_id], map: "idx_messages_recipient")
   @@index([sender_id], map: "idx_messages_sender")
+}
+
+// Emoji reactions on a chat message. One row per (message, user, emoji) — a user
+// may add several different emojis to a message but not the same one twice.
+model message_reactions {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  message_id String    @db.Uuid
+  user_id    String    @db.Uuid
+  emoji      String    @db.VarChar(16)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  messages   messages  @relation(fields: [message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([message_id, user_id, emoji], map: "message_reactions_unique")
+  @@index([message_id], map: "idx_message_reactions_message")
 }
 
 model notification_templates {

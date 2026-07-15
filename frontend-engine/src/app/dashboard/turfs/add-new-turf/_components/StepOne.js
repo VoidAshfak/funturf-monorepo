@@ -1,3 +1,4 @@
+import AiRephraseButton from "@/components/AiRephraseButton";
 import InputField from "@/components/InputField";
 import RequiredSign from "@/components/RequiredSign";
 import { Input } from "@/components/ui/input";
@@ -81,12 +82,21 @@ export default function StepOne({ formdata, setFormdata, step, setStep }) {
             <div className="flex flex-col gap-1.5">
                 <Label htmlFor="description">Description</Label>
                 <InputField errors={errors}>
-                    <Textarea
-                        id="description"
-                        rows={4}
-                        placeholder="Describe your venue, facilities, and any special features…"
-                        {...register("description")}
-                    />
+                    {/* relative wrapper so the AI button can sit in the corner */}
+                    <div className="relative">
+                        <Textarea
+                            id="description"
+                            rows={4}
+                            placeholder="Describe your venue, facilities, and any special features… (Banglish is fine — AI can polish it)"
+                            className="pb-12"
+                            {...register("description")}
+                        />
+                        <AiRephraseButton
+                            kind="venue"
+                            getText={() => watch("description")}
+                            onResult={(t) => setValue("description", t, { shouldDirty: true })}
+                        />
+                    </div>
                 </InputField>
             </div>
 

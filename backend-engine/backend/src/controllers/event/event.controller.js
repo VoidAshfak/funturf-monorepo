@@ -7,6 +7,13 @@ import { EventSerializer } from "../../utils/dataSerializer.js";
 import { createNotification } from "../../utils/notificationService.js";
 import { broadcastToTurfmates, getAcceptedTurfmateIds } from "../../utils/turfmateService.js";
 import { isEventAdmin, notifyEventAdmins } from "../../utils/eventService.js";
+import { logger } from "../../../logs/logger.js";
+import { emitToEvent } from "../../socket.js";
+
+// Tell everyone viewing a match page that its roster / request queue changed, so
+// their squad list and admin panel refresh live (no manual reload). Non-sensitive
+// — just a nudge to refetch; carries no private data.
+const broadcastRoster = (eventId) => emitToEvent(eventId, "event:roster", { eventId });
 
 // Build a display name from a user row, with a safe fallback.
 const displayName = (u, fallback = "A player") =>
@@ -45,6 +52,9 @@ const createEvent = asyncHandler(async (req, res) => {
         skill_level_required,
         total_cost,
         cost_split_type,
+        // Optional: an existing booking (the ground reservation) the organizer
+        // wants this match tied to. Linked bidirectionally after the event exists.
+        booking_id,
     } = req.body
 
     if (!title
@@ -64,6 +74,23 @@ const createEvent = asyncHandler(async (req, res) => {
         throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
             message: "A required event field is missing",
         });
+    }
+
+    // If the organizer is attaching a booking, validate it BEFORE creating the
+    // event so we never leave an orphan event when the booking is bad. It must be
+    // the caller's own booking and not already tied to another match.
+    if (booking_id) {
+        const booking = await pgClient.bookings.findUnique({
+            where: { id: booking_id },
+            select: { id: true, user_id: true, event_id: true },
+        });
+        if (!booking) throw ApiError.fromCode(ERROR_CODES.BOOKING_NOT_FOUND);
+        if (booking.user_id !== req.user.id) {
+            throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+                message: "You can only attach a booking you made",
+            });
+        }
+        if (booking.event_id) throw ApiError.fromCode(ERROR_CODES.BOOKING_ALREADY_ATTACHED);
     }
 
     const createdEvents = await pgClient.$queryRaw
@@ -110,6 +137,26 @@ const createEvent = asyncHandler(async (req, res) => {
         data: eventParticipantData,
         skipDuplicates: true
     });
+
+    // Tie the booking to the match on BOTH sides, atomically:
+    //   events.booking_id  -> the reservation this match runs on
+    //   bookings.event_id  -> the match this reservation is for
+    // Re-guarding event_id inside the transaction closes the race where two
+    // events grab the same booking at once. Best-effort re-check kept simple; a
+    // lost race just means the second event links nothing (booking already taken).
+    if (booking_id) {
+        await pgClient.$transaction([
+            pgClient.events.update({
+                where: { id: createdEvent.id },
+                data: { booking_id },
+            }),
+            pgClient.bookings.updateMany({
+                where: { id: booking_id, user_id: req.user.id, event_id: null },
+                data: { event_id: createdEvent.id },
+            }),
+        ]);
+        logger.info(`event ${createdEvent.id} linked to booking ${booking_id}`);
+    }
 
     // Align turfmates: tell the organizer's turfmates a new match is up for grabs,
     // prioritised by how soon it is. Best-effort; never blocks event creation.
@@ -361,6 +408,22 @@ const getEventById = asyncHandler(async (req, res) => {
             min_players: true,
             max_players: true,
             current_players: true,
+            // The attached booking (the ground reservation this match runs on),
+            // if the organizer tied one. Drives the booking card on the detail page.
+            bookings_events_booking_idTobookings: {
+                select: {
+                    id: true,
+                    booking_date: true,
+                    slot: true,
+                    ground_id: true,
+                    user_id: true,
+                    total_amount: true,
+                    discount_amount: true,
+                    final_amount: true,
+                    payment_status: true,
+                    booking_status: true,
+                },
+            },
             event_participants: {
                 select: {
                     user_id: true,
@@ -405,9 +468,33 @@ const getEventById = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Error getting event players")
     }
 
+    // Attach the live hold countdown to the booking. An unpaid booking is a soft
+    // 2-hour hold; its expiry lives on the slot_locks row (source of truth). Only
+    // meaningful while still pending+unpaid — a paid/confirmed booking has no timer.
+    const attachedBooking = event.bookings_events_booking_idTobookings;
+    let bookingWithHold = attachedBooking;
+    if (
+        attachedBooking &&
+        attachedBooking.booking_status === "pending" &&
+        attachedBooking.payment_status === "pending"
+    ) {
+        const lock = await pgClient.slot_locks.findFirst({
+            where: {
+                ground_id: attachedBooking.ground_id,
+                date: attachedBooking.booking_date,
+                slot_code: attachedBooking.slot?.code,
+                locked_by_user_id: attachedBooking.user_id,
+                locked_until: { gt: new Date() },
+            },
+            select: { locked_until: true },
+        });
+        bookingWithHold = { ...attachedBooking, hold_expires_at: lock?.locked_until ?? null };
+    }
+
     const response = EventSerializer.toDto({
         ...event,
-        event_participants: players_joined
+        event_participants: players_joined,
+        booking: bookingWithHold,
     })
 
     return res.status(200).json(new ApiResponse(200, "Event found", response));
@@ -709,6 +796,9 @@ const joinEvent = asyncHandler(async (req, res) => {
         action_url: `/events/${event_id}`,
     });
 
+    // Live: the admin panel's request queue updates without a refresh.
+    broadcastRoster(event_id);
+
     return res.status(201).json(new ApiResponse(201, "Join request sent", participant));
 });
 
@@ -814,6 +904,9 @@ const acceptJoinRequest = asyncHandler(async (req, res) => {
         action_url: `/events/${event_id}`,
     });
 
+    // Live: requester drops out of the queue and into the squad for all viewers.
+    broadcastRoster(event_id);
+
     return res.status(200).json(new ApiResponse(200, "Join request approved", { event_id, user_id }));
 });
 
@@ -866,6 +959,8 @@ const rejectJoinRequest = asyncHandler(async (req, res) => {
         [adminId]
     );
 
+    broadcastRoster(event_id);
+
     return res.status(200).json(new ApiResponse(200, "Join request rejected", { event_id, user_id }));
 });
 
@@ -903,6 +998,8 @@ const cancelJoinRequest = asyncHandler(async (req, res) => {
         },
         [userId]
     );
+
+    broadcastRoster(event_id);
 
     return res.status(200).json(new ApiResponse(200, "Join request cancelled", { event_id }));
 });
@@ -1028,6 +1125,8 @@ const leaveEvent = asyncHandler(async (req, res) => {
             UPDATE events SET current_players = GREATEST(current_players - 1, 0) WHERE id = ${event_id}::uuid
         `;
     }
+
+    broadcastRoster(event_id);
 
     return res.status(200).json(new ApiResponse(200, "Left match", { event_id }));
 });

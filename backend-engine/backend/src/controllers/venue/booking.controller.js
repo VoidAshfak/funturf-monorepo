@@ -460,7 +460,9 @@ export const getMyBookings = asyncHandler(async (req, res) => {
         orderBy: [{ booking_date: "desc" }, { created_at: "desc" }],
         include: {
             grounds: {
-                select: { id: true, name: true, turfs: { select: { id: true, name: true, city: true } } },
+                // sport_type is needed so "attach booking to a match" can fill the
+                // event's sport straight from the reservation's ground.
+                select: { id: true, name: true, sport_type: true, turfs: { select: { id: true, name: true, city: true } } },
             },
         },
     });

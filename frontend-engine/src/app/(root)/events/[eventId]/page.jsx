@@ -1,19 +1,25 @@
 import EventAdminPanel from "@/components/EventAdminPanel"
+import EventChat from "@/components/EventChat"
 import EventJoinButton from "@/components/EventJoinButton"
+import EventRealtime from "@/components/EventRealtime"
+import EventSquad from "@/components/EventSquad"
+import { BookingStatusBadge, HoldExpiryBadge, PaymentStatusBadge } from "@/components/BookingStatus"
 import EventListWrapper from "@/components/EventListWrapper"
 import MapDialog from "@/components/MapDialog"
-import PlayerItem from "@/components/PlayerItem"
 import RulesAndComments from "@/components/RulesAndComments"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getIndividualEventByEventId } from "@/utils/getData"
 import { getLocationString } from "@/utils/utility-functions"
+import { slotRangeLabel } from "@/utils/slots"
 import { format } from "date-fns"
 import {
     ArrowRight,
     CalendarDays,
     Clock,
     MapPin,
+    Receipt,
     Sparkles,
+    Ticket,
     Trophy,
     Users,
 } from "lucide-react"
@@ -35,7 +41,7 @@ export default async function EventDetails({ params }) {
         max_players,
         min_players,
         current_players,
-        participants = [],
+        booking,
     } = event;
 
     const sport = event.sport_type || ground?.sport_type;
@@ -43,7 +49,6 @@ export default async function EventDetails({ params }) {
     const cur = current_players ?? 0;
     const isFull = min > 0 && cur >= min;
     const spotsLeft = Math.max(min - cur, 0);
-    const pct = min ? Math.min(Math.round((cur / min) * 100), 100) : 0;
 
     const organizerName = organizer
         ? `${organizer.first_name ?? ""} ${organizer.last_name ?? ""}`.trim()
@@ -62,6 +67,12 @@ export default async function EventDetails({ params }) {
 
     return (
         <div className="mx-auto max-w-7xl px-4 pb-16 pt-6 md:px-8 md:pt-24">
+            {/* Live wiring: subscribes to the match room and refetches squad/requests
+                on any roster change. Floating squad chat for members. Both render
+                fixed/nothing, so their position in the tree doesn't matter. */}
+            <EventRealtime eventId={event.id} />
+            <EventChat eventId={event.id} initialEvent={event} />
+
             {/* HERO */}
             <section className="relative isolate overflow-hidden rounded-[2rem] border border-border bg-gradient-to-b from-[#eaf2ee] to-[#e6f1ec] p-6 dark:from-[#0a1412] dark:to-[#0a0a0a] md:p-10">
                 {/* ambient glows */}
@@ -173,23 +184,17 @@ export default async function EventDetails({ params }) {
                     {/* admin-only: pending join requests + manage admins */}
                     <EventAdminPanel event={event} />
 
+                    {/* Attached booking — the ground reservation this match runs on.
+                        Shows the live hold countdown while it's still an unpaid hold. */}
+                    {booking && <BookingCard booking={booking} />}
+
                     {/* quick stats */}
                     <div className="mb-6 grid grid-cols-3 gap-4">
                         <StatCard icon={Users} value={`${cur}/${min || "—"}`} label="Joined" />
                         <StatCard icon={Trophy} value={max_players ?? "—"} label="Max players" />
                         <StatCard
                             icon={Clock}
-                            value={
-                                start_time && end_time
-                                    ? `${Math.max(
-                                          Math.round(
-                                              (new Date(end_time) - new Date(start_time)) /
-                                                  3600000
-                                          ),
-                                          0
-                                      )}h`
-                                    : "—"
-                            }
+                            value={formatDuration(start_time, end_time)}
                             label="Duration"
                         />
                     </div>
@@ -201,64 +206,8 @@ export default async function EventDetails({ params }) {
                     </div>
                 </div>
 
-                {/* right: squad */}
-                <aside className="glass-card h-fit rounded-3xl p-5 md:p-6">
-                    <div className="mb-4 flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-foreground">Squad</h2>
-                        <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-bold text-primary">
-                            {cur}/{min || "—"}
-                        </span>
-                    </div>
-
-                    {/* progress */}
-                    <div className="mb-5">
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                            <div
-                                className="h-full rounded-full bg-gradient-to-r from-brand to-teal transition-all duration-500"
-                                style={{ width: `${pct}%` }}
-                            />
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                            {isFull
-                                ? "This squad is full."
-                                : `${spotsLeft} more player${spotsLeft === 1 ? "" : "s"} needed.`}
-                        </p>
-                    </div>
-
-                    <div className="space-y-1">
-                        {participants.length > 0 ? (
-                            participants.map((participant, i) => (
-                                <PlayerItem
-                                    key={participant?.id ?? participant?.user_id ?? participant ?? i}
-                                    participant={participant}
-                                />
-                            ))
-                        ) : cur > 0 ? (
-                            <div className="rounded-xl bg-muted/50 p-4 text-center">
-                                <div className="mb-2 flex justify-center -space-x-3">
-                                    {Array.from({ length: Math.min(cur, 5) }).map((_, i) => (
-                                        <span
-                                            key={i}
-                                            className="grid h-9 w-9 place-items-center rounded-full border-2 border-card bg-gradient-to-br from-brand to-teal text-primary-foreground"
-                                        >
-                                            <Users className="h-4 w-4" />
-                                        </span>
-                                    ))}
-                                </div>
-                                <p className="text-sm font-semibold text-foreground">
-                                    {cur} player{cur === 1 ? "" : "s"} joined
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    Roster hidden until you join.
-                                </p>
-                            </div>
-                        ) : (
-                            <p className="rounded-xl bg-muted/50 p-4 text-center text-sm text-muted-foreground">
-                                No players yet. Be the first to join!
-                            </p>
-                        )}
-                    </div>
-                </aside>
+                {/* right: squad — live (real roster, updates on join/accept/leave) */}
+                <EventSquad eventId={event.id} initialEvent={event} />
             </div>
 
             {/* SIMILAR EVENTS */}
@@ -292,6 +241,19 @@ export default async function EventDetails({ params }) {
     )
 }
 
+// "1h 30m" / "2h" / "45m" from two datetime-ish values. No rounding to whole hours
+// (that's why a 90-min slot used to read "2h").
+function formatDuration(start, end) {
+    if (!start || !end) return "—";
+    const mins = Math.max(Math.round((new Date(end) - new Date(start)) / 60000), 0);
+    if (mins === 0) return "—";
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h && m) return `${h}h ${m}m`;
+    if (h) return `${h}h`;
+    return `${m}m`;
+}
+
 function MetaPill({ icon: Icon, label, sub, action }) {
     return (
         <div className="glass-chip flex items-center gap-3 rounded-2xl px-4 py-3">
@@ -303,6 +265,82 @@ function MetaPill({ icon: Icon, label, sub, action }) {
                 {sub && <p className="truncate text-sm text-muted-foreground">{sub}</p>}
             </div>
             {action}
+        </div>
+    );
+}
+
+// The reservation this match is tied to. When the booking is an unpaid hold, the
+// HoldExpiryBadge ticks down live — the organizer sees exactly how long they have
+// to pay before the slot frees up (and the match loses its ground).
+function BookingCard({ booking }) {
+    const slot = booking.slot || {};
+    // Human slot time ("7:30 – 9:00 PM"), decoded from the grid code — never "t1930".
+    const slotLabel = slot.code ? slotRangeLabel(slot.code) : null;
+    const amount = booking.final_amount ?? booking.total_amount;
+    const isUnpaidHold = Boolean(booking.hold_expires_at);
+
+    return (
+        <div className="glass-card mb-6 rounded-3xl p-5 md:p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
+                        <Ticket className="h-4.5 w-4.5" />
+                    </span>
+                    <div>
+                        <h2 className="text-base font-bold text-foreground">Reserved ground</h2>
+                        <p className="text-xs text-muted-foreground">This match's booking</p>
+                    </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    <BookingStatusBadge status={booking.booking_status} />
+                    <PaymentStatusBadge status={booking.payment_status} />
+                </div>
+            </div>
+
+            {/* Live hold countdown — only while it's an unpaid hold. */}
+            {isUnpaidHold && (
+                <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+                    <HoldExpiryBadge expiresAt={booking.hold_expires_at} />
+                    <span className="text-muted-foreground">Pay before the hold runs out to keep this slot.</span>
+                </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-3">
+                <div className="flex items-center gap-2.5">
+                    <CalendarDays className="h-4 w-4 text-primary" />
+                    <div>
+                        <p className="text-xs text-muted-foreground">Date</p>
+                        <p className="text-sm font-semibold text-foreground">
+                            {booking.booking_date ? format(new Date(booking.booking_date), "d MMM yyyy") : "—"}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                    <Clock className="h-4 w-4 text-primary" />
+                    <div>
+                        <p className="text-xs text-muted-foreground">Slot</p>
+                        <p className="text-sm font-semibold text-foreground">
+                            {slotLabel || "—"}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                    <Receipt className="h-4 w-4 text-primary" />
+                    <div>
+                        <p className="text-xs text-muted-foreground">Amount</p>
+                        <p className="text-sm font-semibold text-foreground">
+                            {amount != null ? `৳${amount}` : "—"}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <Link
+                href={`/bookings/${booking.id}/ticket`}
+                className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+            >
+                View ticket <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
         </div>
     );
 }

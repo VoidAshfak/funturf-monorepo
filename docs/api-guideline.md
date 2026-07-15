@@ -164,10 +164,63 @@ address_line_1: {
 | POST | `/:event_id/admins` | **required, organizer** | `{ user_id }` | `200` — `{ event_id, user_id }` (grant admin → role `co_organizer`) |
 | DELETE | `/:event_id/admins/:user_id` | **required, organizer** | — | `200` — `{ event_id, user_id }` (revoke admin → role `player`) |
 | GET | `/my-events` | **required** | query `status?` | `200` — `{ events: [ { ...event, my_participation:{status,payment_status,joined_at} } ] }` |
-| POST | `/create-event` | **required** | event fields + `current_players[]` | `200` — created event (organizer = token user; initial roster inserted as `approved`) |
+| POST | `/create-event` | **required** | event fields + `current_players[]` + optional `booking_id` | `200` — created event (organizer = token user; initial roster inserted as `approved`; if `booking_id` given, links it both ways) |
 | PATCH | `/update-event/:event_id` | **required, organizer only** | editable event fields | `200` — updated event |
 | DELETE | `/delete-event` | **required, organizer only** | `{ event_id }` | `200` — deleted event |
-| GET | `/:event_id` | public | path `event_id` | `200` — full event DTO |
+| GET | `/:event_id` | public | path `event_id` | `200` — full event DTO (incl. `booking` when one is attached) |
+| GET | `/:event_id/messages` | **required, member** | — | `200` — `{ messages:[msgDTO] }` (last 50, oldest→newest; tombstones kept) |
+| POST | `/:event_id/messages` | **required, member** | `{ content?, attachment_url?, reply_to_id?, message_type? }` | `201` — message DTO (fans out `chat:new`) |
+| PATCH | `/:event_id/messages/:message_id` | **required, sender** | `{ content }` | `200` — edited DTO (`is_edited`; fans out `chat:update`) |
+| DELETE | `/:event_id/messages/:message_id` | **required, sender or match admin** | — | `200` — `{ id }` (soft delete; fans out `chat:delete`) |
+| POST | `/:event_id/messages/:message_id/reactions` | **required, member** | `{ emoji }` | `200` — `{ message_id, reactions }` (toggles; fans out `chat:reaction`) |
+
+**Squad group chat (`/events/:event_id/messages`)** — private to the match's members
+(**approved players + organizer/co-organizers**, same rule as `canCommentOnEvent`). Non-members get
+`EVENT_CHAT_FORBIDDEN (403)` on read/write (unlike the public event **comments**). A message needs
+**text OR an image attachment** (or both); `attachment_url` must be an `https` URL (from `/api/upload`
+→ imgbb; images only). `reply_to_id` must point at a message in the same chat. Max text length 2000.
+
+**Message DTO:**
+```
+{ id, event_id, content|null, attachment_url|null, message_type, is_edited, is_deleted,
+  created_at, edited_at, sender:{id,first_name,last_name,profile_picture_url},
+  reply_to: { id, sender_name, content } | null,
+  reactions: [ { emoji, count, user_ids:[...] } ] }        // deleted msgs null content + empty reactions
+```
+
+**Schema additions** (run `npx prisma db push` + `npm run prisma:generate:pg`): `messages.reply_to_id`
+(self-relation) and a new **`message_reactions`** table (`message_id`,`user_id`,`emoji`, unique per
+person+emoji).
+
+**Socket events (Socket.IO)** — client connects to the server origin with `auth:{ token }`; each
+socket auto-joins its `user:<id>` room. Additional match-page realtime:
+- Client emits **`event:subscribe`** / **`event:unsubscribe`** with an `eventId` to join/leave that
+  match's `event:<id>` room.
+- Server emits **`event:roster`** `{ eventId }` to the event room on any roster/request change
+  (join, accept, reject, cancel, leave) → clients refetch squad + join requests. Non-sensitive.
+- Server emits **`chat:new`** (message DTO) / **`chat:update`** (edited DTO) / **`chat:delete`**
+  `{ id, event_id }` / **`chat:reaction`** `{ message_id, event_id, reactions }` to each **member's**
+  `user:<id>` room → the floating chat appends/updates/tombstones/re-reacts live (private; never
+  broadcast to the event room).
+
+**Attaching a booking (`booking_id` on `POST /create-event`)** — optional. Ties the match to a
+ground reservation the organizer already made. The booking must be **the caller's own** and **not
+already attached** to another event, else `BOOKING_NOT_FOUND` / `VALIDATION_ERROR` /
+`BOOKING_ALREADY_ATTACHED (409)`. On success the link is written **both ways** in one transaction:
+`events.booking_id` → the reservation, `bookings.event_id` → the match. (Booking-side attach still
+works too, via `event_id` on `POST /bookings` — same organizer-owns-event rule.)
+
+**`GET /events/:event_id` `booking` field** — present only when a booking is attached:
+```
+booking: {
+  id, booking_date, slot:{code,start_time,end_time},
+  total_amount, discount_amount, final_amount,
+  payment_status, booking_status,
+  hold_expires_at   // ISO string ONLY while it's an unpaid pending hold (from slot_locks); else null
+}
+```
+The detail page renders this as a "Reserved ground" card with a **live hold countdown** when
+`hold_expires_at` is set.
 
 **`GET /events` is a paginated, filterable feed** (powers the infinite-scroll `/events` page):
 

@@ -10,6 +10,11 @@ let io = null;
 // so we can push a notification to *all* of a user's open tabs/devices at once.
 const userRoom = (userId) => `user:${userId}`;
 
+// Event rooms carry NON-SENSITIVE live updates for a match page (roster changes,
+// join-request counts) to everyone currently viewing it. Private data (chat
+// messages) is NOT sent here — it goes to member user-rooms via emitToUser.
+const eventRoom = (eventId) => `event:${eventId}`;
+
 /**
  * Attach Socket.IO to the HTTP server and wire JWT auth.
  *
@@ -46,6 +51,16 @@ export function initSocket(server) {
         socket.join(userRoom(userId));
         logger.info(`socket connected: user=${userId} sid=${socket.id}`);
 
+        // A client viewing a match page subscribes to that event's room to get
+        // live roster/request updates. Only non-sensitive data flows here (see
+        // eventRoom note), so plain membership of the room needs no extra auth.
+        socket.on("event:subscribe", (eventId) => {
+            if (typeof eventId === "string" && eventId) socket.join(eventRoom(eventId));
+        });
+        socket.on("event:unsubscribe", (eventId) => {
+            if (typeof eventId === "string" && eventId) socket.leave(eventRoom(eventId));
+        });
+
         socket.on("disconnect", (reason) => {
             logger.info(`socket disconnected: user=${userId} sid=${socket.id} (${reason})`);
         });
@@ -68,4 +83,14 @@ export function getIo() {
 export function emitToUser(userId, event, payload) {
     if (!io || !userId) return;
     io.to(userRoom(userId)).emit(event, payload);
+}
+
+/**
+ * Emit to everyone subscribed to a match's event room (all current viewers).
+ * Use ONLY for non-sensitive live updates (roster/request changes). Safe no-op
+ * if the socket layer isn't up.
+ */
+export function emitToEvent(eventId, event, payload) {
+    if (!io || !eventId) return;
+    io.to(eventRoom(eventId)).emit(event, payload);
 }

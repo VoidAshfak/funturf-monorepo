@@ -22,6 +22,13 @@ import {
     deleteComment,
     toggleCommentLike,
 } from '../../controllers/event/comment.controller.js'
+import {
+    getEventMessages,
+    sendEventMessage,
+    editEventMessage,
+    deleteEventMessage,
+    reactEventMessage,
+} from '../../controllers/event/message.controller.js'
 import { verifyJWT, attachUserIfPresent } from "../../middlewares/auth/auth.middleware.js"
 import { commentWriteLimiter } from "../../middlewares/rateLimit.middleware.js"
 
@@ -71,6 +78,21 @@ router
     .patch(verifyJWT, commentWriteLimiter, updateComment)
     .delete(verifyJWT, deleteComment)
 router.route('/:event_id/comments/:comment_id/like').post(verifyJWT, commentWriteLimiter, toggleCommentLike)
+
+// ---- Squad group chat ----
+// Private to the match's members (approved players + admins) — enforced in the
+// controller via canCommentOnEvent. Reuses the comment write rate-limiter.
+router
+    .route('/:event_id/messages')
+    .get(verifyJWT, getEventMessages)
+    .post(verifyJWT, commentWriteLimiter, sendEventMessage)
+router
+    .route('/:event_id/messages/:message_id')
+    .patch(verifyJWT, commentWriteLimiter, editEventMessage)
+    .delete(verifyJWT, deleteEventMessage)
+router
+    .route('/:event_id/messages/:message_id/reactions')
+    .post(verifyJWT, commentWriteLimiter, reactEventMessage)
 
 // Dynamic catch-all read — keep last
 router.route('/:event_id').get(getEventById)

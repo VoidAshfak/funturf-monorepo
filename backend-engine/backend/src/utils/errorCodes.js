@@ -43,6 +43,11 @@ export const ERROR_CODES = Object.freeze({
     NOT_EVENT_PARTICIPANT: { code: "NOT_EVENT_PARTICIPANT", statusCode: 400, message: "You are not a participant of this match" },
     NOT_EVENT_ADMIN:       { code: "NOT_EVENT_ADMIN",       statusCode: 403, message: "Only an event admin can perform this action" },
     JOIN_REQUEST_NOT_FOUND:{ code: "JOIN_REQUEST_NOT_FOUND", statusCode: 404, message: "No pending join request found" },
+    BOOKING_ALREADY_ATTACHED: { code: "BOOKING_ALREADY_ATTACHED", statusCode: 409, message: "This booking is already attached to a match" },
+    EVENT_CHAT_FORBIDDEN:  { code: "EVENT_CHAT_FORBIDDEN",  statusCode: 403, message: "Only players in this match can use its chat" },
+    MESSAGE_NOT_FOUND:     { code: "MESSAGE_NOT_FOUND",     statusCode: 404, message: "Message not found" },
+    NOT_MESSAGE_OWNER:     { code: "NOT_MESSAGE_OWNER",     statusCode: 403, message: "You can only edit your own messages" },
+    MESSAGE_DELETE_FORBIDDEN: { code: "MESSAGE_DELETE_FORBIDDEN", statusCode: 403, message: "Only the sender or a match admin can delete this message" },
     ALREADY_ADMIN:         { code: "ALREADY_ADMIN",         statusCode: 409, message: "This user is already an event admin" },
 
     // ---- event comments ----

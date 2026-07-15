@@ -1,40 +1,16 @@
-"use client"
-
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import EventCreationForm from "./EventCreationForm";
-import { useState } from "react";
+import { Plus } from "lucide-react";
+import Link from "next/link";
 
+// The match form now lives on its own full page (/events/create) — too many
+// fields for a dialog. This is just the entry point from the events hub.
 export default function CreateNewEvent() {
-    const [open, setOpen] = useState(false);
-
     return (
-        <div>
-            <Button
-                className="hover:cursor-pointer w-fit"
-                onClick={() => setOpen(true)}
-            >
+        <Button asChild className="green-glow w-fit gap-2 font-medium">
+            <Link href="/events/create">
+                <Plus className="h-4 w-4" />
                 Create New Event
-            </Button>
-
-            {open && (
-                <Dialog
-                    open={open}
-                    onOpenChange={setOpen}
-                    className="w-[500px]"
-                >
-                    <DialogContent className="max-h-11/12 overflow-auto ">
-                        <DialogHeader className="sm:text-center">
-                            <DialogTitle>Create Your Event </DialogTitle>
-                            <DialogDescription>
-                                Enter your information below to create your event
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <EventCreationForm setOpen={setOpen} />
-                    </DialogContent>
-                </Dialog>
-            )}
-        </div>
-    )
+            </Link>
+        </Button>
+    );
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import AiRephraseButton from "@/components/AiRephraseButton";
 import {
     Select,
     SelectContent,
@@ -174,7 +175,14 @@ export default function GroundForm({ initial = null, onSubmit, submitLabel, pend
             {/* Notes */}
             <div className="flex flex-col gap-1.5">
                 <Label htmlFor="notes">Notes</Label>
-                <Textarea id="notes" rows={3} placeholder="Anything players should know…" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+                <div className="relative">
+                    <Textarea id="notes" rows={3} className="pb-12" placeholder="Anything players should know… (Banglish is fine — AI can polish it)" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+                    <AiRephraseButton
+                        kind="ground"
+                        getText={() => form.notes}
+                        onResult={(t) => set("notes", t)}
+                    />
+                </div>
             </div>
 
             <Button type="submit" className="green-glow w-full rounded-full" disabled={busy}>

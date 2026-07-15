@@ -16,7 +16,7 @@ export const apiSlice = createApi({
             return headers;
         },
     }),
-    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications"],
+    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Messages", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications"],
     endpoints: (builder) => ({
         // ---- Venues ----
         getVenues: builder.query({
@@ -120,7 +120,12 @@ export const apiSlice = createApi({
                 method: "POST",
                 body,
             }),
-            invalidatesTags: [{ type: "Events", id: "LIST" }],
+            // Attaching a booking mutates that booking (sets its event_id), so the
+            // "my bookings" list must refresh too, not just the events feed.
+            invalidatesTags: [
+                { type: "Events", id: "LIST" },
+                { type: "Bookings", id: "MINE" },
+            ],
         }),
         // Events the logged-in user participates in (GET /events/my-events, auth required).
         getMyEvents: builder.query({
@@ -480,6 +485,177 @@ export const apiSlice = createApi({
             invalidatesTags: (r, e, { eventId }) => [{ type: "Event", id: eventId }],
         }),
 
+        // ---- Squad group chat ----
+        // History (last 50). Kept LIVE: after the initial fetch we listen on the
+        // socket for `chat:new` and append matching messages, so the thread updates
+        // in real time without polling. Member-only server-side.
+        getEventMessages: builder.query({
+            query: (eventId) => `events/${eventId}/messages`,
+            transformResponse: (res) => res?.data?.messages ?? [],
+            providesTags: (r, e, eventId) => [{ type: "Messages", id: eventId }],
+            async onCacheEntryAdded(
+                eventId,
+                { getState, updateCachedData, cacheDataLoaded, cacheEntryRemoved }
+            ) {
+                const token = getState().auth?.token;
+                const socket = token ? getSocket(token) : null;
+                try {
+                    await cacheDataLoaded;
+                    if (!socket) return;
+
+                    const forThis = (p) => p?.event_id === eventId;
+
+                    // New message -> append (de-duped).
+                    const onNew = (msg) => {
+                        if (!forThis(msg)) return;
+                        updateCachedData((draft) => {
+                            if (draft.some((m) => m.id === msg.id)) return;
+                            draft.push(msg);
+                        });
+                    };
+                    // Edited message -> replace in place.
+                    const onUpdate = (msg) => {
+                        if (!forThis(msg)) return;
+                        updateCachedData((draft) => {
+                            const i = draft.findIndex((m) => m.id === msg.id);
+                            if (i !== -1) draft[i] = msg;
+                        });
+                    };
+                    // Soft-deleted -> flip to a tombstone (keep position/reply refs).
+                    const onDelete = ({ id, event_id }) => {
+                        if (event_id !== eventId) return;
+                        updateCachedData((draft) => {
+                            const m = draft.find((x) => x.id === id);
+                            if (m) {
+                                m.is_deleted = true;
+                                m.content = null;
+                                m.attachment_url = null;
+                                m.reactions = [];
+                                m.reply_to = null;
+                            }
+                        });
+                    };
+                    // Reaction change -> swap the message's grouped reactions.
+                    const onReaction = ({ message_id, event_id, reactions }) => {
+                        if (event_id !== eventId) return;
+                        updateCachedData((draft) => {
+                            const m = draft.find((x) => x.id === message_id);
+                            if (m) m.reactions = reactions;
+                        });
+                    };
+
+                    socket.on("chat:new", onNew);
+                    socket.on("chat:update", onUpdate);
+                    socket.on("chat:delete", onDelete);
+                    socket.on("chat:reaction", onReaction);
+                    await cacheEntryRemoved;
+                    socket.off("chat:new", onNew);
+                    socket.off("chat:update", onUpdate);
+                    socket.off("chat:delete", onDelete);
+                    socket.off("chat:reaction", onReaction);
+                } catch {
+                    // entry removed before load — ignore
+                }
+            },
+        }),
+        // Send a message (text and/or image attachment, optional reply). The socket
+        // echoes it back too, but we also append the POST result so it shows
+        // instantly even if the socket round-trip is slow (de-duped by id).
+        sendEventMessage: builder.mutation({
+            query: ({ eventId, content, attachment_url, reply_to_id, message_type }) => ({
+                url: `events/${eventId}/messages`,
+                method: "POST",
+                body: { content, attachment_url, reply_to_id, message_type },
+            }),
+            async onQueryStarted({ eventId }, { dispatch, queryFulfilled }) {
+                try {
+                    const { data } = await queryFulfilled;
+                    const msg = data?.data;
+                    if (!msg) return;
+                    dispatch(
+                        apiSlice.util.updateQueryData("getEventMessages", eventId, (draft) => {
+                            if (!draft.some((m) => m.id === msg.id)) draft.push(msg);
+                        })
+                    );
+                } catch {
+                    // error surfaced at the call site
+                }
+            },
+        }),
+        // Edit your own message's text.
+        editEventMessage: builder.mutation({
+            query: ({ eventId, messageId, content }) => ({
+                url: `events/${eventId}/messages/${messageId}`,
+                method: "PATCH",
+                body: { content },
+            }),
+            async onQueryStarted({ eventId }, { dispatch, queryFulfilled }) {
+                try {
+                    const { data } = await queryFulfilled;
+                    const msg = data?.data;
+                    if (!msg) return;
+                    dispatch(
+                        apiSlice.util.updateQueryData("getEventMessages", eventId, (draft) => {
+                            const i = draft.findIndex((m) => m.id === msg.id);
+                            if (i !== -1) draft[i] = msg;
+                        })
+                    );
+                } catch {
+                    // surfaced at call site
+                }
+            },
+        }),
+        // Soft-delete a message (sender or match admin).
+        deleteEventMessage: builder.mutation({
+            query: ({ eventId, messageId }) => ({
+                url: `events/${eventId}/messages/${messageId}`,
+                method: "DELETE",
+            }),
+            async onQueryStarted({ eventId, messageId }, { dispatch, queryFulfilled }) {
+                // Optimistic tombstone.
+                const patch = dispatch(
+                    apiSlice.util.updateQueryData("getEventMessages", eventId, (draft) => {
+                        const m = draft.find((x) => x.id === messageId);
+                        if (m) {
+                            m.is_deleted = true;
+                            m.content = null;
+                            m.attachment_url = null;
+                            m.reactions = [];
+                            m.reply_to = null;
+                        }
+                    })
+                );
+                try {
+                    await queryFulfilled;
+                } catch {
+                    patch.undo();
+                }
+            },
+        }),
+        // Toggle an emoji reaction on a message.
+        reactEventMessage: builder.mutation({
+            query: ({ eventId, messageId, emoji }) => ({
+                url: `events/${eventId}/messages/${messageId}/reactions`,
+                method: "POST",
+                body: { emoji },
+            }),
+            async onQueryStarted({ eventId, messageId }, { dispatch, queryFulfilled }) {
+                try {
+                    const { data } = await queryFulfilled;
+                    const reactions = data?.data?.reactions;
+                    if (!reactions) return;
+                    dispatch(
+                        apiSlice.util.updateQueryData("getEventMessages", eventId, (draft) => {
+                            const m = draft.find((x) => x.id === messageId);
+                            if (m) m.reactions = reactions;
+                        })
+                    );
+                } catch {
+                    // surfaced at call site
+                }
+            },
+        }),
+
         // ---- Bookings ----
         // Create a booking. Body: { ground_id, booking_date, slot, paid?,
         // transaction_id?, payment_proof_url?, event_id?, promo_code?, notes? }.
@@ -695,6 +871,12 @@ export const {
     useRejectJoinRequestMutation,
     useGrantEventAdminMutation,
     useRevokeEventAdminMutation,
+    // event chat
+    useGetEventMessagesQuery,
+    useSendEventMessageMutation,
+    useEditEventMessageMutation,
+    useDeleteEventMessageMutation,
+    useReactEventMessageMutation,
     useCreateBookingMutation,
     useGetMyBookingsQuery,
     useGetBookingByIdQuery,

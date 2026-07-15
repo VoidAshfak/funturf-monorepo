@@ -127,8 +127,26 @@ export class EventSerializer {
             organizer: event.users ? this.userToDto(event.users) : null,
             ground: event.grounds ? this.groundToDto(event.grounds) : null,
 
+            // The attached booking (the ground reservation), if one is tied to this
+            // match. `hold_expires_at` is present only while it's an unpaid hold.
+            booking: event.booking ? this.bookingToDto(event.booking) : null,
+
             participants: event.event_participants || [],
             comments: event.event_comments || []
+        };
+    }
+
+    static bookingToDto(booking) {
+        return {
+            id: booking.id,
+            booking_date: booking.booking_date,
+            slot: booking.slot,
+            total_amount: booking.total_amount,
+            discount_amount: booking.discount_amount,
+            final_amount: booking.final_amount,
+            payment_status: booking.payment_status,
+            booking_status: booking.booking_status,
+            hold_expires_at: booking.hold_expires_at ?? null,
         };
     }
 
