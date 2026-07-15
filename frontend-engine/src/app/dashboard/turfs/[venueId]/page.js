@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
+import { TurfVerifiedBadge } from "@/components/VerificationBadge";
 import { getIndividualVenueByVenueId } from "@/utils/getData";
-import { Edit, Settings } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
+import Link from "next/link";
 import ContactInfo from "./_components/ContactInfo";
 import Facilities from "./_components/Facilities";
 import GroundDetails from "./_components/GroundDetails";
@@ -16,24 +18,27 @@ export default async function AdminVenueDetailsPage({ params }) {
     const { data: venue } = await getIndividualVenueByVenueId(venueId);
 
     return (
-        <div className="min-h-screen bg-background flex flex-col gap-6">
-            {/* Admin Header */}
-            <div
-                className="glass-nav border-b border-border sticky top-12 z-50"
-            >
-                <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <Settings className="w-6 h-6 text-muted-foreground" />
-                        <h1 className="text-xl font-bold text-foreground">Admin Panel - Venue Management</h1>
+        <div className="flex flex-col gap-6">
+            {/* Page header (in-flow — the dashboard top bar is the only sticky one). */}
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                    <Settings className="w-6 h-6 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                        {/* The turf's own name is the page title. */}
+                        <div className="flex items-center gap-2">
+                            <h1 className="truncate text-2xl font-bold text-foreground">{venue.name}</h1>
+                            {/* Turf verification — reflects the live `verified` flag. */}
+                            <TurfVerifiedBadge verified={venue.verified} />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Manage Grounds</p>
                     </div>
-                    <Button
-                        // onClick={handleEditVenue}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition"
-                    >
-                        <Edit className="w-4 h-4" />
-                        Edit Venue
-                    </Button>
                 </div>
+                <Button asChild className="green-glow flex shrink-0 items-center gap-2 rounded-lg font-medium">
+                    <Link href="/dashboard/turfs/add-ground">
+                        <Plus className="w-4 h-4" />
+                        Add Ground
+                    </Link>
+                </Button>
             </div>
 
             {/* Quick Info Cards */}

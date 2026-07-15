@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ArrowUpRight, Clock, MapPin, Users } from "lucide-react";
-import Image from "next/image";
+import SportIcon from "./icons/SportIcon";
 
 // Initials fallback for an avatar (e.g. "Rafi Ahmed" -> "RA").
 function initials(name = "") {
@@ -72,12 +72,7 @@ export default function EventFeedCard({ event }) {
 
                 <span className="glass-chip relative inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize text-foreground">
                     {sport_type && (
-                        <Image
-                            src={`/assets/icons/${sport_type.toLowerCase()}.png`}
-                            alt={sport_type}
-                            width={14}
-                            height={14}
-                        />
+                        <SportIcon sport={sport_type} className="h-3.5 w-3.5 text-primary" />
                     )}
                     {sport_type}
                 </span>

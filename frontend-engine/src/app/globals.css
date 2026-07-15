@@ -456,3 +456,29 @@
 .leaflet-control-attribution a {
   color: var(--primary) !important;
 }
+
+/* -----------------------------------------------------------------------------
+   Print: isolate the booking ticket.
+   The ticket page lives inside the app shell (navbar, footer, bottom tab bar).
+   When the player prints, hide everything except the ticket card, which carries
+   id="printable-ticket". Robust regardless of surrounding chrome.
+----------------------------------------------------------------------------- */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-ticket,
+  #printable-ticket * {
+    visibility: visible !important;
+  }
+  #printable-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  /* Never print interactive controls (print button, links). */
+  .print\:hidden {
+    display: none !important;
+  }
+}

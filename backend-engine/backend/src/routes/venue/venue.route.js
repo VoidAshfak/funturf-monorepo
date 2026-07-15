@@ -5,6 +5,7 @@ import {
     getVenueList,
     createVenue,
     createGround,
+    updateGround,
     getVenueByAdminId
 } from "../../controllers/venue/venue.controller.js";
 import { verifyJWT, authorizeRoles } from "../../middlewares/auth/auth.middleware.js"
@@ -21,5 +22,6 @@ router.route('/get-venues-by-admin/:admin_id').get(getVenueByAdminId);
 // Writes — only turf admins / super admins may create venues and grounds
 router.route('/create-venue').post(verifyJWT, authorizeRoles("turf_admin", "super_admin"), createVenue);
 router.route('/create-ground').post(verifyJWT, authorizeRoles("turf_admin", "super_admin"), createGround);
+router.route('/grounds/:ground_id').patch(verifyJWT, authorizeRoles("turf_admin", "super_admin"), updateGround);
 
 export default router;

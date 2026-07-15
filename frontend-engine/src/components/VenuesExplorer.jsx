@@ -3,7 +3,7 @@
 import { useMemo, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Link from "next/link";
-import Image from "next/image";
+import SportIcon from "./icons/SportIcon";
 import { useGSAP } from "@gsap/react";
 import {
     selectVenueFilters,
@@ -34,11 +34,17 @@ const SORTS = [
 const PAGE_SIZE = 9;
 
 function venueSports(venue) {
-    if (Array.isArray(venue.sports_available) && venue.sports_available.length) {
-        return venue.sports_available;
-    }
-    // Fallback to ground-level sport types.
-    return (venue.grounds || []).map((g) => g.sport_type).filter(Boolean);
+    // A ground's sport_type is a MULTISELECT — it's an array like
+    // ["Football","Cricket"], and sports_available can be nested the same way.
+    // Flatten one level, coerce to strings, and dedupe so callers always get a
+    // flat list of unique sport names (an array leaking through here would become
+    // a comma-joined React key and break both the chips and the sport filter).
+    const raw =
+        Array.isArray(venue.sports_available) && venue.sports_available.length
+            ? venue.sports_available
+            : (venue.grounds || []).map((g) => g.sport_type);
+
+    return [...new Set(raw.flat().filter(Boolean).map(String))];
 }
 
 function locationText(venue) {
@@ -253,7 +259,7 @@ export default function VenuesExplorer({ venues = [] }) {
                             onClick={() => setSport(s.name)}
                             label={s.name}
                             count={s.count}
-                            icon={`/assets/icons/${String(s.name).toLowerCase()}.png`}
+                            sport={s.name}
                         />
                     ))}
                 </div>
@@ -306,7 +312,7 @@ export default function VenuesExplorer({ venues = [] }) {
     );
 }
 
-function Chip({ active, onClick, label, count, icon }) {
+function Chip({ active, onClick, label, count, sport }) {
     return (
         <button
             onClick={onClick}
@@ -316,15 +322,7 @@ function Chip({ active, onClick, label, count, icon }) {
                     : "border-border bg-card/60 text-muted-foreground hover:border-primary/40 hover:text-foreground"
             }`}
         >
-            {icon && (
-                <Image
-                    src={icon}
-                    alt={label}
-                    width={16}
-                    height={16}
-                    className="h-4 w-4 object-contain"
-                />
-            )}
+            {sport && <SportIcon sport={sport} className="h-4 w-4" />}
             {label}
             <span
                 className={`rounded-full px-1.5 text-[11px] font-bold ${

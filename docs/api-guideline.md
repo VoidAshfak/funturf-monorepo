@@ -106,11 +106,22 @@ Notes:
 | GET | `/:venue_id` | public | path `venue_id` | `200` — full venue DTO with grounds |
 | GET | `/get-venues-by-admin/:admin_id` | public | path `admin_id` | `200` — venues owned by that admin (`[]` if none) |
 | POST | `/create-venue` | **turf_admin / super_admin** | venue payload incl. `grounds[]` (see `frontend-engine/src/utils/constants.js`) | `201` — created venue DTO |
-| POST | `/create-ground` | **turf_admin / super_admin** | ground payload | `201` — created ground |
+| POST | `/create-ground` | **turf_admin / super_admin** | single ground payload (name + ≥1 `sport_type` + `hourly_rate` required) | `201` — created ground |
+| PATCH | `/grounds/:ground_id` | **turf_admin / super_admin** | partial ground fields (incl. `status`) | `200` — updated ground (scoped to the ground's owning turf admin) |
 
 **Auth change:** `create-venue` / `create-ground` now require `Authorization: Bearer` **and**
 a `turf_admin`/`super_admin` role. The owner (`admin_user_id`) is taken from the token —
 the old anonymous hardcoded-admin fallback is removed.
+
+**One turf per admin.** A `turf_admin` owns **exactly one** turf and grows it by adding
+**grounds**, not more turfs:
+- `create-venue` rejects a second turf from the same `turf_admin` → `TURF_ALREADY_EXISTS` (409).
+  (App-level; `super_admin` is exempt — it's a moderator, not an owner.)
+- `create-ground` attaches the ground to the **caller's own turf** (found by `admin_user_id`;
+  `turf_id` in the body is honored only for `super_admin`). It sets `turf_id` + `status: available`,
+  bumps `turfs.total_grounds`, and merges the ground's sports into `turfs.sports_available`. No turf
+  yet → `NO_TURF_FOR_ADMIN` (404). *(Previously `create-ground` never set `turf_id` and was unusable.)*
+  In the admin UI, the "Create Turf" action becomes **"Add Ground"** once the turf exists.
 
 **`create-venue` payload (BD address + required set):** required fields now mirror the DB
 `NOT NULL` columns only. The `address_line_1` object is Bangladesh-shaped and maps to columns:
@@ -289,11 +300,14 @@ Implemented in `frontend-engine/src/lib/notify.js`. Live notifications arrive ov
 | POST | `/create` | **required** | `{ ground_id, booking_date, slot, paid?, transaction_id?, payment_proof_url?, event_id?, promo_code?, payment_method?, notes? }` | `201` — created booking |
 | GET | `/my` | **required** | — | `200` — `{ bookings:[...] }` (caller's bookings) |
 | GET | `/manage` | **required, turf_admin/super_admin** | q `status?` | `200` — `{ bookings:[ {...,event_trust,users_bookings_user_idTousers} ] }` (own turfs; super_admin = all) |
-| GET | `/:booking_id` | **required, owner or admin** | — | `200` — booking + `event_trust` (if event attached) |
+| GET | `/dashboard-stats` | **required, turf_admin/super_admin** | — | `200` — overview roll-up: `kpis`, 30-day `series`, `status_breakdown`, `top_grounds`, recent/upcoming/pending lists (own turfs; super_admin = all) |
+| GET | `/:booking_id` | **required, owner or admin** | — | `200` — booking + owner + `event_trust` (if event attached) |
+| GET | `/verify-lookup` | **required, turf_admin/super_admin** | q `code` (`FT-XXXXXXXX`) | `200` — booking resolved from a printed reference (manual verify, turf-scoped) |
 | POST | `/:booking_id/confirm-payment` | **required, turf_admin/super_admin** | `{ admin_notes? }` | `200` — booking → confirmed/completed |
 | POST | `/:booking_id/reject-payment` | **required, turf_admin/super_admin** | `{ admin_notes? }` | `200` — booking → reverts to unpaid hold (proof cleared, slot unlocked) |
 | POST | `/:booking_id/cancel` | **required, owner or admin** | `{ reason? }` | `200` — cancelled OR mutual-cancel request opened |
 | POST | `/:booking_id/cancel/respond` | **required, counterparty** | `{ accept: boolean }` | `200` — cancellation accepted (cancel + refund flag) or declined |
+| POST | `/:booking_id/check-in` | **required, turf_admin/super_admin** | — | `200` — sets `check_in_time` (gate check-in via ticket QR) |
 
 **Slot model:** 90-minute discrete grid — the 16 boolean columns on `slots` (`t0000`…`t2230`).
 The boolean = **admin master enable + paid-lock**: `false` means admin-disabled OR paid-locked, so
@@ -350,7 +364,7 @@ Notifications are sent only *after* the transaction commits.
 | lever | value | where |
 | --- | --- | --- |
 | hold TTL | **2 hours** (`slot_locks.locked_until`) | `UNPAID_HOLD_TTL_MS` |
-| max concurrent unpaid holds per user | **3** | `MAX_UNPAID_HOLDS_PER_USER` → `TOO_MANY_UNPAID_HOLDS` (429) |
+| max concurrent unpaid holds **per turf, per user** | **4** | `MAX_UNPAID_HOLDS_PER_TURF` → `TOO_MANY_UNPAID_HOLDS` (429) |
 | booking writes | **10 / min / user** | `bookingWriteLimiter` → `RATE_LIMITED` (429) |
 | availability + quote reads | **120 / min** | `bookingReadLimiter` |
 
@@ -372,6 +386,51 @@ previously any `turf_admin` could verify payments and read payment proofs on a c
 `GET /available-slots` also returns **`held_slots: string[]`** — slot codes held by an unpaid
 booking. Their grid boolean is still `true` (unpaid doesn't lock), so the client needs this to show
 "held — pay to take it". `GET /my` returns **`hold_expires_at`** on unpaid bookings for the countdown.
+
+### Booking ticket & gate check-in
+
+A **confirmed** booking is a printable, invoice-style receipt on the player's side
+(`/bookings/:id/ticket`). The booking `id` (a random UUID) *is* the ticket identity — there is **no new
+column and no token table**. The receipt shows a QR plus a human-readable reference `FT-XXXXXXXX`
+(first 8 hex of the id).
+
+**The QR encodes the booking DATA** (compact JSON `{ v, id, ref, date, slot, ground, turf, amount }`),
+not a URL — so a scan identifies the exact booking. The encoded snapshot is for instant display only;
+it is **never trusted for the decision**. The turf admin scans it in the dashboard **Verify** tab
+(`/dashboard/bookings/verify`), which pulls the `id` out and re-resolves the booking server-side before
+offering check-in. So a hand-crafted QR resolves to nothing (or someone else's booking they don't own)
+and can't check anyone in.
+
+Two ways for the turf to verify, both landing on the same check-in action:
+- **Scan** — camera reads the QR → `id` → `GET /:booking_id`.
+- **Manual** — type the printed reference → `GET /verify-lookup?code=FT-XXXXXXXX`, which prefix-matches
+  the 8 hex against the booking id **scoped to the caller's turfs** (raw SQL; refuses with
+  `BOOKING_REF_AMBIGUOUS` on the astronomically unlikely double match).
+
+Check-in is `POST /:booking_id/check-in`:
+- scoped to **that turf's** admin (or super_admin) via `isBookingAdmin`, like every other admin action;
+- booking must be `confirmed` (`BOOKING_NOT_CONFIRMED`) — an unpaid hold / unverified claim has no ticket;
+- **single-use**: sets `check_in_time`; a second scan is rejected with `ALREADY_CHECKED_IN`, so a
+  screenshot of a used ticket can't re-enter.
+
+Reuses the existing `bookings.check_in_time` column — **no migration**. `GET /:booking_id` and
+`/verify-lookup` include the booking owner (`users_bookings_user_idTousers`: id + name + avatar) so the
+verify screen can show who the ticket belongs to.
+
+### Dashboard analytics (`GET /dashboard-stats`)
+
+Single roll-up powering the admin **Overview** tab. Turf-scoped (own turfs; super_admin = platform).
+Everything is **derived from existing tables** (`bookings` / `reviews` / `grounds` / `turfs`) — no
+analytics table, no audit table, no new columns. Returns:
+
+- `kpis` — realized revenue (all-time + this month), bookings (total + month), upcoming,
+  `pending_verifications`, unique players, grounds/turfs, `avg_rating`, `occupancy_pct`.
+- `series` — 30-day zero-filled `{ date, bookings, revenue }[]` (revenue counts only `completed`).
+- `status_breakdown` — booking-status counts; `top_grounds` — top 5 by realized revenue.
+- `recent_bookings` / `upcoming_bookings` / `pending_verifications_list` — action lists.
+
+**Realized revenue = `payment_status: completed` only.** A `partial` claim is money awaiting admin
+verification — surfaced as an action item, never counted as earned.
 
 **Schema migration required:** adds `bookings.payment_proof_url String?`,
 `bookings.cancellation_requested_by String? @db.Uuid`, and the composite index

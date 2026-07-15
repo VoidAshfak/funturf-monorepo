@@ -4,6 +4,7 @@ import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
 import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { VenueSerializer } from "../../utils/dataSerializer.js"
+import { logger } from "../../../logs/logger.js";
 
 
 // const getVenues = asyncHandler(async (req, res) => {
@@ -221,6 +222,17 @@ const getVenueById = asyncHandler(async (req, res) => {
 );
 
 const createVenue = asyncHandler(async (req, res) => {
+    // One turf per turf_admin. A turf_admin owns exactly one turf and adds
+    // GROUNDS to it (see createGround) rather than multiple turfs. super_admin is
+    // a platform moderator, not a turf owner, so it isn't capped here.
+    if (req.user.user_type === "turf_admin") {
+        const existing = await pgClient.turfs.findFirst({
+            where: { admin_user_id: req.user.id },
+            select: { id: true },
+        });
+        if (existing) throw ApiError.fromCode(ERROR_CODES.TURF_ALREADY_EXISTS);
+    }
+
     const {
         name,
         description,
@@ -434,81 +446,144 @@ const createVenue = asyncHandler(async (req, res) => {
 });
 
 
-const createGround = asyncHandler(async (req, res) => {
-    const {
-        name,
-        ground_type,
-        sport_type,
-        surface_type,
-        dimensions_length_m,
-        dimensions_width_m,
-        capacity_players,
-        hourly_rate,
-        weekend_hourly_rate,
-        peak_hour_rate,
-        off_peak_hour_rate,
-        currency,
-        minimum_booking_hours,
-        maximum_booking_hours,
-        amenities,
-        images,
-        notes
-    } = req.body
+// Numeric columns on a ground; clients send them as strings from the form.
+const GROUND_NUMERIC_FIELDS = [
+    "capacity_players", "hourly_rate", "weekend_hourly_rate", "peak_hour_rate",
+    "off_peak_hour_rate", "minimum_booking_hours", "maximum_booking_hours",
+    "dimensions_length_m", "dimensions_width_m",
+];
 
-    if (
-        !name
-        || !ground_type
-        || !sport_type
-        || !surface_type
-        || !dimensions_length_m
-        || !dimensions_width_m
-        || !capacity_players
-        || !hourly_rate
-        || !weekend_hourly_rate
-        || !peak_hour_rate
-        || !off_peak_hour_rate
-        || !currency
-        || !minimum_booking_hours
-        || !maximum_booking_hours
-        || !amenities
-        || !images
-        || !notes
-    ) {
+// Cast numeric strings -> Number|null, and blank strings -> null. An empty
+// string is an INVALID Prisma enum value (ground_type/surface_type/status) and
+// would abort the insert, so blanks must become null to fall back to defaults.
+function normalizeGround(raw) {
+    const g = { ...raw };
+    for (const f of GROUND_NUMERIC_FIELDS) {
+        if (g[f] === "" || g[f] === null || g[f] === undefined) g[f] = null;
+        else {
+            const n = Number(g[f]);
+            g[f] = Number.isNaN(n) ? null : n;
+        }
+    }
+    for (const k of Object.keys(g)) {
+        if (g[k] === "") g[k] = null;
+    }
+    return g;
+}
+
+// Add a GROUND to the caller's turf. A turf_admin owns exactly one turf (see the
+// one-turf gate in createVenue), so "create turf" in the admin panel becomes
+// "add ground" once that turf exists. super_admin may target any turf via
+// `turf_id` in the body.
+const createGround = asyncHandler(async (req, res) => {
+    const isSuper = req.user.user_type === "super_admin";
+
+    const turf = isSuper && req.body.turf_id
+        ? await pgClient.turfs.findUnique({
+              where: { id: req.body.turf_id },
+              select: { id: true, sports_available: true },
+          })
+        : await pgClient.turfs.findFirst({
+              where: { admin_user_id: req.user.id },
+              select: { id: true, sports_available: true },
+          });
+
+    // No turf yet -> they must create the turf first (onboarding wizard).
+    if (!turf) throw ApiError.fromCode(ERROR_CODES.NO_TURF_FOR_ADMIN);
+
+    // Minimal required set mirrors createVenue's per-ground rule: name + at least
+    // one sport + an hourly rate > 0. Everything else is optional.
+    const { name, sport_type, hourly_rate } = req.body;
+    const hasSport = Array.isArray(sport_type) ? sport_type.length > 0 : Boolean(sport_type);
+    const hasRate =
+        hourly_rate !== undefined && hourly_rate !== null && hourly_rate !== "" && Number(hourly_rate) > 0;
+    if (!name || !hasSport || !hasRate) {
         throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
-            message: "A required ground field is missing",
+            message: "A ground needs a name, at least one sport, and an hourly rate greater than 0",
         });
     }
 
-    const groundCreated = await pgClient.grounds.create({
-        data: {
-            name,
-            ground_type,
-            sport_type,
-            surface_type,
-            dimensions_length_m,
-            dimensions_width_m,
-            capacity_players,
-            hourly_rate,
-            weekend_hourly_rate,
-            peak_hour_rate,
-            off_peak_hour_rate,
-            currency,
-            minimum_booking_hours,
-            maximum_booking_hours,
-            status: "available",
-            amenities,
-            images,
-            notes
-        }
-    })
+    // Whitelist client-settable columns — turf_id and status are set by us, never
+    // taken from the body (a client can't attach a ground to someone else's turf).
+    const allowed = [
+        "name", "ground_type", "sport_type", "surface_type", "dimensions_length_m",
+        "dimensions_width_m", "capacity_players", "hourly_rate", "weekend_hourly_rate",
+        "peak_hour_rate", "off_peak_hour_rate", "currency", "minimum_booking_hours",
+        "maximum_booking_hours", "amenities", "images", "notes",
+    ];
+    const payload = normalizeGround(Object.fromEntries(allowed.map((k) => [k, req.body[k]])));
+    payload.currency = payload.currency || "BDT";
 
-    if (!groundCreated) {
-        throw new ApiError(500, "Error creating new ground");
+    const created = await pgClient.$transaction(async (tx) => {
+        const ground = await tx.grounds.create({
+            data: { ...payload, turf_id: turf.id, status: "available" },
+        });
+
+        // Keep the turf rollups in sync: ground count + the union of sports so the
+        // venue stays discoverable by every sport its grounds host.
+        const incomingSports = Array.isArray(sport_type) ? sport_type : [sport_type];
+        const mergedSports = Array.from(
+            new Set([...(turf.sports_available ?? []), ...incomingSports].filter(Boolean))
+        );
+        await tx.turfs.update({
+            where: { id: turf.id },
+            data: { total_grounds: { increment: 1 }, sports_available: mergedSports },
+        });
+
+        return ground;
+    });
+
+    return res
+        .status(201)
+        .json(new ApiResponse(201, "New ground created successfully", created));
+})
+
+// Edit a ground's info. Scoped to the ground's OWNING turf admin (super_admin
+// global) — a turf_admin can only edit grounds on the turf they own. Partial
+// update: only the columns present in the body are touched.
+const updateGround = asyncHandler(async (req, res) => {
+    const { ground_id } = req.params;
+    const isSuper = req.user.user_type === "super_admin";
+
+    const ground = await pgClient.grounds.findUnique({
+        where: { id: ground_id },
+        select: { id: true, turfs: { select: { admin_user_id: true } } },
+    });
+    if (!ground) throw ApiError.fromCode(ERROR_CODES.GROUND_NOT_FOUND);
+    if (!isSuper && ground.turfs?.admin_user_id !== req.user.id) {
+        throw ApiError.fromCode(ERROR_CODES.NOT_TURF_ADMIN);
     }
 
-    return res.status(201).json(
-        new ApiResponse(201, "New ground created successfully", groundCreated)
-    )
+    // Client-settable columns only (never turf_id). `status` is editable here so
+    // the owner can flip a ground to maintenance/unavailable.
+    const allowed = [
+        "name", "ground_type", "sport_type", "surface_type", "dimensions_length_m",
+        "dimensions_width_m", "capacity_players", "hourly_rate", "weekend_hourly_rate",
+        "peak_hour_rate", "off_peak_hour_rate", "currency", "minimum_booking_hours",
+        "maximum_booking_hours", "amenities", "images", "notes", "status",
+    ];
+    const raw = {};
+    for (const k of allowed) if (k in req.body) raw[k] = req.body[k];
+
+    // If these are being changed, they must stay valid (can't blank them out).
+    if ("name" in raw && !String(raw.name).trim()) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, { message: "Ground name can't be empty" });
+    }
+    if ("sport_type" in raw) {
+        const ok = Array.isArray(raw.sport_type) ? raw.sport_type.length > 0 : Boolean(raw.sport_type);
+        if (!ok) throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, { message: "Pick at least one sport" });
+    }
+    if ("hourly_rate" in raw && !(Number(raw.hourly_rate) > 0)) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, { message: "Hourly rate must be greater than 0" });
+    }
+
+    const updated = await pgClient.grounds.update({
+        where: { id: ground_id },
+        data: normalizeGround(raw),
+    });
+
+    logger.info(`ground ${ground_id} updated by admin=${req.user.id}`);
+    return res.status(200).json(new ApiResponse(200, "Ground updated", updated));
 })
 
 const getVenueByAdminId = asyncHandler(async (req, res) => {
@@ -537,5 +612,6 @@ export {
     getVenueById,
     createVenue,
     createGround,
+    updateGround,
     getVenueByAdminId
 }

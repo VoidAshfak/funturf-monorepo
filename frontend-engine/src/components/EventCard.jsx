@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
 import { Clock, MapPin, ArrowUpRight, Users } from "lucide-react";
-import Image from "next/image";
+import SportIcon from "./icons/SportIcon";
 import AvatarGroup from "./AvatarGroup";
 
 export default function EventCard({ event }) {
@@ -43,12 +43,7 @@ export default function EventCard({ event }) {
 
                 {/* sport label */}
                 <span className="glass-chip absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize text-foreground">
-                    <Image
-                        src={`/assets/icons/${sport_type?.toLowerCase()}.png`}
-                        alt={sport_type}
-                        width={14}
-                        height={14}
-                    />
+                    <SportIcon sport={sport_type} className="h-3.5 w-3.5 text-primary" />
                     {sport_type}
                 </span>
 

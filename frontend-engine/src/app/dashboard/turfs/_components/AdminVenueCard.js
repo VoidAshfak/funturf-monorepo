@@ -1,12 +1,13 @@
 "use client"
 
-import { getLocationString, getStatusColor } from "@/utils/utility-functions";
+import { flattenSports, getLocationString } from "@/utils/utility-functions";
+import { TurfVerifiedBadge } from "@/components/VerificationBadge";
 import { Clock, Globe, Mail, MapPin, Phone, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function AdminVenueCard({ venue }) {
-    const { id, name, description, status, address_line_1, address_line_2, phone, email, website_url, total_grounds, rating, total_bookings, sports_available, facilities, operating_hours } = venue;
+    const { id, name, description, verified, address_line_1, address_line_2, phone, email, website_url, total_grounds, rating, total_bookings, sports_available, facilities, operating_hours } = venue;
 
     const router = useRouter();
 
@@ -19,9 +20,7 @@ export default function AdminVenueCard({ venue }) {
             <div className="bg-gradient-to-r from-brand-dark to-brand p-6 text-white">
                 <div className="flex items-start justify-between mb-3">
                     <h3 className="text-xl font-bold">{name}</h3>
-                    <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
-                        <span>{status}</span>
-                    </div>
+                    <TurfVerifiedBadge verified={verified} />
                 </div>
                 <p className="text-white/80 text-sm">{description}</p>
             </div>
@@ -88,8 +87,8 @@ export default function AdminVenueCard({ venue }) {
                     <div>
                         <p className="text-xs font-semibold text-muted-foreground mb-2">SPORTS AVAILABLE</p>
                         <div className="flex flex-wrap gap-2">
-                            {sports_available.map((sport, idx) => (
-                                <span key={idx} className="px-3 py-1 bg-primary/15 text-primary rounded-full text-xs font-medium">
+                            {flattenSports(sports_available).map((sport) => (
+                                <span key={sport} className="px-3 py-1 bg-primary/15 text-primary rounded-full text-xs font-medium capitalize">
                                     {sport}
                                 </span>
                             ))}

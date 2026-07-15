@@ -1,4 +1,5 @@
 import { getUserByUserId } from "@/utils/getData";
+import { flattenSports } from "@/utils/utility-functions";
 import { format } from "date-fns";
 import {
     BadgeCheck,
@@ -8,7 +9,7 @@ import {
     MessageCircle,
     Phone,
 } from "lucide-react";
-import Image from "next/image";
+import SportIcon from "./icons/SportIcon";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
 import ConnectButton from "./ConnectButton";
@@ -113,19 +114,14 @@ export default async function ProfileCard({ userId }) {
                     </div>
 
                     {/* sports */}
-                    {sports.length > 0 && (
+                    {flattenSports(sports).length > 0 && (
                         <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
-                            {sports.map((sport) => (
+                            {flattenSports(sports).map((sport) => (
                                 <span
                                     key={sport}
                                     className="glass-chip inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize text-foreground"
                                 >
-                                    <Image
-                                        src={`/assets/icons/${String(sport).toLowerCase()}.png`}
-                                        alt={sport}
-                                        width={14}
-                                        height={14}
-                                    />
+                                    <SportIcon sport={sport} className="h-3.5 w-3.5 text-primary" />
                                     {sport}
                                 </span>
                             ))}

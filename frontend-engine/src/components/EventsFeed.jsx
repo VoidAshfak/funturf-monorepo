@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Link from "next/link";
-import Image from "next/image";
+import SportIcon from "./icons/SportIcon";
 import { useGSAP } from "@gsap/react";
 import {
     CalendarDays,
@@ -332,7 +332,7 @@ function EventFilters({
                         onClick={() => setSport(s.name)}
                         label={s.name}
                         count={s.count}
-                        icon={`/assets/icons/${s.name.toLowerCase()}.png`}
+                        sport={s.name}
                     />
                 ))}
             </div>
@@ -373,7 +373,7 @@ function FeedSkeleton() {
     );
 }
 
-function Chip({ active, onClick, label, count, icon }) {
+function Chip({ active, onClick, label, count, sport }) {
     return (
         <button
             onClick={onClick}
@@ -384,15 +384,7 @@ function Chip({ active, onClick, label, count, icon }) {
                     : "border-border bg-card/60 text-muted-foreground hover:border-primary/40 hover:text-foreground"
             )}
         >
-            {icon && (
-                <Image
-                    src={icon}
-                    alt={label}
-                    width={16}
-                    height={16}
-                    className="h-4 w-4 object-contain"
-                />
-            )}
+            {sport && <SportIcon sport={sport} className="h-4 w-4" />}
             {label}
             {typeof count === "number" && (
                 <span

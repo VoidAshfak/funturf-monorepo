@@ -4,7 +4,8 @@ import MapDialog from "@/components/MapDialog"
 import { Button } from "@/components/ui/button"
 import VenueListWrapper from "@/components/VenueListWrapper"
 import { getIndividualVenueByVenueId } from "@/utils/getData"
-import { getLocationString } from "@/utils/utility-functions"
+import { flattenSports, getLocationString } from "@/utils/utility-functions"
+import SportIcon from "@/components/icons/SportIcon"
 import {
     CalendarRange,
     Clock,
@@ -118,19 +119,14 @@ const VenueDetails = async ({ params }) => {
                     </h1>
 
                     {/* sports chips */}
-                    {sports_available.length > 0 && (
+                    {flattenSports(sports_available).length > 0 && (
                         <div className="flex flex-wrap gap-2">
-                            {sports_available.map((sport) => (
+                            {flattenSports(sports_available).map((sport) => (
                                 <span
                                     key={sport}
                                     className="glass-chip inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize text-foreground"
                                 >
-                                    <Image
-                                        src={`/assets/icons/${String(sport).toLowerCase()}.png`}
-                                        alt={sport}
-                                        width={14}
-                                        height={14}
-                                    />
+                                    <SportIcon sport={sport} className="h-3.5 w-3.5 text-primary" />
                                     {sport}
                                 </span>
                             ))}

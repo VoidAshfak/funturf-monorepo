@@ -5,11 +5,14 @@ import {
     createBooking,
     getMyBookings,
     getBookingById,
+    lookupBookingByRef,
     getManageBookings,
+    getDashboardStats,
     confirmPayment,
     rejectPayment,
     cancelBooking,
     respondCancellation,
+    checkInBooking,
 } from "../../controllers/venue/booking.controller.js";
 import {
     verifyJWT,
@@ -32,6 +35,16 @@ router.route("/quote").get(bookingReadLimiter, calculateBookingPrice);
 // scopes each action to the turf the caller actually owns.
 router.route("/manage").get(verifyJWT, authorizeRoles("turf_admin", "super_admin"), getManageBookings);
 
+// Overview analytics roll-up for the admin dashboard.
+router
+    .route("/dashboard-stats")
+    .get(verifyJWT, authorizeRoles("turf_admin", "super_admin"), bookingReadLimiter, getDashboardStats);
+
+// Resolve a printed ticket reference for MANUAL verification (admin-scoped).
+router
+    .route("/verify-lookup")
+    .get(verifyJWT, authorizeRoles("turf_admin", "super_admin"), bookingReadLimiter, lookupBookingByRef);
+
 // User bookings. verifyJWT first, so the limiter can key on the user id.
 router.route("/create").post(verifyJWT, bookingWriteLimiter, createBooking);
 router.route("/my").get(verifyJWT, getMyBookings);
@@ -47,6 +60,12 @@ router
 // Cancellation (owner or admin) + mutual-cancel response.
 router.route("/:booking_id/cancel").post(verifyJWT, bookingWriteLimiter, cancelBooking);
 router.route("/:booking_id/cancel/respond").post(verifyJWT, bookingWriteLimiter, respondCancellation);
+
+// Gate check-in: turf admin scans the player's ticket QR (carries the booking id)
+// to confirm attendance. Controller scopes it to the turf the caller owns.
+router
+    .route("/:booking_id/check-in")
+    .post(verifyJWT, authorizeRoles("turf_admin", "super_admin"), bookingWriteLimiter, checkInBooking);
 
 // Dynamic read — keep last (owner or admin; enforced in controller).
 router.route("/:booking_id").get(verifyJWT, getBookingById);

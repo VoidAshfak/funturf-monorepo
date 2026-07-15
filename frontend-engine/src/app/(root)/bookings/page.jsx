@@ -11,6 +11,7 @@ import {
     Loader2,
     LogIn,
     MapPin,
+    QrCode,
     Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,20 @@ export default function MyBookingsPage() {
                                 </div>
 
                                 {b.event_trust && <EventTrustPanel trust={b.event_trust} />}
+
+                                {/* Confirmed booking -> printable QR ticket for the gate. */}
+                                {b.booking_status === "confirmed" && (
+                                    <Button
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-4 w-full border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+                                    >
+                                        <Link href={`/bookings/${b.id}/ticket`}>
+                                            <QrCode className="h-4 w-4" /> View ticket
+                                        </Link>
+                                    </Button>
+                                )}
 
                                 {/* Actions */}
                                 {isActive(b) && (

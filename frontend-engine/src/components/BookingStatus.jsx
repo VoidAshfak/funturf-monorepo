@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Hourglass, ShieldCheck, Users } from "lucide-react";
 
@@ -50,38 +53,62 @@ export function PaymentStatusBadge({ status }) {
     );
 }
 
+// "3660000ms" -> "1h 01m 00s" / "58m 09s" / "0m 42s". Seconds only appear under
+// the last hour so the badge doesn't jitter for a hold that's hours out.
+function formatCountdown(msLeft) {
+    const totalSec = Math.floor(msLeft / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+    return `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
 /**
- * Countdown on an unpaid hold.
+ * LIVE countdown on an unpaid hold.
  *
  * An unpaid booking is only a 2-hour soft hold: it never locks the slot, anyone
- * can take it by paying, and it self-cancels when the timer runs out. Showing
- * the deadline is the difference between "my booking vanished" and "I knew I had
+ * can take it by paying, and it self-cancels when the timer runs out. This ticks
+ * every second so the holder watches the clock run down instead of seeing a
+ * stale number — the difference between "my booking vanished" and "I knew I had
  * to pay". `expiresAt` comes from the API as `hold_expires_at`.
  */
 export function HoldExpiryBadge({ expiresAt }) {
+    // Re-render on a 1s tick. `now` is the only state; everything else derives.
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        if (!expiresAt) return;
+        const id = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(id);
+    }, [expiresAt]);
+
     if (!expiresAt) return null;
 
-    const msLeft = new Date(expiresAt).getTime() - Date.now();
-    if (msLeft <= 0) return null;
-
-    const minutes = Math.round(msLeft / 60000);
-    const label =
-        minutes >= 60
-            ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
-            : `${minutes}m`;
+    const msLeft = new Date(expiresAt).getTime() - now;
+    if (msLeft <= 0) {
+        // Ran out while the page was open. The backend sweeper cancels it; show a
+        // terminal state rather than a live timer so the row doesn't look active.
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
+                <Hourglass className="h-3 w-3" />
+                Hold expired
+            </span>
+        );
+    }
 
     // Under 30 minutes left is worth alarming about.
-    const urgent = minutes < 30;
+    const urgent = msLeft < 30 * 60 * 1000;
 
     return (
         <span
             className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold",
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums",
                 urgent ? "bg-destructive/15 text-destructive" : "bg-amber-500/15 text-amber-500"
             )}
         >
             <Hourglass className="h-3 w-3" />
-            Hold expires in {label}
+            Expires in {formatCountdown(msLeft)}
         </span>
     );
 }

@@ -1,7 +1,6 @@
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import AppSidebar from "./_components/AppSidebar";
-import FunBreadcrumb from "@/components/FunBreadcrumb";
-import NotificationBell from "@/components/NotificationBell";
+import DashboardHeader from "@/components/DashboardHeader";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
@@ -34,13 +33,7 @@ export default async function DashboardLayout({ children }) {
         <SidebarProvider>
             <AppSidebar />
             <main className="w-full">
-                <div className="border-b border-border p-2.5 flex items-center gap-3 sticky top-0 glass-nav z-10">
-                    <SidebarTrigger />
-                    <FunBreadcrumb />
-                    <div className="ml-auto">
-                        <NotificationBell />
-                    </div>
-                </div>
+                <DashboardHeader />
                 <div className="p-5">
                     {children}
                 </div>

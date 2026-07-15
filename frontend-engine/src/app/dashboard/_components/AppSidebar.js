@@ -13,8 +13,9 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Building2, CalendarCheck, LayoutDashboard, LogOut, Plus, User } from "lucide-react";
+import { Building2, CalendarCheck, LayoutDashboard, LogOut, Plus, ScanLine, User } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
+import { useGetVenuesByAdminQuery } from "@/store/api/apiSlice";
 import { disconnectSocket } from "@/lib/socket";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,8 +23,9 @@ import { usePathname } from "next/navigation";
 
 const MANAGE_LINKS = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
-    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck },
-    { href: "/dashboard/turfs", label: "My Turfs", icon: Building2 },
+    { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck, exact: true },
+    { href: "/dashboard/bookings/verify", label: "Verify Tickets", icon: ScanLine },
+    { href: "/dashboard/turfs", label: "Manage Grounds", icon: Building2 },
 ];
 
 export default function AppSidebar() {
@@ -35,6 +37,15 @@ export default function AppSidebar() {
 
     const user = session?.user;
     const profileHref = user?.id ? `/profile/${user.id}` : "/dashboard";
+
+    // One turf per admin: once the turf exists, "Create Turf" becomes "Add Ground".
+    // The dashboard layout already guarantees a turf_admin here HAS a turf, so
+    // default to that while the list loads (avoids a Create->Add flicker).
+    const { data: venues } = useGetVenuesByAdminQuery(user?.id, { skip: !user?.id });
+    const hasTurf = venues ? venues.length > 0 : user?.user_type === "turf_admin";
+    const primaryAction = hasTurf
+        ? { href: "/dashboard/turfs/add-ground", label: "Add Ground" }
+        : { href: "/dashboard/turfs/add-new-turf", label: "Create Turf" };
 
     // Display name + initials for the avatar fallback (no email on the session).
     const displayName =
@@ -57,9 +68,9 @@ export default function AppSidebar() {
                 </Link>
                 <div className="px-2 pb-2">
                     <Button asChild className="green-glow w-full rounded-full">
-                        <Link href="/dashboard/turfs/add-new-turf">
+                        <Link href={primaryAction.href}>
                             <Plus className="mr-2 h-4 w-4" />
-                            Create Turf
+                            {primaryAction.label}
                         </Link>
                     </Button>
                 </div>

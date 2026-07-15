@@ -17,7 +17,7 @@ import {
     Trophy,
     Users,
 } from "lucide-react"
-import Image from "next/image"
+import SportIcon from "@/components/icons/SportIcon"
 import Link from "next/link"
 
 export default async function EventDetails({ params }) {
@@ -86,12 +86,7 @@ export default async function EventDetails({ params }) {
                     <div className="flex items-center justify-between">
                         {sport && (
                             <span className="glass-chip inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold capitalize text-foreground">
-                                <Image
-                                    src={`/assets/icons/${String(sport).toLowerCase()}.png`}
-                                    alt={sport}
-                                    width={14}
-                                    height={14}
-                                />
+                                <SportIcon sport={sport} className="h-3.5 w-3.5 text-primary" />
                                 {sport}
                             </span>
                         )}

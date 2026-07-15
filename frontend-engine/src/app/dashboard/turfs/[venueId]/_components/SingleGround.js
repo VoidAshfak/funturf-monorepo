@@ -1,36 +1,35 @@
 import { Button } from "@/components/ui/button";
+import { GroundStatusBadge } from "@/components/VerificationBadge";
+import ImageWithFallback from "@/components/ImageWithFallback";
+import { flattenSports } from "@/utils/utility-functions";
 import { Edit } from "lucide-react";
-import Image from "next/image";
+import Link from "next/link";
 
-export default function SingleGround({ ground }) {
+export default function SingleGround({ ground, venueId }) {
     return (
         <div key={ground.id} className="glass-card rounded-lg overflow-hidden hover:border-primary/50 transition">
-            <div className="relative">
-                <Image
-                    src={ground.images[0]}
+            {/* Banner — fixed height so object-cover crops; falls back to a
+                placeholder when the ground has no photo yet. */}
+            <div className="relative h-44 w-full">
+                <ImageWithFallback
+                    src={ground.images?.[0]}
                     alt={ground.name}
-                    width={800}
-                    height={200}
-                    className="w-full object-cover"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    className="object-cover"
                 />
-                {/* <Button
-                    className="absolute top-3 right-3 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-600 p-2 rounded-lg shadow-md transition flex items-center gap-2 font-medium"
-                >
-                    <Edit className="w-4 h-4" />
-                    Edit Ground
-                </Button> */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                <Button asChild size="sm" className="absolute right-3 top-3 rounded-lg green-glow">
+                    <Link href={`/dashboard/turfs/${venueId}/grounds/${ground.id}/edit`}>
+                        <Edit className="h-4 w-4" />
+                        Edit
+                    </Link>
+                </Button>
             </div>
             <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                     <h4 className="text-lg font-bold text-foreground">{ground.name}</h4>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${ground.status === 'available'
-                        ? 'bg-green-100 text-green-700'
-                        : ground.status === 'maintenance'
-                            ? 'bg-orange-100 text-orange-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                        {ground.status === 'available' ? 'Available' : ground.status === 'maintenance' ? 'Maintenance' : 'Unavailable'}
-                    </span>
+                    <GroundStatusBadge status={ground.status} />
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
@@ -39,7 +38,9 @@ export default function SingleGround({ ground }) {
                     </div>
                     <div>
                         <span className="text-muted-foreground">Sport:</span>
-                        {/* <span className="ml-2 font-medium text-foreground">{ground.sport_type.map(sport => sport).join(", ")}</span> */}
+                        <span className="ml-2 font-medium capitalize text-foreground">
+                            {flattenSports(ground.sport_type).join(", ")}
+                        </span>
                     </div>
                     <div>
                         <span className="text-muted-foreground">Surface:</span>

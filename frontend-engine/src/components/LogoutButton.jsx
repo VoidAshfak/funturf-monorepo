@@ -10,13 +10,15 @@ export default function LogoutButton() {
         <Button
             variant="ghost"
             onClick={() => {
+                // Close the notification socket before the token is gone,
+                // otherwise a dead authenticated connection lingers.
                 disconnectSocket();
-                signOut();
+                signOut({ callbackUrl: "/" });
             }}
-            className="justify-start"
+            className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
-            <LogOut className="text-red-400" />
-            <span className="text-red-400" >Log out</span>
+            <LogOut className="h-4 w-4" />
+            <span>Log out</span>
         </Button>
     )
 }

@@ -9,6 +9,18 @@ export const getStatusColor = (status) => {
     }
 };
 
+/**
+ * Normalize a venue/ground sports value into a flat list of unique sport names.
+ *
+ * A ground's `sport_type` is a MultiSelect (an array like ["Football","Cricket"]),
+ * and `sports_available` can arrive nested the same way. Rendering such a value
+ * directly gives React a comma-joined key ("Football,Cricket") — a duplicate-key
+ * warning — and builds broken asset URLs ("football,cricket.png"). Always run the
+ * list through this before mapping it to chips.
+ */
+export const flattenSports = (value) =>
+    [...new Set((Array.isArray(value) ? value : [value]).flat().filter(Boolean).map(String))];
+
 export const getLocationString = (locationObject = {}) => {
     const { area, city, state, postal_code, country } = locationObject;
     const parts = [];

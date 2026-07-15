@@ -17,13 +17,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+    SheetTrigger,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
@@ -199,17 +200,20 @@ export default function BookingDialog({ venue }) {
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>{triggerBtn}</DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Book {venue?.name}</DialogTitle>
-                    <DialogDescription>
+        // Right-side drawer. Sheet ships the slide-in/out transition
+        // (open ~500ms / close ~300ms). Layout is a fixed header, a scrollable
+        // body, and a pinned footer so the submit CTA is always reachable.
+        <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>{triggerBtn}</SheetTrigger>
+            <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-lg">
+                <SheetHeader className="border-b border-border">
+                    <SheetTitle>Book {venue?.name}</SheetTitle>
+                    <SheetDescription>
                         Pick a ground, date and a 90-minute slot.
-                    </DialogDescription>
-                </DialogHeader>
+                    </SheetDescription>
+                </SheetHeader>
 
-                <div className="space-y-5">
+                <div className="flex-1 space-y-5 overflow-y-auto p-4">
                     {/* Ground */}
                     {grounds.length > 1 && (
                         <div className="space-y-1.5">
@@ -502,6 +506,9 @@ export default function BookingDialog({ venue }) {
                         </div>
                     )}
 
+                </div>
+
+                <SheetFooter className="border-t border-border">
                     <Button
                         className="w-full green-glow"
                         disabled={!slot || submitting}
@@ -514,8 +521,8 @@ export default function BookingDialog({ venue }) {
                         )}
                         {isPaidMode ? "Place paid booking" : "Place unpaid hold"}
                     </Button>
-                </div>
-            </DialogContent>
-        </Dialog>
+                </SheetFooter>
+            </SheetContent>
+        </Sheet>
     );
 }

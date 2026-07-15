@@ -3,7 +3,7 @@
 import { useMemo, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Link from "next/link";
-import Image from "next/image";
+import SportIcon from "./icons/SportIcon";
 import { useGSAP } from "@gsap/react";
 import {
     selectEventFilters,
@@ -266,7 +266,7 @@ export default function EventsExplorer({ events = [] }) {
                             onClick={() => setSport(s.name)}
                             label={s.name}
                             count={s.count}
-                            icon={`/assets/icons/${s.name.toLowerCase()}.png`}
+                            sport={s.name}
                         />
                     ))}
                 </div>
@@ -384,7 +384,7 @@ function PageButton({ active, disabled, children, ...props }) {
     );
 }
 
-function Chip({ active, onClick, label, count, icon }) {
+function Chip({ active, onClick, label, count, sport }) {
     return (
         <button
             onClick={onClick}
@@ -394,9 +394,7 @@ function Chip({ active, onClick, label, count, icon }) {
                     : "border-border bg-card/60 text-muted-foreground hover:border-primary/40 hover:text-foreground"
             }`}
         >
-            {icon && (
-                <Image src={icon} alt={label} width={16} height={16} className="h-4 w-4 object-contain" />
-            )}
+            {sport && <SportIcon sport={sport} className="h-4 w-4" />}
             {label}
             <span
                 className={`rounded-full px-1.5 text-[11px] font-bold ${

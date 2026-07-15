@@ -25,7 +25,11 @@ const SLOT_MINUTES = 90;
 //   * a user may only hold a few slots at once.
 // A PAID claim has neither limit — it carries a real transaction to verify.
 export const UNPAID_HOLD_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
-export const MAX_UNPAID_HOLDS_PER_USER = 3;
+// Cap is PER TURF: a user may sit on at most this many unpaid holds within a
+// single turf at once. Scoping it per-turf (rather than one global ceiling) lets
+// a genuine organizer hold a few slots at each of several turfs while still
+// stopping anyone from carpeting one turf's grid with free holds.
+export const MAX_UNPAID_HOLDS_PER_TURF = 4;
 
 // Paid/confirmed claims aren't time-boxed like unpaid holds; they stay locked
 // until the booking is played or cancelled. Park the lock far in the future.
@@ -207,10 +211,20 @@ export async function expireStaleHolds({ groundId, date } = {}) {
     return expired.length;
 }
 
-/** How many live unpaid holds is this user sitting on? (The cap is the anti-spam lever.) */
-export function countActiveUnpaidHolds(userId) {
+/**
+ * How many live unpaid holds is this user sitting on WITHIN one turf?
+ *
+ * `slot_locks` only carries `ground_id`, so we reach the turf through the
+ * grounds relation (`grounds.turf_id`). This is the anti-spam lever enforced in
+ * createBooking against MAX_UNPAID_HOLDS_PER_TURF.
+ */
+export function countActiveUnpaidHoldsForTurf(userId, turfId) {
     return pgClient.slot_locks.count({
-        where: { locked_by_user_id: userId, locked_until: unpaidLockWindow() },
+        where: {
+            locked_by_user_id: userId,
+            locked_until: unpaidLockWindow(),
+            grounds: { turf_id: turfId },
+        },
     });
 }
 

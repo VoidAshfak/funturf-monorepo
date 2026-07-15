@@ -48,6 +48,27 @@ export const apiSlice = createApi({
             }),
             invalidatesTags: [{ type: "Venues", id: "LIST" }],
         }),
+        // Add a ground to the caller's turf (turf-scoped server-side).
+        createGround: builder.mutation({
+            query: (body) => ({
+                url: "venues/create-ground",
+                method: "POST",
+                body,
+            }),
+            invalidatesTags: [{ type: "Venues", id: "LIST" }],
+        }),
+        // Edit a ground's info (turf-scoped server-side).
+        updateGround: builder.mutation({
+            query: ({ groundId, ...body }) => ({
+                url: `venues/grounds/${groundId}`,
+                method: "PATCH",
+                body,
+            }),
+            invalidatesTags: (r, e, { venueId }) => [
+                { type: "Venues", id: "LIST" },
+                ...(venueId ? [{ type: "Venue", id: venueId }] : []),
+            ],
+        }),
 
         // ---- Events ----
         // Paginated infinite-scroll feed. Args: { page, limit, sport, timeframe, q, openOnly }.
@@ -469,6 +490,7 @@ export const apiSlice = createApi({
             invalidatesTags: [
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "STATS" }, // keep the dashboard overview fresh
                 { type: "Bookings", id: "SLOTS" }, // the slot grid shows own bookings + holds
             ],
         }),
@@ -483,6 +505,18 @@ export const apiSlice = createApi({
             query: (bookingId) => `bookings/${bookingId}`,
             transformResponse: (res) => res?.data ?? null,
             providesTags: (r, e, bookingId) => [{ type: "Booking", id: bookingId }],
+        }),
+        // Resolve a printed ticket reference (FT-XXXXXXXX) to a booking, for
+        // MANUAL verification. Admin-scoped server-side. Used via the lazy hook.
+        verifyBookingLookup: builder.query({
+            query: (code) => ({ url: "bookings/verify-lookup", params: { code } }),
+            transformResponse: (res) => res?.data ?? null,
+        }),
+        // Turf-admin dashboard analytics roll-up (GET /bookings/dashboard-stats).
+        getDashboardStats: builder.query({
+            query: () => "bookings/dashboard-stats",
+            transformResponse: (res) => res?.data ?? null,
+            providesTags: [{ type: "Bookings", id: "STATS" }],
         }),
         // Turf-admin management list (GET /bookings/manage?status=).
         getManageBookings: builder.query({
@@ -500,6 +534,7 @@ export const apiSlice = createApi({
             invalidatesTags: (r, e, { bookingId }) => [
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "STATS" }, // keep the dashboard overview fresh
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "SLOTS" }, // payment state changes the grid too
             ],
@@ -514,6 +549,7 @@ export const apiSlice = createApi({
             invalidatesTags: (r, e, { bookingId }) => [
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "STATS" }, // keep the dashboard overview fresh
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "SLOTS" }, // payment state changes the grid too
             ],
@@ -529,7 +565,21 @@ export const apiSlice = createApi({
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "STATS" }, // keep the dashboard overview fresh
                 { type: "Bookings", id: "SLOTS" }, // the slot grid shows own bookings + holds
+            ],
+        }),
+        // Turf admin checks a player in by scanning their ticket QR.
+        checkInBooking: builder.mutation({
+            query: (bookingId) => ({
+                url: `bookings/${bookingId}/check-in`,
+                method: "POST",
+            }),
+            invalidatesTags: (r, e, bookingId) => [
+                { type: "Booking", id: bookingId },
+                { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "STATS" }, // keep the dashboard overview fresh
+                { type: "Bookings", id: "MINE" },
             ],
         }),
         // Respond to a mutual cancellation request ({ accept: boolean }).
@@ -543,6 +593,7 @@ export const apiSlice = createApi({
                 { type: "Booking", id: bookingId },
                 { type: "Bookings", id: "MINE" },
                 { type: "Bookings", id: "MANAGE" },
+                { type: "Bookings", id: "STATS" }, // keep the dashboard overview fresh
                 { type: "Bookings", id: "SLOTS" }, // the slot grid shows own bookings + holds
             ],
         }),
@@ -609,6 +660,8 @@ export const {
     useGetVenuesByAdminQuery,
     useGetVenueByIdQuery,
     useCreateVenueMutation,
+    useCreateGroundMutation,
+    useUpdateGroundMutation,
     useGetEventsQuery,
     useGetEventByIdQuery,
     useCreateEventMutation,
@@ -645,11 +698,15 @@ export const {
     useCreateBookingMutation,
     useGetMyBookingsQuery,
     useGetBookingByIdQuery,
+    useLazyGetBookingByIdQuery,
+    useLazyVerifyBookingLookupQuery,
     useGetManageBookingsQuery,
+    useGetDashboardStatsQuery,
     useConfirmBookingPaymentMutation,
     useRejectBookingPaymentMutation,
     useCancelBookingMutation,
     useRespondCancellationMutation,
+    useCheckInBookingMutation,
     // comments
     useGetCommentsQuery,
     useCreateCommentMutation,

@@ -23,9 +23,13 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
+    // <html>/<body> are emitted by the server root layout directly. All
+    // providers live INSIDE <body>; wrapping <body> in a client provider puts a
+    // client boundary across the html→body edge and triggers hydration errors
+    // on hard-loaded pages (the post-login redirect landings).
     <html lang="en" suppressHydrationWarning className={`${inter.variable} ${geistMono.variable}`}>
-      <NextAuthSessionProvider>
-        <body className="font-sans antialiased">
+      <body className="font-sans antialiased">
+        <NextAuthSessionProvider>
           <ReduxProvider>
             <ThemeProvider>
               {children}
@@ -33,8 +37,8 @@ export default function RootLayout({ children }) {
               <Toaster />
             </ThemeProvider>
           </ReduxProvider>
-        </body>
-      </NextAuthSessionProvider>
+        </NextAuthSessionProvider>
+      </body>
     </html>
   );
 }
