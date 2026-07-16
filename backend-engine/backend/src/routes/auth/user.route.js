@@ -30,8 +30,15 @@ router.route("/register").post(
 );
 router.route("/login").post(loginUser);
 router.route("/refresh").post(tokenRefresh);
+
+// Cloudinary upload signature — AUTH REQUIRED. This mints a credential that lets
+// the holder upload into our Cloudinary account, so leaving it public let anyone
+// on the internet fill our storage (and our bill) with arbitrary files. Signing
+// is only ever needed by a signed-in user uploading their own media.
+// Declared BEFORE "/:user_id" — a static path must never be reachable as an id.
+router.route("/media/signature").post(verifyJWT, signMedia);
+
 router.route("/:user_id").get(getUserById);
-router.route("/media/signature").post(signMedia)
 
 
 // protected routes

@@ -113,12 +113,6 @@ const registerUser = asyncHandler(async (req, res) => {
         });
     }
 
-    const sports = req.body.sports || [];
-    const teamsJoined = 0;
-    const eventsJoined = 0;
-    const friends = 0;
-    const username = email.split("@")[0];
-
     // Self-service account type, but whitelisted: a signup may only choose
     // "player" or "turf_admin". "super_admin" is NEVER assignable via public
     // register (must be granted out-of-band). Anything else falls back to player.
@@ -179,6 +173,10 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Failed to create user");
     }
 
+    // NEVER select password_hash here: this row is spread straight into the
+    // response below, so selecting it would hand the caller back the bcrypt hash
+    // of their own password. Login deliberately selects it (it has to compare
+    // against it) and strips it before responding — this path has no such need.
     const newlyCreatedUser = await pgClient.users.findUnique({
         where: {
             id: user.id
@@ -186,7 +184,6 @@ const registerUser = asyncHandler(async (req, res) => {
         select: {
             id: true,
             email: true,
-            password_hash: true,
             first_name: true,
             last_name: true,
             status: true,
@@ -257,10 +254,14 @@ const loginUser = asyncHandler(async (req, res) => {
         throw ApiError.fromCode(ERROR_CODES.INVALID_CREDENTIALS);
     }
 
-    const sports = req.body.sports || [];
-    const teamsJoined = 0;
-    const eventsJoined = 0;
-    const friends = 0;
+    // Derived, not stored. Everything else the client needs about the account is
+    // already on `response`.
+    //
+    // This response deliberately carries NO activity aggregates. It used to ship
+    // `sports: []`, `teamsJoined/eventsJoined/friends: 0` — all hardcoded, none
+    // backed by a query, so they were simply wrong for every user who had ever
+    // played. A caller that wants those must read GET /users/:user_id, which
+    // counts them live.
     const username = user.email.split("@")[0];
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user.id)
@@ -272,10 +273,6 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const userResponse = {
         ...response,
-        sports,
-        teamsJoined,
-        eventsJoined,
-        friends,
         username,
         accessToken: accessToken,
         refreshToken: refreshToken,

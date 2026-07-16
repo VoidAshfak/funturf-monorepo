@@ -5,6 +5,11 @@ Base URL: `http://localhost:8080/api/v1` (dev) · `https://app4-osju.onrender.co
 This document is the **contract between the backend and the frontend**. Update it in the
 same change that touches a route, so `frontend-engine` can be kept in sync.
 
+> **Machine-readable spec:** [`docs/openapi.yaml`](./openapi.yaml) covers the same surface
+> as an OpenAPI 3.0.3 document — every endpoint, required vs. optional fields, error codes
+> and examples. Use it for client generation, mock servers and Swagger/Redoc rendering, and
+> update it alongside this file when a route changes.
+
 ## Response envelopes
 
 Every endpoint returns one of two shapes.
@@ -125,10 +130,10 @@ local `.env` keeps `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1`.
 | method | path | auth | body / params | success `data` |
 | --- | --- | --- | --- | --- |
 | POST | `/register` | public | `{ first_name, last_name, email, password_hash, phone?, date_of_birth?, gender?, profile_picture_url?, bio?, sports?, division?, district?, latitude?, longitude?, user_type? }` | `201` — user fields + `accessToken`, `refreshToken`, `tokenExpiresIn` |
-| POST | `/login` | public | `{ email, password }` | `200` — `{ user: { ...profile, sports, teamsJoined, eventsJoined, friends, username, accessToken, refreshToken, tokenExpiresIn } }` |
+| POST | `/login` | public | `{ email, password }` | `200` — `{ user: { ...profile, username, accessToken, refreshToken, tokenExpiresIn } }` |
 | POST | `/refresh` | public | `{ refresh_token }` | `200` — `{ accessToken, refreshToken, tokenExpiresIn }` |
 | GET | `/:user_id` | public | path `user_id` | `200` — full public profile: account fields (`gender`, `division`, `district`, `latitude`, `longitude`, verification, `created_at`, …) + `player_profile` (skill, positions, experience, foot, jersey, height/weight, play time, travel, reliability, games) + **live** `eventsJoined`, `gamesOrganized`, `friends`, flat `rating`, `sports`, `username` |
-| POST | `/media/signature` | public | — | media upload signature |
+| POST | `/media/signature` | ✅ | — | `200` — `{ signature, timestamp, cloudname, apikey }` (Cloudinary direct-upload signature) |
 
 **Errors:** `VALIDATION_ERROR` (missing fields), `USER_ALREADY_EXISTS` (register, email/phone clash),
 `INVALID_CREDENTIALS` (login — same code for unknown email and wrong password, by design),
@@ -142,6 +147,16 @@ Notes:
   profile's reputation rating. `player_profile` is `null` for a user who hasn't filled one in yet.
 - `password_hash` in the register body is the **plaintext** password; the `encryptPassword`
   middleware hashes it before the controller runs (field name is historical).
+- **No auth response ever returns credential material.** `register` does not select
+  `password_hash` (it used to, and echoed the caller's own bcrypt hash straight back);
+  `login` selects it only to `bcrypt.compare` and strips it before responding. If you add a
+  field to either `select`, keep it out of the response spread.
+- **`login` carries no activity aggregates.** It previously shipped `sports: []` and
+  `teamsJoined / eventsJoined / friends: 0` — all hardcoded, so they were wrong for anyone who
+  had ever played, and nothing consumed them. Read `GET /:user_id` for the live counts.
+- **`POST /media/signature` requires auth.** The signature *is* the upload credential, so a
+  public endpoint let anyone upload into our Cloudinary account. It also returns the standard
+  `ApiResponse` envelope now (it used to return a bare object — the only endpoint that did).
 - Register returns `201` (was `200`).
 - Login does **not** reveal whether an email exists — always `INVALID_CREDENTIALS`.
 - `user_type` at register is **whitelisted**: only `player` (default) or `turf_admin` are
