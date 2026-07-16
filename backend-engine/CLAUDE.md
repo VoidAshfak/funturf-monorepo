@@ -8,6 +8,7 @@ Run all of these from `backend/`.
 
 ```bash
 npm run dev                  # start API with nodemon + dotenv (port 8080)
+npm run dev:docs             # same, but forces Swagger UI on at /api/v1/docs
 
 # Prisma (two separate datasources — see Architecture)
 npm run prisma:generate      # regenerate BOTH clients (pg + mongo) — run after any schema edit
@@ -58,6 +59,7 @@ Route mounts (`app.js`): `/api/v1/{users, turfmates, events, venues, bookings}`.
 - **DTO shaping**: `utils/dataSerializer.js` (e.g. `VenueSerializer`) converts Prisma rows to API DTOs before responding.
 - **File uploads**: `multer` middleware (`middlewares/file-upload/`) + Cloudinary (`utils/mediaUpload.js`).
 - **Time/slots**: `utils/timeAndDateFormatting.js` and `middlewares/venue/booking.middleware.js` back slot-availability/pricing logic.
+- **API docs**: Swagger UI at `/api/v1/docs`, raw spec at `/api/v1/docs.json`, mounted by `utils/swagger.js`. The spec is the **hand-written** `backend/docs/openapi.yaml` — nothing generates it, so **edit it in the same change as the route**. It must stay under `backend/` (the Docker build context). Docs are off when `NODE_ENV=production` unless `DOCS_ENABLED=true`; note the local `.env` already sets `NODE_ENV=production`, so use `DOCS_ENABLED=true npm run dev` to see them.
 - 
 
 

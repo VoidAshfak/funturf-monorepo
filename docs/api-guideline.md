@@ -5,10 +5,17 @@ Base URL: `http://localhost:8080/api/v1` (dev) · `https://app4-osju.onrender.co
 This document is the **contract between the backend and the frontend**. Update it in the
 same change that touches a route, so `frontend-engine` can be kept in sync.
 
-> **Machine-readable spec:** [`docs/openapi.yaml`](./openapi.yaml) covers the same surface
-> as an OpenAPI 3.0.3 document — every endpoint, required vs. optional fields, error codes
-> and examples. Use it for client generation, mock servers and Swagger/Redoc rendering, and
-> update it alongside this file when a route changes.
+> **Machine-readable spec:** [`backend-engine/backend/docs/openapi.yaml`](../backend-engine/backend/docs/openapi.yaml)
+> covers the same surface as an OpenAPI 3.0.3 document — every endpoint, required vs.
+> optional fields, error codes and examples. Use it for client generation and mock servers,
+> and update it alongside this file when a route changes. It lives under `backend/` because
+> that is the Docker build context (`render.yaml` → `rootDir: ./backend`); a spec outside it
+> would not exist in the deployed image.
+>
+> **Swagger UI:** the backend serves that spec interactively at `/api/v1/docs`, with the raw
+> JSON at `/api/v1/docs.json`. It is **off when `NODE_ENV=production`** unless `DOCS_ENABLED=true`
+> is set — so it is a dev/docker-compose tool, not a public endpoint. See
+> `backend/src/utils/swagger.js`.
 
 ## Response envelopes
 

@@ -56,6 +56,7 @@ import notificationRoute from "./routes/notification/notification.route.js";
 import chatRoute from "./routes/chat/chat.route.js";
 import promotionRoute from "./routes/venue/promotion.route.js";
 import couponRoute from "./routes/venue/coupon.route.js";
+import { mountDocs } from "./utils/swagger.js";
 import { errorHandler } from "./utils/errorHandler.js";
 
 
@@ -69,6 +70,10 @@ app.use("/api/v1/notifications", notificationRoute);
 app.use("/api/v1/chat", chatRoute);
 app.use("/api/v1/promotions", promotionRoute);
 app.use("/api/v1/coupons", couponRoute);
+
+// Interactive API docs at /api/v1/docs (dev only by default — see utils/swagger.js).
+// Must sit before errorHandler, which is terminal.
+mountDocs(app);
 
 app.use(errorHandler);
 

@@ -70,3 +70,15 @@ export const commentWriteLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 20,
 });
+
+/**
+ * Swagger UI + raw spec (`utils/swagger.js`). Anonymous by definition, so this
+ * keys on IP. One page load pulls the HTML plus a handful of static assets, so
+ * the limit is generous — it exists to stop the ~9k-line spec being scraped in
+ * a loop, not to ration normal reading.
+ */
+export const docsLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 60 * 1000,
+    limit: 60,
+});
