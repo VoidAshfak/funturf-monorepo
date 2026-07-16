@@ -37,8 +37,18 @@ const emailOptional = z
     })
     .optional();
 
-// Coordinate coming from the map picker — string or number, optional.
-const coordinate = z.union([z.string(), z.number()]).optional();
+// Coordinate coming from the map picker. Geolocation is REQUIRED now — the
+// events feed ranks matches by turf proximity, so every turf must be placed on
+// the map. Accept string or number, coerce, and validate the earth-range.
+const requiredCoordinate = (min, max, label) =>
+    z
+        .union([z.string(), z.number()])
+        .refine((v) => v !== "" && v !== null && v !== undefined, {
+            message: `Pick the turf's location on the map`,
+        })
+        .refine((v) => Number.isFinite(Number(v)) && Number(v) >= min && Number(v) <= max, {
+            message: `Invalid ${label}`,
+        });
 
 // ---- Step 1: basics, address, contact ----
 export const stepOneSchema = z
@@ -52,8 +62,8 @@ export const stepOneSchema = z
                 state: z.string().trim().min(1, "Please choose a division"),
                 country: z.string().trim().min(1, "Country is required").default("Bangladesh"),
                 postal_code: optionalText,
-                latitude: coordinate,
-                longitude: coordinate,
+                latitude: requiredCoordinate(-90, 90, "latitude"),
+                longitude: requiredCoordinate(-180, 180, "longitude"),
             })
             .passthrough(),
         address_line_2: optionalText, // landmark — not required

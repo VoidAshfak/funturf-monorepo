@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { logger } from "../logs/logger.js";
+import { allowedOrigins } from "./utils/corsOrigins.js";
 
 // Single Socket.IO server instance for the process. Held in module scope so
 // controllers/services can `emitToUser` without threading `io` through every call.
@@ -25,8 +26,13 @@ const eventRoom = (eventId) => `event:${eventId}`;
  */
 export function initSocket(server) {
     io = new Server(server, {
-        // Mirror the permissive REST CORS for now (app.js uses origin:'*').
-        cors: { origin: "*", methods: ["GET", "POST"] },
+        // Same whitelist as the REST layer (utils/corsOrigins.js) so the two
+        // never drift. credentials:true matches app.js.
+        cors: {
+            origin: allowedOrigins,
+            methods: ["GET", "POST"],
+            credentials: true,
+        },
     });
 
     // Handshake auth: the client sends its access token in `auth.token`.

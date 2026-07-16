@@ -2,7 +2,7 @@
 
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { useSession } from "next-auth/react";
-import { Clock, Loader2, LogIn, UserMinus, UserPlus } from "lucide-react";
+import { Check, Clock, Loader2, LogIn, UserMinus, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { getApiErrorMessage } from "@/utils/apiError";
@@ -10,6 +10,8 @@ import {
     useJoinEventMutation,
     useCancelJoinRequestMutation,
     useLeaveEventMutation,
+    useAcceptEventInvitationMutation,
+    useDeclineEventInvitationMutation,
     useGetEventByIdQuery,
 } from "@/store/api/apiSlice";
 
@@ -18,6 +20,7 @@ import {
 //   signed out          -> Sign in to join
 //   organizer           -> disabled "You're the organizer"
 //   approved            -> Leave match
+//   invited             -> Accept / Decline (organizer pulled them in; they decide)
 //   requested (pending) -> Requested — tap to cancel
 //   none / rejected     -> Request to Join (disabled when full)
 export default function EventJoinButton({ event: initialEvent, isFull: initialIsFull }) {
@@ -40,7 +43,14 @@ export default function EventJoinButton({ event: initialEvent, isFull: initialIs
     const [join, joinState] = useJoinEventMutation();
     const [cancel, cancelState] = useCancelJoinRequestMutation();
     const [leave, leaveState] = useLeaveEventMutation();
-    const busy = joinState.isLoading || cancelState.isLoading || leaveState.isLoading;
+    const [acceptInvite, acceptState] = useAcceptEventInvitationMutation();
+    const [declineInvite, declineState] = useDeclineEventInvitationMutation();
+    const busy =
+        joinState.isLoading ||
+        cancelState.isLoading ||
+        leaveState.isLoading ||
+        acceptState.isLoading ||
+        declineState.isLoading;
 
     const spinner = <Loader2 className="h-4 w-4 animate-spin" />;
 
@@ -50,6 +60,16 @@ export default function EventJoinButton({ event: initialEvent, isFull: initialIs
                 <Link href="/login">
                     <LogIn className="h-4 w-4" /> Sign in to join
                 </Link>
+            </Button>
+        );
+    }
+
+    // A settled match takes no new players — show a dead state, not a join CTA.
+    const settled = event?.status === "cancelled" || event?.status === "completed";
+    if (settled) {
+        return (
+            <Button size="lg" variant="outline" className="rounded-full px-8" disabled>
+                {event.status === "cancelled" ? "Match cancelled" : "Match ended"}
             </Button>
         );
     }
@@ -93,6 +113,34 @@ export default function EventJoinButton({ event: initialEvent, isFull: initialIs
             >
                 {busy ? spinner : <UserMinus className="h-4 w-4" />} Leave match
             </Button>
+        );
+    }
+
+    // Invited by the organizer (e.g. a rematch carry-over) — the caller decides.
+    // Decline removes the invite, so the button below falls back to "Request to
+    // Join" and they can still opt in later on their own terms.
+    if (status === "invited") {
+        return (
+            <div className="flex flex-wrap items-center gap-2">
+                <Button
+                    size="lg"
+                    className="rounded-full px-6 green-glow"
+                    disabled={busy || isFull}
+                    onClick={() => run(acceptInvite, "You're in!", "See you on the pitch.")}
+                >
+                    {busy ? spinner : <Check className="h-4 w-4" />}
+                    {isFull ? "Squad full" : "Accept invite"}
+                </Button>
+                <Button
+                    size="lg"
+                    variant="outline"
+                    className="rounded-full px-6"
+                    disabled={busy}
+                    onClick={() => run(declineInvite, "Invitation declined")}
+                >
+                    {busy ? spinner : <X className="h-4 w-4" />} Decline
+                </Button>
+            </div>
         );
     }
 

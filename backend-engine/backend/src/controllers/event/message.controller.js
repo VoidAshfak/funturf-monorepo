@@ -272,6 +272,30 @@ export const deleteEventMessage = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /events/:event_id/messages/read — mark this match's squad chat read for the
+ * caller (upserts their read marker to now). Member-only. Clears the chat's unread
+ * badge in the navbar conversation list. Read state is private/per-user, so nothing
+ * is fanned out to other members.
+ */
+export const markEventChatRead = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { event_id } = req.params;
+
+    if (!(await canCommentOnEvent(event_id, userId))) {
+        throw ApiError.fromCode(ERROR_CODES.EVENT_CHAT_FORBIDDEN);
+    }
+
+    const now = new Date();
+    await pgClient.event_chat_reads.upsert({
+        where: { user_id_event_id: { user_id: userId, event_id } },
+        update: { last_read_at: now, updated_at: now },
+        create: { user_id: userId, event_id, last_read_at: now },
+    });
+
+    return res.status(200).json(new ApiResponse(200, "Chat marked read", { event_id }));
+});
+
+/**
  * POST /events/:event_id/messages/:message_id/reactions — toggle an emoji react
  * for the caller. Member-only. Pushes `chat:reaction` { message_id, event_id,
  * reactions } with the message's fresh grouped reactions.

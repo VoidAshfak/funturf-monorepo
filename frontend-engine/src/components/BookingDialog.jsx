@@ -13,6 +13,8 @@ import {
     Loader2,
     LogIn,
     ShieldAlert,
+    Tag,
+    Ticket,
     Upload,
 } from "lucide-react";
 import Link from "next/link";
@@ -44,6 +46,7 @@ import { SLOT_CODES, slotRangeLabel } from "@/utils/slots";
 import {
     useGetAvailableSlotsQuery,
     useGetBookingQuoteQuery,
+    useGetAvailableCouponsQuery,
     useGetMyEventsQuery,
     useCreateBookingMutation,
 } from "@/store/api/apiSlice";
@@ -88,6 +91,13 @@ export default function BookingDialog({ venue }) {
         { ground_id: groundId, slot, booking_date: dateStr, promo_code: promoCode || undefined },
         { skip: !groundId || !slot || !dateStr }
     );
+    // Coupons this user can apply to a booking on the picked ground/date (scoped
+    // per-user server-side, so private/group coupons only show for the right user).
+    const { data: availableCoupons = [] } = useGetAvailableCouponsQuery(
+        { ground_id: groundId, date: dateStr },
+        { skip: !groundId || !dateStr || !session }
+    );
+
     const { data: myEvents = [] } = useGetMyEventsQuery(undefined, { skip: !session });
     const [createBooking] = useCreateBookingMutation();
 
@@ -381,37 +391,94 @@ export default function BookingDialog({ venue }) {
                         </div>
                     )}
 
-                    {/* Price */}
+                    {/* Price breakdown */}
                     {slot && (
-                        <div className="glass-neutral flex items-center justify-between rounded-xl border border-border/60 px-4 py-3">
-                            <span className="text-sm text-muted-foreground">Price</span>
+                        <div className="glass-neutral rounded-xl border border-border/60 px-4 py-3">
                             {quoteLoading ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">Price</span>
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                </div>
                             ) : quote ? (
-                                <span className="text-right">
-                                    <span className="text-lg font-extrabold text-foreground">
-                                        {currency} {Number(quote.final_price).toLocaleString()}
-                                    </span>
+                                <div className="space-y-1.5 text-sm">
+                                    <div className="flex items-center justify-between text-muted-foreground">
+                                        <span>Subtotal</span>
+                                        <span>{currency} {Number(quote.base_rate).toLocaleString()}</span>
+                                    </div>
                                     {quote.discount > 0 && (
-                                        <span className="ml-2 text-xs text-muted-foreground line-through">
-                                            {currency} {Number(quote.base_rate).toLocaleString()}
-                                        </span>
+                                        <div className="flex items-center justify-between font-semibold text-primary">
+                                            <span className="inline-flex items-center gap-1.5">
+                                                <Tag className="h-3.5 w-3.5" />
+                                                Discount{quote.promotion?.code ? ` (${quote.promotion.code})` : ""}
+                                            </span>
+                                            <span>− {currency} {Number(quote.discount).toLocaleString()}</span>
+                                        </div>
                                     )}
-                                </span>
+                                    <div className="flex items-center justify-between border-t border-border/60 pt-1.5 text-base font-extrabold text-foreground">
+                                        <span>Total</span>
+                                        <span>{currency} {Number(quote.final_price).toLocaleString()}</span>
+                                    </div>
+                                </div>
                             ) : (
-                                <span className="text-sm text-muted-foreground">—</span>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">Price</span>
+                                    <span className="text-sm text-muted-foreground">—</span>
+                                </div>
                             )}
                         </div>
                     )}
 
-                    {/* Promo */}
-                    <div className="space-y-1.5">
-                        <Label>Promo code (optional)</Label>
+                    {/* Promo / coupon */}
+                    <div className="space-y-2">
+                        <Label>Coupon (optional)</Label>
+
+                        {/* Picker of coupons available to this user for this ground/date. */}
+                        {availableCoupons.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {availableCoupons.map((c) => {
+                                    const on = promoCode.trim().toUpperCase() === c.code;
+                                    const label =
+                                        c.discount_type === "percentage"
+                                            ? `${c.discount_value}% off`
+                                            : `${currency} ${c.discount_value} off`;
+                                    return (
+                                        <button
+                                            key={c.code}
+                                            type="button"
+                                            onClick={() => setPromoCode(on ? "" : c.code)}
+                                            title={c.title}
+                                            className={cn(
+                                                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                                                on
+                                                    ? "border-primary bg-primary/15 text-primary"
+                                                    : "border-border bg-muted/40 text-foreground hover:bg-accent"
+                                            )}
+                                        >
+                                            <Ticket className="h-3.5 w-3.5" />
+                                            {c.code} · {label}
+                                            {c.is_targeted && (
+                                                <span className="rounded-full bg-amber-500/15 px-1.5 text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                                                    For you
+                                                </span>
+                                            )}
+                                            {on && <Check className="h-3.5 w-3.5" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
                         <Input
                             value={promoCode}
                             onChange={(e) => setPromoCode(e.target.value)}
-                            placeholder="e.g. WEEKEND10"
+                            placeholder="Or type a code, e.g. WEEKEND10"
                         />
+                        {/* Feedback: a code was entered but the server applied no discount. */}
+                        {promoCode.trim() && quote && !quoteLoading && quote.discount <= 0 && (
+                            <p className="text-xs text-destructive">
+                                This code can&apos;t be applied to this booking.
+                            </p>
+                        )}
                     </div>
 
                     {/* Attach event */}

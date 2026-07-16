@@ -19,12 +19,6 @@ model users {
   gender                                             gender_type?
   profile_picture_url                                String?
   bio                                                String?
-  // Home location (Bangladesh-shaped, all optional). Powers turfmate
-  // recommendations; when null we fall back to the user's activity areas.
-  division                                           String?              @db.VarChar(100)
-  district                                           String?              @db.VarChar(100)
-  latitude                                           Decimal?             @db.Decimal(10, 7)
-  longitude                                          Decimal?             @db.Decimal(10, 7)
   user_type                                          user_type
   status                                             user_status?         @default(active)
   email_verified                                     Boolean?             @default(false)
@@ -36,6 +30,10 @@ model users {
   timezone                                           String?              @default("UTC") @db.VarChar(50)
   notification_preferences                           Json?
   refresh_token                                      String?              @db.VarChar(255)
+  district                                           String?              @db.VarChar(100)
+  division                                           String?              @db.VarChar(100)
+  latitude                                           Decimal?             @db.Decimal(10, 7)
+  longitude                                          Decimal?             @db.Decimal(10, 7)
   bookings_bookings_cancelled_byTousers              bookings[]           @relation("bookings_cancelled_byTousers")
   bookings_bookings_user_idTousers                   bookings[]           @relation("bookings_user_idTousers")
   comment_likes                                      comment_likes[]
@@ -47,9 +45,9 @@ model users {
   event_comments_event_comments_user_idTousers       event_comments[]     @relation("event_comments_user_idTousers")
   event_participants                                 event_participants[]
   events                                             events[]
+  message_reactions                                  message_reactions[]
   messages_messages_recipient_idTousers              messages[]           @relation("messages_recipient_idTousers")
   messages_messages_sender_idTousers                 messages[]           @relation("messages_sender_idTousers")
-  message_reactions                                  message_reactions[]
   notifications                                      notifications[]
   payments                                           payments[]
   player_profiles                                    player_profiles[]
@@ -98,13 +96,6 @@ model bookings {
   cancelled_at                       DateTime?            @db.Timestamp(6)
   payment_method                     payment_method_type?
   transaction_id                     String?              @db.VarChar(255)
-  // URL of the uploaded payment proof (client uploads via imgbb, sends the URL).
-  // Visible to the booking owner and turf admins for verification.
-  payment_proof_url                  String?
-  // Mutual-cancellation handshake: once a payment is admin-confirmed, neither
-  // side can cancel unilaterally. One party sets this to their user id (opens a
-  // cancel request); the other party must accept before the booking is cancelled.
-  cancellation_requested_by          String?              @db.Uuid
   notes                              String?
   admin_notes                        String?
   reminder_sent                      Boolean?             @default(false)
@@ -113,6 +104,8 @@ model bookings {
   created_at                         DateTime?            @default(now()) @db.Timestamp(6)
   updated_at                         DateTime?            @default(now()) @db.Timestamp(6)
   slot                               Json
+  cancellation_requested_by          String?              @db.Uuid
+  payment_proof_url                  String?
   users_bookings_cancelled_byTousers users?               @relation("bookings_cancelled_byTousers", fields: [cancelled_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   events_bookings_event_idToevents   events?              @relation("bookings_event_idToevents", fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   grounds                            grounds              @relation(fields: [ground_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -127,9 +120,6 @@ model bookings {
   @@index([ground_id], map: "idx_bookings_ground_id")
   @@index([booking_status], map: "idx_bookings_status")
   @@index([user_id], map: "idx_bookings_user_id")
-  // Every slot-availability check filters on (ground, date) together — the two
-  // single-column indexes above force a scan/merge. This is the hot path of the
-  // whole booking flow, so index the pair.
   @@index([ground_id, booking_date], map: "idx_bookings_ground_date")
 }
 
@@ -216,22 +206,36 @@ model event_comments {
   @@index([user_id], map: "idx_event_comments_user_id")
 }
 
+// Per-user read marker for a match's squad chat. One row per (user, event); its
+// `last_read_at` is bumped whenever the user opens that chat. A message counts as
+// unread for a user when it was sent by someone else, after their marker (or with
+// no marker yet). Kept relation-free on purpose — an orphaned marker is harmless,
+// so no FK back-relations on users/events are needed.
+model event_chat_reads {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id      String   @db.Uuid
+  event_id     String   @db.Uuid
+  last_read_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+
+  @@unique([user_id, event_id], map: "unique_event_chat_read")
+  @@index([event_id], map: "idx_event_chat_reads_event")
+  @@index([user_id], map: "idx_event_chat_reads_user")
+}
+
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model event_participants {
   id              String                   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   event_id        String                   @db.Uuid
   user_id         String                   @db.Uuid
   status          participant_status_type? @default(requested)
-  // Per-event role. organizer is tracked on events.organizer_id; a participant
-  // promoted to co_organizer is an "event admin" who can approve/reject join
-  // requests. Only the organizer (creator) can grant/revoke this.
-  role            participant_role_type?   @default(player)
   payment_status  payment_status_type?     @default(pending)
   joined_at       DateTime?                @default(now()) @db.Timestamp(6)
   approved_at     DateTime?                @db.Timestamp(6)
   rating_given    Int?
   rating_received Int?
   notes           String?
+  role            participant_role_type?   @default(player)
   events          events                   @relation(fields: [event_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users           users                    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -325,29 +329,27 @@ model grounds {
 }
 
 model messages {
-  id                                 String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  sender_id                          String        @db.Uuid
-  recipient_id                       String?       @db.Uuid
-  event_id                           String?       @db.Uuid
-  message_type                       message_type? @default(text)
+  id                                 String              @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sender_id                          String              @db.Uuid
+  recipient_id                       String?             @db.Uuid
+  event_id                           String?             @db.Uuid
+  message_type                       message_type?       @default(text)
   content                            String
   attachment_url                     String?
-  is_read                            Boolean?      @default(false)
-  read_at                            DateTime?     @db.Timestamp(6)
-  is_edited                          Boolean?      @default(false)
-  edited_at                          DateTime?     @db.Timestamp(6)
-  is_deleted                         Boolean?      @default(false)
-  deleted_at                         DateTime?     @db.Timestamp(6)
-  // The message this one replies to (self-reference). Null for top-level messages.
-  reply_to_id                        String?       @db.Uuid
-  created_at                         DateTime?     @default(now()) @db.Timestamp(6)
-  events                             events?       @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users_messages_recipient_idTousers users?        @relation("messages_recipient_idTousers", fields: [recipient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users_messages_sender_idTousers    users         @relation("messages_sender_idTousers", fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  // Self-relation for replies: `reply_to` is the parent, `replies` the children.
-  reply_to                           messages?     @relation("message_replies", fields: [reply_to_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  replies                            messages[]    @relation("message_replies")
+  is_read                            Boolean?            @default(false)
+  read_at                            DateTime?           @db.Timestamp(6)
+  is_edited                          Boolean?            @default(false)
+  edited_at                          DateTime?           @db.Timestamp(6)
+  is_deleted                         Boolean?            @default(false)
+  deleted_at                         DateTime?           @db.Timestamp(6)
+  created_at                         DateTime?           @default(now()) @db.Timestamp(6)
+  reply_to_id                        String?             @db.Uuid
   message_reactions                  message_reactions[]
+  events                             events?             @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_messages_recipient_idTousers users?              @relation("messages_recipient_idTousers", fields: [recipient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reply_to                           messages?           @relation("message_replies", fields: [reply_to_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies                            messages[]          @relation("message_replies")
+  users_messages_sender_idTousers    users               @relation("messages_sender_idTousers", fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([created_at], map: "idx_messages_created_at")
   @@index([event_id], map: "idx_messages_event")
@@ -355,8 +357,6 @@ model messages {
   @@index([sender_id], map: "idx_messages_sender")
 }
 
-// Emoji reactions on a chat message. One row per (message, user, emoji) — a user
-// may add several different emojis to a message but not the same one twice.
 model message_reactions {
   id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   message_id String    @db.Uuid
@@ -481,7 +481,7 @@ model promotion_usage {
 model promotions {
   id                      String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   turf_id                 String?                @db.Uuid
-  code                    String                 @unique @db.VarChar(50)
+  code                    String                 @db.VarChar(50) // unique PER TURF (see @@unique below), not globally
   title                   String                 @db.VarChar(255)
   description             String?
   discount_type           discount_type
@@ -495,6 +495,7 @@ model promotions {
   applicable_days         Json?
   applicable_hours        Json?
   applicable_sports       Json?
+  applicable_users        Json? // user-specific coupons: array of user UUIDs allowed to redeem (null = anyone)
   status                  promotion_status_type? @default(active)
   created_at              DateTime?              @default(now()) @db.Timestamp(6)
   updated_at              DateTime?              @default(now()) @db.Timestamp(6)
@@ -503,6 +504,7 @@ model promotions {
   ground_rate             grounds?               @relation(fields: [ground_id], references: [id], onDelete: Cascade, map: "fk_ground_promo")
   turfs                   turfs?                 @relation(fields: [turf_id], references: [id], onDelete: Cascade, map: "fk_turf_promo")
 
+  @@unique([turf_id, code], map: "unique_turf_code")
   @@index([code], map: "idx_promotions_code")
   @@index([status], map: "idx_promotions_status")
   @@index([turf_id], map: "idx_promotions_turf")
@@ -537,6 +539,7 @@ model reviews {
   users_reviews_reviewer_idTousers users               @relation("reviews_reviewer_idTousers", fields: [reviewer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   turfs                            turfs?              @relation(fields: [turf_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@unique([reviewer_id, turf_id, review_type], map: "unique_reviewer_turf_type")
   @@index([rating], map: "idx_reviews_rating")
   @@index([reviewer_id], map: "idx_reviews_reviewer")
   @@index([turf_id], map: "idx_reviews_turf")
@@ -843,6 +846,7 @@ enum notification_type {
   system_announcement
   comment_added
   comment_reply
+  event_completed
 }
 
 enum participant_role_type {
@@ -859,6 +863,7 @@ enum participant_status_type {
   cancelled
   attended
   no_show
+  invited
 }
 
 enum payment_method_type {

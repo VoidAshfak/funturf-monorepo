@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, ExternalLink } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import ChatLauncher from "@/components/ChatLauncher";
 import NotificationBell from "@/components/NotificationBell";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -82,6 +83,7 @@ export default function DashboardHeader() {
                     </Link>
                 </Button>
                 <ThemeToggle />
+                <ChatLauncher />
                 <NotificationBell />
             </div>
         </header>

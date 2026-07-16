@@ -368,7 +368,7 @@ export default function EventCreationForm() {
             <Section
                 icon={MapPin}
                 title="Venue & Slot"
-                subtitle={locked ? "Set from the attached booking." : "Where and when."}
+                subtitle={locked ? "Set from the attached booking." : "Where, and a probable time until you attach a booking."}
             >
                 {locked && attachedBooking ? (
                     // Booking attached: venue/ground/date/slot are fixed by the
@@ -549,7 +549,10 @@ export default function EventCreationForm() {
                         </div>
 
                         <fieldset className="rounded-xl border border-border p-4">
-                            <legend className="px-2 text-sm text-muted-foreground">Slot</legend>
+                            <legend className="px-2 text-sm text-muted-foreground">Probable time</legend>
+                            <p className="mb-3 text-xs text-muted-foreground">
+                                No booking attached — set a likely time. It becomes the confirmed slot once you attach a booking.
+                            </p>
                             <div className="grid gap-5 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label>Start Time <RequiredSign /></Label>

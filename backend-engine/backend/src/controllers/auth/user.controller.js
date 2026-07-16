@@ -388,6 +388,9 @@ const tokenRefresh = asyncHandler(async (req, res) => {
 const getUserById = asyncHandler(async (req, res) => {
     const { user_id } = req.params;
 
+    // Public profile = the user's account fields + their sporting profile
+    // (player_profiles, 1:1 in practice) so the page can show EVERY data point:
+    // skill, positions, physique, play preferences, reputation, etc.
     const user = await pgClient.users.findUnique({
         where: { id: user_id },
         select: {
@@ -400,15 +403,41 @@ const getUserById = asyncHandler(async (req, res) => {
             gender: true,
             profile_picture_url: true,
             bio: true,
+            division: true,
+            district: true,
+            latitude: true,
+            longitude: true,
             user_type: true,
             status: true,
             email_verified: true,
             phone_verified: true,
             preferred_language: true,
+            timezone: true,
             last_login_at: true,
             created_at: true,
-            updated_at: true
-        }
+            updated_at: true,
+            player_profiles: {
+                select: {
+                    preferred_positions: true,
+                    skill_level: true,
+                    years_of_experience: true,
+                    preferred_foot: true,
+                    jersey_number: true,
+                    height_cm: true,
+                    weight_kg: true,
+                    achievements: true,
+                    sports_played: true,
+                    availability_schedule: true,
+                    preferred_play_time: true,
+                    max_travel_distance_km: true,
+                    rating: true,
+                    total_games_played: true,
+                    total_games_organized: true,
+                    reliability_score: true,
+                },
+                take: 1,
+            },
+        },
     });
 
     // Must return here — falling through on a missing user would crash on
@@ -417,14 +446,35 @@ const getUserById = asyncHandler(async (req, res) => {
         throw ApiError.fromCode(ERROR_CODES.USER_NOT_FOUND);
     }
 
-    // TODO: replace these placeholders with real aggregates once the
-    // teams / events / connections features land.
+    // Live aggregates (cheap COUNTs, run in parallel) — replaces the old
+    // hardcoded zeros. friends = accepted connections in EITHER direction.
+    const [approvedJoins, gamesOrganized, friends] = await Promise.all([
+        pgClient.event_participants.count({
+            where: { user_id, status: "approved" },
+        }),
+        pgClient.events.count({ where: { organizer_id: user_id } }),
+        pgClient.connections.count({
+            where: {
+                status: "accepted",
+                OR: [{ requester_id: user_id }, { recipient_id: user_id }],
+            },
+        }),
+    ]);
+
+    const profile = user.player_profiles?.[0] ?? null;
+    // Sports come from the player profile's JSON list when present.
+    const sports = Array.isArray(profile?.sports_played) ? profile.sports_played : [];
+
+    const { player_profiles, ...account } = user;
     const userResponse = {
-        ...user,
-        sports: [],
-        teamsJoined: 0,
-        eventsJoined: 0,
-        friends: 0,
+        ...account,
+        player_profile: profile,   // full sporting profile (null if none yet)
+        sports,
+        eventsJoined: approvedJoins,
+        gamesOrganized,
+        friends,
+        // Player reputation rating lives on the sporting profile; surface it flat too.
+        rating: profile?.rating != null ? Number(profile.rating) : null,
         username: user.email.split("@")[0],
     };
 

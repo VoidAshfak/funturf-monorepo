@@ -247,11 +247,16 @@ export function slotEndTime(slotCode) {
  * @param {string}  params.slotCode     e.g. "t1800"
  * @param {string}  params.bookingDate  "YYYY-MM-DD"
  * @param {string} [params.promoCode]
+ * @param {string} [params.userId]     the booker (enables user-targeted coupons)
  * @returns {Promise<{slot_time,day_of_week,is_peak,is_weekend,base_rate,discount,final_price,promotion}>}
  */
-export async function computeSlotPricing({ ground, slotCode, bookingDate, promoCode }) {
+export async function computeSlotPricing({ ground, slotCode, bookingDate, promoCode, userId }) {
     const slot_time = parseSlotCodeToTime(slotCode);
-    const js_date = new Date(bookingDate + "T00:00:00");
+    // Parse the booking date as UTC midnight ("...T00:00:00Z") so getUTCDay()
+    // returns the CALENDAR weekday. Without the "Z" the string is read as local
+    // midnight and getUTCDay() shifts it a day on any UTC+ server — which made a
+    // Friday slot read as Thursday and wrongly failed day-scoped coupons.
+    const js_date = new Date(bookingDate + "T00:00:00Z");
     const day_of_week = js_date.getUTCDay();
 
     const hourly_rate = Number(ground.hourly_rate);
@@ -282,26 +287,46 @@ export async function computeSlotPricing({ ground, slotCode, bookingDate, promoC
     let promotion = null;
 
     if (promoCode) {
-        const candidate_promos = await pgClient.promotions.findMany({
+        // Find the active code whose SCOPE covers this booking: the exact ground,
+        // OR the whole turf, OR a global (turf-less) promo. The validity WINDOW is
+        // checked below against the BOOKING date (you book slots in advance), not
+        // the moment of checkout.
+        const promo = await pgClient.promotions.findFirst({
             where: {
-                ground_id: ground.id,
-                code: promoCode,
+                code: promoCode.toString().trim().toUpperCase(),
                 status: "active",
-                valid_from: { lte: new Date() },
-                valid_until: { gte: new Date() },
-                usage_limit: { gt: 1 },
+                OR: [
+                    { ground_id: ground.id },
+                    { ground_id: null, turf_id: ground.turf_id },
+                    { ground_id: null, turf_id: null },
+                ],
             },
         });
 
-        const promo = candidate_promos.find((p) => {
-            if (p.applicable_days) {
-                const days = p.applicable_days;
-                if (!days.includes(day_of_week)) return false;
-            }
-            return true;
-        });
+        // Validity window vs the booking DATE (date-only compare, TZ-safe).
+        const inWindow =
+            promo &&
+            bookingDate >= promo.valid_from.toISOString().slice(0, 10) &&
+            bookingDate <= promo.valid_until.toISOString().slice(0, 10);
 
-        if (promo && (!promo.minimum_booking_amount || base_rate >= Number(promo.minimum_booking_amount))) {
+        // JS-side eligibility: window, day / user targeting, usage cap, min spend.
+        const eligible =
+            promo &&
+            inWindow &&
+            // weekday targeting (0=Sun..6=Sat)
+            (!Array.isArray(promo.applicable_days) ||
+                promo.applicable_days.length === 0 ||
+                promo.applicable_days.includes(day_of_week)) &&
+            // user targeting (only enforced when we know who's booking)
+            (!Array.isArray(promo.applicable_users) ||
+                promo.applicable_users.length === 0 ||
+                (userId && promo.applicable_users.includes(userId))) &&
+            // global usage cap
+            (promo.usage_limit == null || (promo.used_count ?? 0) < promo.usage_limit) &&
+            // minimum booking amount
+            (!promo.minimum_booking_amount || base_rate >= Number(promo.minimum_booking_amount));
+
+        if (eligible) {
             let raw_discount =
                 promo.discount_type === "percentage"
                     ? base_rate * (Number(promo.discount_value) / 100)
@@ -309,7 +334,8 @@ export async function computeSlotPricing({ ground, slotCode, bookingDate, promoC
             if (promo.maximum_discount_amount != null) {
                 raw_discount = Math.min(raw_discount, Number(promo.maximum_discount_amount));
             }
-            discount = raw_discount;
+            // Never discount below zero.
+            discount = Math.min(raw_discount, base_rate);
             promotion = { id: promo.id, code: promo.code };
         }
     }

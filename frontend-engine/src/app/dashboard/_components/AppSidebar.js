@@ -13,7 +13,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Building2, CalendarCheck, LayoutDashboard, LogOut, Plus, ScanLine, User } from "lucide-react";
+import { Building2, CalendarCheck, LayoutDashboard, LogOut, Plus, ScanLine, Ticket, User } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useGetVenuesByAdminQuery } from "@/store/api/apiSlice";
 import { disconnectSocket } from "@/lib/socket";
@@ -26,6 +26,7 @@ const MANAGE_LINKS = [
     { href: "/dashboard/bookings", label: "Bookings", icon: CalendarCheck, exact: true },
     { href: "/dashboard/bookings/verify", label: "Verify Tickets", icon: ScanLine },
     { href: "/dashboard/turfs", label: "Manage Grounds", icon: Building2 },
+    { href: "/dashboard/promotions", label: "Coupons", icon: Ticket },
 ];
 
 export default function AppSidebar() {

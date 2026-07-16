@@ -42,6 +42,7 @@ const TYPE_ICON = {
     event_cancelled: CalendarX,
     event_reminder: Calendar,
     event_full: Calendar,
+    event_completed: CheckCheck,
     payment_received: CreditCard,
     payment_pending: CreditCard,
     connection_request: UserPlus,

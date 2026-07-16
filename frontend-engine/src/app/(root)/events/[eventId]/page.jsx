@@ -1,5 +1,5 @@
 import EventAdminPanel from "@/components/EventAdminPanel"
-import EventChat from "@/components/EventChat"
+import EventOrganizerActions from "@/components/EventOrganizerActions"
 import EventJoinButton from "@/components/EventJoinButton"
 import EventRealtime from "@/components/EventRealtime"
 import EventSquad from "@/components/EventSquad"
@@ -45,6 +45,9 @@ export default async function EventDetails({ params }) {
     } = event;
 
     const sport = event.sport_type || ground?.sport_type;
+    // A match's time is only "confirmed" when a booking backs it; otherwise the
+    // start/end are a probable range the organizer set by hand.
+    const scheduleConfirmed = event.schedule_confirmed ?? Boolean(booking);
     const min = min_players ?? 0;
     const cur = current_players ?? 0;
     const isFull = min > 0 && cur >= min;
@@ -68,10 +71,9 @@ export default async function EventDetails({ params }) {
     return (
         <div className="mx-auto max-w-7xl px-4 pb-16 pt-6 md:px-8 md:pt-24">
             {/* Live wiring: subscribes to the match room and refetches squad/requests
-                on any roster change. Floating squad chat for members. Both render
-                fixed/nothing, so their position in the tree doesn't matter. */}
+                on any roster change. Renders nothing. The squad chat now lives in the
+                navbar chat box (ChatLauncher), not as a floating head here. */}
             <EventRealtime eventId={event.id} />
-            <EventChat eventId={event.id} initialEvent={event} />
 
             {/* HERO */}
             <section className="relative isolate overflow-hidden rounded-[2rem] border border-border bg-gradient-to-b from-[#eaf2ee] to-[#e6f1ec] p-6 dark:from-[#0a1412] dark:to-[#0a0a0a] md:p-10">
@@ -144,9 +146,10 @@ export default async function EventDetails({ params }) {
                             label={event_date ? format(new Date(event_date), "EEEE, d MMMM yyyy") : "Date TBA"}
                             sub={
                                 start_time && end_time
-                                    ? `${format(new Date(start_time), "h:mm a")} – ${format(new Date(end_time), "h:mm a")}`
+                                    ? `${format(new Date(start_time), "h:mm a")} – ${format(new Date(end_time), "h:mm a")}${scheduleConfirmed ? "" : " · probable"}`
                                     : null
                             }
+                            badge={scheduleConfirmed ? null : "Probable"}
                         />
                         <MetaPill
                             icon={MapPin}
@@ -181,6 +184,9 @@ export default async function EventDetails({ params }) {
             <div className="mt-8 grid gap-6 lg:grid-cols-3">
                 {/* left: details / rules / comments */}
                 <div className="lg:col-span-2">
+                    {/* organizer/admin: edit match + rematch (clone & re-invite squad) */}
+                    <EventOrganizerActions event={event} />
+
                     {/* admin-only: pending join requests + manage admins */}
                     <EventAdminPanel event={event} />
 
@@ -254,14 +260,21 @@ function formatDuration(start, end) {
     return `${m}m`;
 }
 
-function MetaPill({ icon: Icon, label, sub, action }) {
+function MetaPill({ icon: Icon, label, sub, action, badge }) {
     return (
         <div className="glass-chip flex items-center gap-3 rounded-2xl px-4 py-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
                 <Icon className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-foreground">{label}</p>
+                <div className="flex items-center gap-2">
+                    <p className="truncate font-semibold text-foreground">{label}</p>
+                    {badge && (
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                            {badge}
+                        </span>
+                    )}
+                </div>
                 {sub && <p className="truncate text-sm text-muted-foreground">{sub}</p>}
             </div>
             {action}

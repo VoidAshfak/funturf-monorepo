@@ -34,9 +34,13 @@ export default function EventFeedCard({ event }) {
         min_players,
         max_players,
         current_players,
+        booking_id,
         event_participants = [],
         turfmates_involved = [],
     } = event;
+
+    // No booking backing the match -> its time is a probable range, not confirmed.
+    const probableTime = !booking_id;
 
     const hasTurfmates = turfmates_involved.length > 0;
 
@@ -161,6 +165,11 @@ export default function EventFeedCard({ event }) {
                             <Clock className="h-4 w-4 text-primary" />
                             {format(new Date(start_time), "h:mm a")} –{" "}
                             {format(new Date(end_time), "h:mm a")}
+                            {probableTime && (
+                                <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                    Probable
+                                </span>
+                            )}
                         </span>
                     )}
                     <span className="inline-flex shrink-0 items-center gap-1.5">

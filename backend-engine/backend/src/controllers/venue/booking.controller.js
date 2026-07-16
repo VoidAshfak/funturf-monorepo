@@ -76,6 +76,8 @@ const BOOKING_DETAIL_INCLUDE = {
     users_bookings_user_idTousers: {
         select: { id: true, first_name: true, last_name: true, profile_picture_url: true },
     },
+    // Applied coupon (if any) for the ticket's price breakdown.
+    promotion_usage: { select: { discount_amount: true, promotions: { select: { code: true } } } },
 };
 
 // Whole-day difference (booking_date - today), for the 2-day free-cancel window.
@@ -170,6 +172,7 @@ export const calculateBookingPrice = asyncHandler(async (req, res) => {
         slotCode: slot,
         bookingDate: booking_date,
         promoCode: promo_code,
+        userId: req.user?.id,
     });
 
     return res.json(
@@ -299,6 +302,7 @@ export const createBooking = asyncHandler(async (req, res) => {
         slotCode: slot,
         bookingDate: booking_date,
         promoCode: promo_code,
+        userId,
     });
 
     // -----------------------------------------------------------------------
@@ -391,6 +395,23 @@ export const createBooking = asyncHandler(async (req, res) => {
                 },
             });
 
+            // Record the coupon redemption (drives promo analytics) and bump its
+            // usage counter — in the same tx so a rolled-back booking never counts.
+            if (pricing.promotion?.id && pricing.discount > 0) {
+                await tx.promotion_usage.create({
+                    data: {
+                        promotion_id: pricing.promotion.id,
+                        user_id: userId,
+                        booking_id: created.id,
+                        discount_amount: pricing.discount,
+                    },
+                });
+                await tx.promotions.update({
+                    where: { id: pricing.promotion.id },
+                    data: { used_count: { increment: 1 } },
+                });
+            }
+
             // A paid claim also flips the visible grid boolean off (hard lock).
             if (isPaid) await lockSlot(ground_id, booking_date, slot, tx);
 
@@ -464,6 +485,8 @@ export const getMyBookings = asyncHandler(async (req, res) => {
                 // event's sport straight from the reservation's ground.
                 select: { id: true, name: true, sport_type: true, turfs: { select: { id: true, name: true, city: true } } },
             },
+            // The applied coupon (if any) so the ticket can show "Discount (CODE)".
+            promotion_usage: { select: { discount_amount: true, promotions: { select: { code: true } } } },
         },
     });
 

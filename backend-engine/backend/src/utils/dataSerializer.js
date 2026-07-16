@@ -124,6 +124,20 @@ export class EventSerializer {
             max_players: event.max_players,
             current_players: event.current_players,
 
+            // Extra fields (present on the detail read) the edit form prefills from.
+            event_type: event.event_type,
+            skill_level_required: event.skill_level_required,
+            entry_fee: event.entry_fee,
+            total_cost: event.total_cost,
+            cost_split_type: event.cost_split_type,
+            visibility: event.visibility,
+            ground_id: event.ground_id,
+            venue_id: event.venue_id,
+            status: event.status,
+            // The match time is "confirmed" only when a booking backs it; without a
+            // booking the start/end are a PROBABLE range the organizer set by hand.
+            schedule_confirmed: Boolean(event.booking),
+
             organizer: event.users ? this.userToDto(event.users) : null,
             ground: event.grounds ? this.groundToDto(event.grounds) : null,
 

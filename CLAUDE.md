@@ -165,6 +165,7 @@ The frontend calls the backend at the base URL in **`NEXT_PUBLIC_API_BASE_URL`**
 - role based access
 - write good comments for new developers
 - add logging to important checkpoints
+- Install any secured (npm) packages to execute any task and take it to the next level. The service should be security tight and feature rich.
 
 
 ## Coding Rules (Very Important)

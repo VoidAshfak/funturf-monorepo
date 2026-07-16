@@ -24,6 +24,7 @@ import Image from "next/image"
 import Link from "next/link"
 import AvailableSports from "./_components/AvailableSports"
 import VenueFacilities from "./_components/VenueFacilities"
+import TurfRating from "@/components/TurfRating"
 
 const prettify = (s = "") =>
     String(s).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -37,7 +38,7 @@ const VenueDetails = async ({ params }) => {
         address_line_1,
         address_line_2,
         rating = 0,
-        ratingCount = 105,
+        rating_count = 0,
         images = [],
         sports_available = [],
         facilities = [],
@@ -94,9 +95,9 @@ const VenueDetails = async ({ params }) => {
                         <span className="glass-chip inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-foreground">
                             <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
                             {rating > 0 ? rating : "New"}
-                            {rating > 0 && (
+                            {rating > 0 && rating_count > 0 && (
                                 <span className="font-medium text-muted-foreground">
-                                    ({ratingCount})
+                                    ({rating_count})
                                 </span>
                             )}
                         </span>
@@ -205,6 +206,13 @@ const VenueDetails = async ({ params }) => {
                         />
                         <AvailableSports sports_available={sports_available} />
                     </div>
+
+                    {/* rate this turf — one rating per user, editable */}
+                    <TurfRating
+                        venueId={venueId}
+                        initialRating={rating}
+                        initialCount={rating_count}
+                    />
 
                     {/* grounds & pricing */}
                     {grounds.length > 0 && (

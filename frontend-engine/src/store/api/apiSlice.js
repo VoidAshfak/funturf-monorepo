@@ -16,7 +16,7 @@ export const apiSlice = createApi({
             return headers;
         },
     }),
-    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Messages", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications"],
+    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Messages", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications", "Conversations", "DmThread", "Promotions"],
     endpoints: (builder) => ({
         // ---- Venues ----
         getVenues: builder.query({
@@ -47,6 +47,53 @@ export const apiSlice = createApi({
                 body,
             }),
             invalidatesTags: [{ type: "Venues", id: "LIST" }],
+        }),
+        // ---- Promotions / coupons (turf manager) ----
+        // All promotion endpoints are turf-manager scoped server-side.
+        getPromotions: builder.query({
+            query: () => "promotions",
+            transformResponse: (res) => res?.data?.promotions ?? [],
+            providesTags: [{ type: "Promotions", id: "LIST" }],
+        }),
+        getPromotionAnalytics: builder.query({
+            query: (days) => `promotions/analytics${days ? `?days=${days}` : ""}`,
+            transformResponse: (res) => res?.data ?? null,
+            providesTags: [{ type: "Promotions", id: "ANALYTICS" }],
+        }),
+        createPromotion: builder.mutation({
+            query: (body) => ({ url: "promotions", method: "POST", body }),
+            invalidatesTags: [
+                { type: "Promotions", id: "LIST" },
+                { type: "Promotions", id: "ANALYTICS" },
+            ],
+        }),
+        updatePromotion: builder.mutation({
+            query: ({ id, ...body }) => ({ url: `promotions/${id}`, method: "PATCH", body }),
+            invalidatesTags: [
+                { type: "Promotions", id: "LIST" },
+                { type: "Promotions", id: "ANALYTICS" },
+            ],
+        }),
+        deletePromotion: builder.mutation({
+            query: (id) => ({ url: `promotions/${id}`, method: "DELETE" }),
+            invalidatesTags: [
+                { type: "Promotions", id: "LIST" },
+                { type: "Promotions", id: "ANALYTICS" },
+            ],
+        }),
+
+        // Rate a turf (1–5). One rating per user; re-posting updates it. Refreshes
+        // the venue so the average + the caller's own star fill update live.
+        rateTurf: builder.mutation({
+            query: ({ venueId, rating, comment }) => ({
+                url: `venues/${venueId}/rating`,
+                method: "POST",
+                body: { rating, ...(comment ? { comment } : {}) },
+            }),
+            invalidatesTags: (r, e, { venueId }) => [
+                { type: "Venue", id: venueId },
+                { type: "Venues", id: "LIST" },
+            ],
         }),
         // Add a ground to the caller's turf (turf-scoped server-side).
         createGround: builder.mutation({
@@ -149,14 +196,30 @@ export const apiSlice = createApi({
                 { type: "Events", id: "MINE" },
             ],
         }),
+        // Rematch: clone a match into a new one and re-invite the squad
+        // (POST /events/:id/rematch). Refreshes the feed + "my events".
+        rematchEvent: builder.mutation({
+            query: ({ eventId, ...body }) => ({
+                url: `events/${eventId}/rematch`,
+                method: "POST",
+                body, // { event_date, start_time, end_time }
+            }),
+            invalidatesTags: [
+                { type: "Events", id: "LIST" },
+                { type: "Events", id: "MINE" },
+            ],
+        }),
         // Organizer-only delete (DELETE /events/delete-event, event_id in body).
+        // Organizer "delete" = soft cancel (status -> cancelled). Refreshes the open
+        // match page plus the feeds it drops out of.
         deleteEvent: builder.mutation({
             query: (eventId) => ({
                 url: "events/delete-event",
                 method: "DELETE",
                 body: { event_id: eventId },
             }),
-            invalidatesTags: [
+            invalidatesTags: (r, e, eventId) => [
+                { type: "Event", id: eventId },
                 { type: "Events", id: "LIST" },
                 { type: "Events", id: "MINE" },
             ],
@@ -181,6 +244,15 @@ export const apiSlice = createApi({
                 params: { ground_id, slot, booking_date, promo_code },
             }),
             transformResponse: (res) => res?.data ?? null,
+        }),
+        // Coupons the signed-in caller can apply to a booking on this ground/date
+        // (private/group coupons are filtered per user server-side).
+        getAvailableCoupons: builder.query({
+            query: ({ ground_id, date }) => ({
+                url: "coupons/available",
+                params: { ground_id, date },
+            }),
+            transformResponse: (res) => res?.data?.coupons ?? [],
         }),
 
         // ---- Notifications (all auth-required) ----
@@ -440,6 +512,26 @@ export const apiSlice = createApi({
             ],
         }),
 
+        // Accept an invitation (e.g. a rematch carry-over) — POST /:id/invitation/accept.
+        // The invitee decides; accepting turns them into an approved player.
+        acceptEventInvitation: builder.mutation({
+            query: (eventId) => ({ url: `events/${eventId}/invitation/accept`, method: "POST" }),
+            invalidatesTags: (r, e, eventId) => [
+                { type: "Event", id: eventId },
+                { type: "Events", id: "LIST" },
+                { type: "Events", id: "MINE" },
+            ],
+        }),
+        // Decline an invitation — POST /:id/invitation/decline. Removes the invite
+        // row so the user can later request a spot the normal way.
+        declineEventInvitation: builder.mutation({
+            query: (eventId) => ({ url: `events/${eventId}/invitation/decline`, method: "POST" }),
+            invalidatesTags: (r, e, eventId) => [
+                { type: "Event", id: eventId },
+                { type: "Events", id: "MINE" },
+            ],
+        }),
+
         // ---- Event admin moderation (admins only) ----
         // Pending join requests for an event (GET /:id/requests).
         getJoinRequests: builder.query({
@@ -656,6 +748,137 @@ export const apiSlice = createApi({
             },
         }),
 
+        // Mark a match's squad chat read (clears its unread badge in the chat box).
+        markEventChatRead: builder.mutation({
+            query: (eventId) => ({ url: `events/${eventId}/messages/read`, method: "POST" }),
+            invalidatesTags: [{ type: "Conversations", id: "LIST" }],
+        }),
+
+        // ---- Direct messages + unified conversation list ----
+        // Unified conversation list (DMs + match chats) for the navbar chat box.
+        // Kept live: any dm:new / dm:read / chat:new refreshes the previews + badges.
+        getConversations: builder.query({
+            query: () => "chat/conversations",
+            transformResponse: (res) => res?.data ?? { conversations: [], total_unread: 0 },
+            providesTags: [{ type: "Conversations", id: "LIST" }],
+            async onCacheEntryAdded(_arg, { getState, dispatch, cacheDataLoaded, cacheEntryRemoved }) {
+                const token = getState().auth?.token;
+                const socket = token ? getSocket(token) : null;
+                try {
+                    await cacheDataLoaded;
+                    if (!socket) return;
+                    const refresh = () =>
+                        dispatch(apiSlice.util.invalidateTags([{ type: "Conversations", id: "LIST" }]));
+                    socket.on("dm:new", refresh);
+                    socket.on("dm:read", refresh);
+                    socket.on("chat:new", refresh);
+                    await cacheEntryRemoved;
+                    socket.off("dm:new", refresh);
+                    socket.off("dm:read", refresh);
+                    socket.off("chat:new", refresh);
+                } catch {
+                    // entry removed before load — ignore
+                }
+            },
+        }),
+        // A single DM thread (+ the other user's profile). Live via `dm:new`: a
+        // message belongs to THIS thread when the other party is the sender or the
+        // recipient, regardless of who sent it.
+        getDmThread: builder.query({
+            query: (userId) => `chat/dm/${userId}`,
+            transformResponse: (res) => res?.data ?? { user: null, messages: [] },
+            providesTags: (r, e, userId) => [{ type: "DmThread", id: userId }],
+            async onCacheEntryAdded(
+                userId,
+                { getState, updateCachedData, cacheDataLoaded, cacheEntryRemoved }
+            ) {
+                const token = getState().auth?.token;
+                const socket = token ? getSocket(token) : null;
+                try {
+                    await cacheDataLoaded;
+                    if (!socket) return;
+                    const onNew = (msg) => {
+                        const inThread =
+                            (msg?.sender?.id ?? msg?.sender_id) === userId ||
+                            msg?.recipient_id === userId;
+                        if (!inThread) return;
+                        updateCachedData((draft) => {
+                            if (draft.messages.some((m) => m.id === msg.id)) return;
+                            draft.messages.push(msg);
+                        });
+                    };
+                    // Reaction change -> swap that message's grouped reactions (if the
+                    // message is in this thread's cache).
+                    const onReaction = ({ message_id, reactions }) => {
+                        updateCachedData((draft) => {
+                            const m = draft.messages.find((x) => x.id === message_id);
+                            if (m) m.reactions = reactions;
+                        });
+                    };
+                    socket.on("dm:new", onNew);
+                    socket.on("dm:reaction", onReaction);
+                    await cacheEntryRemoved;
+                    socket.off("dm:new", onNew);
+                    socket.off("dm:reaction", onReaction);
+                } catch {
+                    // entry removed before load — ignore
+                }
+            },
+        }),
+        // Send a DM (text and/or image). Appends the result instantly (socket echo
+        // is de-duped by id) and refreshes the conversation list preview.
+        sendDm: builder.mutation({
+            query: ({ userId, content, attachment_url, reply_to_id }) => ({
+                url: `chat/dm/${userId}`,
+                method: "POST",
+                body: { content, attachment_url, reply_to_id },
+            }),
+            async onQueryStarted({ userId }, { dispatch, queryFulfilled }) {
+                try {
+                    const { data } = await queryFulfilled;
+                    const msg = data?.data;
+                    if (!msg) return;
+                    dispatch(
+                        apiSlice.util.updateQueryData("getDmThread", userId, (draft) => {
+                            if (!draft.messages.some((m) => m.id === msg.id)) draft.messages.push(msg);
+                        })
+                    );
+                } catch {
+                    // surfaced at call site
+                }
+            },
+            invalidatesTags: [{ type: "Conversations", id: "LIST" }],
+        }),
+        // Toggle an emoji reaction on a DM. Optimistically updates the thread; the
+        // socket echo (dm:reaction) keeps both parties in sync.
+        reactDm: builder.mutation({
+            query: ({ userId, messageId, emoji }) => ({
+                url: `chat/dm/${userId}/messages/${messageId}/reactions`,
+                method: "POST",
+                body: { emoji },
+            }),
+            async onQueryStarted({ userId, messageId }, { dispatch, queryFulfilled }) {
+                try {
+                    const { data } = await queryFulfilled;
+                    const reactions = data?.data?.reactions;
+                    if (!reactions) return;
+                    dispatch(
+                        apiSlice.util.updateQueryData("getDmThread", userId, (draft) => {
+                            const m = draft.messages.find((x) => x.id === messageId);
+                            if (m) m.reactions = reactions;
+                        })
+                    );
+                } catch {
+                    // surfaced at call site
+                }
+            },
+        }),
+        // Mark a DM thread read (clears its unread badge).
+        markDmRead: builder.mutation({
+            query: (userId) => ({ url: `chat/dm/${userId}/read`, method: "POST" }),
+            invalidatesTags: [{ type: "Conversations", id: "LIST" }],
+        }),
+
         // ---- Bookings ----
         // Create a booking. Body: { ground_id, booking_date, slot, paid?,
         // transaction_id?, payment_proof_url?, event_id?, promo_code?, notes? }.
@@ -835,6 +1058,12 @@ export const {
     useGetVenuesQuery,
     useGetVenuesByAdminQuery,
     useGetVenueByIdQuery,
+    useRateTurfMutation,
+    useGetPromotionsQuery,
+    useGetPromotionAnalyticsQuery,
+    useCreatePromotionMutation,
+    useUpdatePromotionMutation,
+    useDeletePromotionMutation,
     useCreateVenueMutation,
     useCreateGroundMutation,
     useUpdateGroundMutation,
@@ -843,6 +1072,7 @@ export const {
     useCreateEventMutation,
     useGetMyEventsQuery,
     useUpdateEventMutation,
+    useRematchEventMutation,
     useDeleteEventMutation,
     useGetNotificationsQuery,
     useMarkNotificationReadMutation,
@@ -850,6 +1080,7 @@ export const {
     useDeleteNotificationMutation,
     useGetAvailableSlotsQuery,
     useGetBookingQuoteQuery,
+    useGetAvailableCouponsQuery,
     useGetUserByIdQuery,
     useRegisterUserMutation,
     useGetTurfmatesQuery,
@@ -866,6 +1097,8 @@ export const {
     useJoinEventMutation,
     useCancelJoinRequestMutation,
     useLeaveEventMutation,
+    useAcceptEventInvitationMutation,
+    useDeclineEventInvitationMutation,
     useGetJoinRequestsQuery,
     useAcceptJoinRequestMutation,
     useRejectJoinRequestMutation,
@@ -877,6 +1110,13 @@ export const {
     useEditEventMessageMutation,
     useDeleteEventMessageMutation,
     useReactEventMessageMutation,
+    useMarkEventChatReadMutation,
+    // direct messages + conversations
+    useGetConversationsQuery,
+    useGetDmThreadQuery,
+    useSendDmMutation,
+    useReactDmMutation,
+    useMarkDmReadMutation,
     useCreateBookingMutation,
     useGetMyBookingsQuery,
     useGetBookingByIdQuery,

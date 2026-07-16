@@ -58,7 +58,15 @@ Defined in `backend-engine/backend/src/utils/errorCodes.js`. Throw them via `Api
 | `ALREADY_JOINED` | 409 | Caller already has a request/participation |
 | `NOT_EVENT_PARTICIPANT` | 400 | Caller isn't a participant (leave / promote target) |
 | `NOT_EVENT_ADMIN` | 403 | Caller isn't an event admin (organizer/co_organizer) |
+| `EVENT_NOT_EDITABLE` | 409 | A completed/cancelled match can no longer be edited |
+| `INVALID_PLAYER_LIMITS` | 400 | Player limits invalid (max below current squad, or min > max) |
+| `EVENT_SCHEDULE_LOCKED` | 409 | Tried to hand-set the time on a match whose time is set by an attached booking |
 | `JOIN_REQUEST_NOT_FOUND` | 404 | No pending join request for that user |
+| `INVITATION_NOT_FOUND` | 404 | No pending invitation for the caller on that match |
+| `NO_TURF_FOR_ADMIN` | 404 | Caller (turf_admin) doesn't own a turf yet |
+| `PROMO_NOT_FOUND` | 404 | Promotion not found / not the caller's |
+| `PROMO_CODE_EXISTS` | 409 | Promotion code already in use |
+| `PROMO_SCOPE_FORBIDDEN` | 403 | Ground/turf doesn't belong to the caller |
 | `ALREADY_ADMIN` | 409 | Target is already an event admin |
 | `NOTIFICATION_NOT_FOUND` | 404 | Notification not found / not owned |
 
@@ -67,6 +75,45 @@ Defined in `backend-engine/backend/src/utils/errorCodes.js`. Throw them via `Api
 Protected routes require `Authorization: Bearer <accessToken>`. The token is issued by
 `POST /users/login` and carried by the frontend NextAuth session
 (`session.user.access_token`) → RTK Query `prepareHeaders`.
+
+## CORS & environment
+
+CORS is **whitelisted**, not open. Both the REST layer (`app.js`) and Socket.IO
+(`socket.js`) read the same allow-list from `backend-engine/backend/src/utils/corsOrigins.js`,
+so they never drift. A blocked browser origin is logged (`CORS blocked origin: ...`)
+and rejected. Requests with no `Origin` header (server-to-server, NextAuth's
+server-side login POST, curl, mobile) are allowed — the boundary is browser-only.
+`credentials: true` is set (auth is a Bearer header today, but cookies stay supported).
+
+**Backend env** (Render — set on each `app1/2/3` service):
+
+| var | example | notes |
+| --- | --- | --- |
+| `CORS_ORIGINS` | `http://localhost:3000,https://funturf-frontend.vercel.app` | Comma-separated allowed origins. Trailing slashes ignored. If unset, falls back to `localhost:3000` + the Vercel frontend. |
+| `APP_TZ_OFFSET_MINUTES` | `360` | Minutes offset of the app's local wall-clock from UTC. Used by the event sweeper to decide when a game's naive `event_date`+`end_time` has passed. Default `360` (Bangladesh, UTC+6). |
+
+### Background jobs
+
+Started in `src/index.js`, run in-process on every replica (idempotent, so multi-replica is safe — just redundant):
+
+| job | file | interval | what it does |
+| --- | --- | --- | --- |
+| hold sweeper | `jobs/holdSweeper.js` | 10 min | Cancels expired unpaid booking holds (see Bookings). |
+| event sweeper | `jobs/eventSweeper.js` | 5 min | **Takes down expired games** — flips any live event (`open`/`ready`/`booked`) whose slot end has passed to `completed`, then notifies members (`event_completed`) and emits `event:roster` so open match pages refresh. End instant = `event_date + end_time` (+1 day for slots crossing midnight), compared in local time via `APP_TZ_OFFSET_MINUTES`. `status` already surfaces as `completed`. |
+
+Notifications fire **exactly once across replicas**: the `RETURNING` rows of the completing UPDATE are the claim — only the replica that actually flips a row gets it back, so the other two notify nobody. (This is why plain `setInterval` is kept over a cron dependency — cron schedules, but wouldn't dedupe the 3 replicas.)
+
+**Frontend env** (Vercel — Production):
+
+| var | value |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | `https://app4-osju.onrender.com/api/v1` |
+| `NEXT_PUBLIC_BASE_URL` | `https://funturf-frontend.vercel.app` |
+| `NEXTAUTH_URL` | `https://funturf-frontend.vercel.app` |
+| `NEXTAUTH_SECRET` | *(real secret)* |
+
+Local dev is unaffected — `http://localhost:3000` is in the default allow-list and the
+local `.env` keeps `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1`.
 
 ## Endpoints
 
@@ -80,7 +127,7 @@ Protected routes require `Authorization: Bearer <accessToken>`. The token is iss
 | POST | `/register` | public | `{ first_name, last_name, email, password_hash, phone?, date_of_birth?, gender?, profile_picture_url?, bio?, sports?, division?, district?, latitude?, longitude?, user_type? }` | `201` — user fields + `accessToken`, `refreshToken`, `tokenExpiresIn` |
 | POST | `/login` | public | `{ email, password }` | `200` — `{ user: { ...profile, sports, teamsJoined, eventsJoined, friends, username, accessToken, refreshToken, tokenExpiresIn } }` |
 | POST | `/refresh` | public | `{ refresh_token }` | `200` — `{ accessToken, refreshToken, tokenExpiresIn }` |
-| GET | `/:user_id` | public | path `user_id` | `200` — `{ id, email, phone, first_name, last_name, ..., sports, teamsJoined, eventsJoined, friends, username }` |
+| GET | `/:user_id` | public | path `user_id` | `200` — full public profile: account fields (`gender`, `division`, `district`, `latitude`, `longitude`, verification, `created_at`, …) + `player_profile` (skill, positions, experience, foot, jersey, height/weight, play time, travel, reliability, games) + **live** `eventsJoined`, `gamesOrganized`, `friends`, flat `rating`, `sports`, `username` |
 | POST | `/media/signature` | public | — | media upload signature |
 
 **Errors:** `VALIDATION_ERROR` (missing fields), `USER_ALREADY_EXISTS` (register, email/phone clash),
@@ -88,6 +135,11 @@ Protected routes require `Authorization: Bearer <accessToken>`. The token is iss
 `USER_NOT_FOUND` (GET by id), `INVALID_TOKEN` / `MISSING_TOKEN` (protected routes).
 
 Notes:
+- **`GET /:user_id` is the full player profile.** It joins `player_profiles` (1:1 sporting profile)
+  and computes live aggregates in parallel: `eventsJoined` = approved `event_participants`,
+  `gamesOrganized` = `events` where `organizer_id` = user, `friends` = `accepted` `connections` in
+  either direction. `sports` comes from `player_profile.sports_played`; the flat `rating` mirrors the
+  profile's reputation rating. `player_profile` is `null` for a user who hasn't filled one in yet.
 - `password_hash` in the register body is the **plaintext** password; the `encryptPassword`
   middleware hashes it before the controller runs (field name is historical).
 - Register returns `201` (was `200`).
@@ -103,15 +155,75 @@ Notes:
 | --- | --- | --- | --- | --- |
 | GET | `/` | public | — | `200` — venue-list DTOs (id, name, images, rating, location, grounds summary) |
 | GET | `/list` | public | — | `200` — minimal `{ id, name, grounds:[{id,name,sport_type}] }` |
-| GET | `/:venue_id` | public | path `venue_id` | `200` — full venue DTO with grounds |
+| GET | `/:venue_id` | **optional auth** | path `venue_id` | `200` — full venue DTO with grounds; `rating` (live avg), `rating_count`, and `my_rating` (the caller's own 1–5, or `null`) |
 | GET | `/get-venues-by-admin/:admin_id` | public | path `admin_id` | `200` — venues owned by that admin (`[]` if none) |
+| POST | `/:venue_id/rating` | **required** | `{ rating (1–5 int), comment? }` | `200` — `{ venue_id, my_rating, rating (avg), rating_count }`. Upsert: one rating per user, re-posting **updates** it |
 | POST | `/create-venue` | **turf_admin / super_admin** | venue payload incl. `grounds[]` (see `frontend-engine/src/utils/constants.js`) | `201` — created venue DTO |
 | POST | `/create-ground` | **turf_admin / super_admin** | single ground payload (name + ≥1 `sport_type` + `hourly_rate` required) | `201` — created ground |
 | PATCH | `/grounds/:ground_id` | **turf_admin / super_admin** | partial ground fields (incl. `status`) | `200` — updated ground (scoped to the ground's owning turf admin) |
 
+**Turf ratings.** A rating is a `reviews` row with `review_type='turf'`. One per `(reviewer, turf)`:
+`POST /:venue_id/rating` looks for the caller's existing turf review and **updates** it, else creates one
+(so a user can raise/lower their score but never stack duplicates). The turf's stored `rating` is
+recomputed as the average of all `approved` turf reviews after every write, and `GET /:venue_id` returns
+that live average plus `rating_count` and (when authenticated) the caller's own `my_rating`.
+
 **Auth change:** `create-venue` / `create-ground` now require `Authorization: Bearer` **and**
 a `turf_admin`/`super_admin` role. The owner (`admin_user_id`) is taken from the token —
 the old anonymous hardcoded-admin fallback is removed.
+
+### Promotions / coupons (`/promotions`)
+
+Coupon management for a turf manager. **All routes require `turf_admin` / `super_admin`** and are
+scoped to the caller's turf (a `turf_admin` owns one turf; a `super_admin` may target any via
+`?turf_id` / `turf_id` in the body). Every promotion belongs to a `turf_id`; scope can be narrowed by
+`ground_id`, `applicable_users`, and `applicable_days`.
+
+| method | path | body / params | success `data` |
+| --- | --- | --- | --- |
+| GET | `/promotions` | — | `200` — `{ promotions:[promoDTO] }` (this turf's, newest first; each with `ground_rate`, `is_expired`, `is_exhausted`, `effective_status`) |
+| GET | `/promotions/analytics` | `?days` (7–180, default 30) | `200` — `{ range_days, totals:{redemptions,total_discount,unique_users}, status_counts:{active,inactive,expired,exhausted,total}, by_coupon:[{code,title,redemptions,total_discount}], timeseries:[{day,redemptions,discount}] }` |
+| POST | `/promotions` | promo payload (below) | `201` — created promoDTO. Dup code → `PROMO_CODE_EXISTS` (409) |
+| GET | `/promotions/:promotion_id` | — | `200` — promoDTO. Not yours → `PROMO_NOT_FOUND` (404) |
+| PATCH | `/promotions/:promotion_id` | any promo fields | `200` — updated promoDTO. **Reuse a coupon by editing** it — extend `valid_until`, raise `usage_limit`, or flip `status` back to `active` to revive an expired/exhausted code |
+| DELETE | `/promotions/:promotion_id` | — | `200` — hard-delete if never redeemed; **deactivates** (status `inactive`) instead when `promotion_usage` exists, to keep analytics history |
+
+**Customer-facing (auth only, not turf-admin):**
+
+| method | path | params | success `data` |
+| --- | --- | --- | --- |
+| GET | `/coupons/available` | `?ground_id` (req), `?date` | `200` — `{ coupons:[{ code, title, description, discount_type, discount_value, minimum_booking_amount, maximum_discount_amount, is_targeted }] }` — the coupons the **caller** may apply to a booking on that ground/date |
+
+`/coupons/available` filters per user server-side (validity, scope, usage cap, day/**user** targeting) so **private/group coupons never leak** to other users — `is_targeted` flags a user/group-scoped coupon so the UI can badge it "for you".
+
+**Payload:** `{ code, title, description?, discount_type:'percentage'|'fixed_amount', discount_value,
+minimum_booking_amount?, maximum_discount_amount?, valid_from, valid_until, usage_limit?, ground_id?,
+applicable_users?:[userId], applicable_days?:[0–6], status?:'active'|'inactive' }`.
+`code` is **unique per turf** (upper-cased) — the same code may exist on a different turf, but not
+twice on one (`@@unique([turf_id, code])`); dup on the same turf → `PROMO_CODE_EXISTS` (409).
+`valid_until` must be after `valid_from`; a percentage can't exceed 100. `ground_id` must belong to the
+caller's turf (`PROMO_SCOPE_FORBIDDEN`). No turf yet → `NO_TURF_FOR_ADMIN` (404).
+
+**Redemption (booking time).** `computeSlotPricing` (used by the booking preview + create) now matches a
+code by scope — the exact `ground_id`, else the whole `turf_id`, else a global (turf-less) promo —
+and enforces the **validity window against the BOOKING date** (slots are booked in advance, so a
+coupon "valid Jul 17–31" covers any slot *dated* in that range, date-only + TZ-safe), plus
+`applicable_days` (the booking date's weekday), `applicable_users` (vs the
+booker), the `usage_limit` vs `used_count`, and `minimum_booking_amount`; the discount is capped by
+`maximum_discount_amount` and can never exceed the base rate. On a successful discounted booking a
+`promotion_usage` row is written and `used_count` is incremented **inside the booking transaction**
+(so a rolled-back booking never counts) — this is what the analytics charts read.
+
+**Applying a coupon at booking.** The customer's booking screen shows a **coupon picker** (from
+`/coupons/available`) plus manual code entry; the `GET /bookings/quote` response drives a live **price
+breakdown** (subtotal → discount → total). On booking, the redemption is recorded and the ticket
+(`GET /bookings/:id`, `GET /bookings/my`) carries the applied code via `promotion_usage[].promotions.code`
+for the invoice's `Discount (CODE)` line.
+
+**Schema:** adds one nullable column **`promotions.applicable_users`** (JSON array of user UUIDs) and
+changes the code constraint from global `@unique` to **`@@unique([turf_id, code])`**. Run
+`npx prisma db push` + `npm run prisma:generate:pg`. All other columns (`applicable_days`,
+`usage_limit`, `used_count`) and the `promotion_usage` table already existed.
 
 **One turf per admin.** A `turf_admin` owns **exactly one** turf and grows it by adding
 **grounds**, not more turfs:
@@ -133,13 +245,14 @@ address_line_1: {
   state,           // required -> division
   country,         // defaults to "Bangladesh"
   postal_code,     // optional
-  latitude, longitude  // optional, set from the map picker
+  latitude, longitude  // REQUIRED, set from the map picker (powers the events "nearby" ranking)
 }
 ```
 
 - **Required:** `name`, `address_line_1.area`, `address_line_1.city`, `address_line_1.state`,
+  a valid `address_line_1.latitude`/`longitude` (map location),
   and at least one ground with `name` + `sport_type` + `hourly_rate`.
-- **Optional (nullable in DB):** description, address_line_2 (landmark), postal_code, lat/lng,
+- **Optional (nullable in DB):** description, address_line_2 (landmark), postal_code,
   phone, email, website_url, establishment_year, facilities, sports_available,
   rules_and_regulations, cancellation_policy, operating_hours, images, and all other ground fields.
 - Ground `amenities` are inherited from the venue's `facilities` on the client.
@@ -154,25 +267,106 @@ address_line_1: {
 
 | method | path | auth | body / params | success `data` |
 | --- | --- | --- | --- | --- |
-| GET | `/` | **optional auth** | query `page?`, `limit?`, `sport?`, `timeframe?`, `q?`, `openOnly?` | `200` — `{ events, pagination, stats? }` (paginated feed) |
+| GET | `/` | **optional auth** | query `page?`, `limit?`, `sport?`, `timeframe?`, `q?`, `openOnly?` | `200` — `{ events, pagination, stats? }` (**recommended-ranked** paginated feed) |
+| GET | `/nearby` | public | query `lat`, `lng`, `radius?` (km, 1–100, default 10) | `200` — `{ events:[{…, turf_name, ground_name, distance_km}], search_radius_km, center }` (nearest first, ≤50) |
 | POST | `/:event_id/join` | **required** | — | `201` — created **pending** request (status `requested`; does NOT bump `current_players`; notifies all admins + requester) |
 | DELETE | `/:event_id/join` | **required, requester** | — | `200` — `{ event_id }` (withdraw own pending request) |
 | DELETE | `/:event_id/leave` | **required, approved participant** | — | `200` — `{ event_id }` (decrements only if was approved) |
-| GET | `/:event_id/requests` | **required, admin** | — | `200` — `{ requests:[{id,user_id,joined_at,users}] }` (pending only) |
+| POST | `/:event_id/invitation/accept` | **required, invitee** | — | `200` — `{ event_id }` (accept an `invited` row → `approved`, +`current_players`; `INVITATION_NOT_FOUND`/`EVENT_FULL`) |
+| POST | `/:event_id/invitation/decline` | **required, invitee** | — | `200` — `{ event_id }` (decline → invite row **deleted**, so they may request later; `INVITATION_NOT_FOUND`) |
+| GET | `/:event_id/requests` | **required, admin** | — | `200` — `{ requests:[{id,user_id,joined_at,users}] }` (pending `requested` only — `invited` rows excluded) |
 | POST | `/:event_id/requests/:user_id/accept` | **required, admin** | — | `200` — `{ event_id, user_id }` (approve → +`current_players`, notify user + admins, align turfmates) |
 | POST | `/:event_id/requests/:user_id/reject` | **required, admin** | — | `200` — `{ event_id, user_id }` (decline) |
 | POST | `/:event_id/admins` | **required, organizer** | `{ user_id }` | `200` — `{ event_id, user_id }` (grant admin → role `co_organizer`) |
 | DELETE | `/:event_id/admins/:user_id` | **required, organizer** | — | `200` — `{ event_id, user_id }` (revoke admin → role `player`) |
 | GET | `/my-events` | **required** | query `status?` | `200` — `{ events: [ { ...event, my_participation:{status,payment_status,joined_at} } ] }` |
 | POST | `/create-event` | **required** | event fields + `current_players[]` + optional `booking_id` | `200` — created event (organizer = token user; initial roster inserted as `approved`; if `booking_id` given, links it both ways) |
-| PATCH | `/update-event/:event_id` | **required, organizer only** | editable event fields | `200` — updated event |
-| DELETE | `/delete-event` | **required, organizer only** | `{ event_id }` | `200` — deleted event |
+| PATCH | `/update-event/:event_id` | **required, organizer only** | any editable fields (below) | `200` — updated event |
+| POST | `/:event_id/rematch` | **required, match admin** | `{ event_date, start_time, end_time }` | `201` — new cloned event (prior squad re-invited as `invited`; each accepts/declines) |
+| DELETE | `/delete-event` | **required, organizer only** | `{ event_id }` | `200` — **soft cancel** (status → `cancelled`, booking detached, squad notified `event_cancelled`; row is NOT deleted). Rejects a settled match (`EVENT_NOT_EDITABLE`) |
 | GET | `/:event_id` | public | path `event_id` | `200` — full event DTO (incl. `booking` when one is attached) |
 | GET | `/:event_id/messages` | **required, member** | — | `200` — `{ messages:[msgDTO] }` (last 50, oldest→newest; tombstones kept) |
 | POST | `/:event_id/messages` | **required, member** | `{ content?, attachment_url?, reply_to_id?, message_type? }` | `201` — message DTO (fans out `chat:new`) |
 | PATCH | `/:event_id/messages/:message_id` | **required, sender** | `{ content }` | `200` — edited DTO (`is_edited`; fans out `chat:update`) |
 | DELETE | `/:event_id/messages/:message_id` | **required, sender or match admin** | — | `200` — `{ id }` (soft delete; fans out `chat:delete`) |
+| POST | `/:event_id/messages/read` | **required, member** | — | `200` — `{ event_id }` (marks the squad chat read for the caller → clears its unread badge) |
 | POST | `/:event_id/messages/:message_id/reactions` | **required, member** | `{ emoji }` | `200` — `{ message_id, reactions }` (toggles; fans out `chat:reaction`) |
+
+**Edit a match (`PATCH /update-event/:id`)** — organizer only. Editable: `title`, `description`,
+`sport_type`, `event_type`, `ground_id`, `venue_id`, `max_players`, `min_players`,
+`skill_level_required`, `age_group`, `gender_preference`, `visibility`, `join_approval_required`,
+`entry_fee`, `total_cost`, `cost_split_type`, `rules`, `what_to_bring`, and the schedule
+(`event_date`, `start_time`, `end_time`). Not editable: `organizer_id` (no ownership transfer),
+`current_players` (derived from the approved roster). Guards: a **completed/cancelled** match is locked
+(`EVENT_NOT_EDITABLE`); `max_players` can't drop below the confirmed squad and `min` can't exceed
+`max` (`INVALID_PLAYER_LIMITS`); money can't be negative.
+**Re-attach a booking:** send `booking_id` — a uuid attaches that booking (must be the caller's, not
+tied to another match; the match's ground/venue/date/slot are then **synced from the booking**);
+`null`/`""` detaches the current one. When the match's date/time/venue/sport changes, all approved
+participants are notified (`event_reminder`) and a live `event:roster` refresh fires.
+
+**Schedule rule (booking = source of truth for time):** a match's time is **either** driven by its
+attached booking **or** a **probable** range the organizer set by hand when there's no booking.
+- **`PATCH /update-event`:** `event_date`/`start_time`/`end_time` are only accepted when the match will
+  have **no** booking after the edit — sending them on a match that stays booked returns
+  `EVENT_SCHEDULE_LOCKED`. Attaching a booking syncs the time from it; detaching frees it to be edited.
+- **`POST /create-event`:** with a `booking_id`, the time **and** venue/ground are derived from the
+  booking (any `event_date`/`start_time`/`end_time`/`venue_id`/`ground_id` in the body are ignored);
+  without a booking, those five are **required** and form the probable time.
+
+The DTO exposes `schedule_confirmed` (`true` when a booking backs the time), and the feed rows carry
+`booking_id` so cards can tag an unbacked time as "Probable".
+
+**Rematch (`POST /:id/rematch`)** — the low-friction "play again" path. Clones the match into a **new**
+event (organizer = caller, auto-joined as the only confirmed player), copying every setting **except**
+the booking (a new session needs its own reservation). The prior squad (source organizer + approved
+players, minus the caller) is inserted as **`invited`** rows and notified (`event_invitation`) to
+confirm for the new date. A finished match is never mutated — reuse is a clone, so
+chat/comments/ratings and organiser reputation stay intact.
+
+**Invitation flow (invitee side)** — an `invited` row is the mirror image of a join request: the
+organizer pulled the player in, so **the player decides**, not an admin. `POST /:id/invitation/accept`
+flips their own row to `approved` (hard capacity check, +`current_players`, notifies admins + aligns
+turfmates). `POST /:id/invitation/decline` **deletes** the invite row — leaving no participant row, so
+the `joinEvent` "any row blocks" guard clears and the user is free to `POST /:id/join` later on their
+own terms. `invited` rows never appear in the admin request queue (`/requests` filters `requested`) and
+never consume a slot until accepted.
+
+**Cancel a match (`DELETE /delete-event`)** — organizer-only, and a **soft cancel**, never a physical
+delete: the match's status flips to `cancelled`, its booking is detached (the reservation itself is
+kept — the organizer may have paid), and the approved squad is notified (`event_cancelled`). The row is
+retained so chat/comments/payments/reviews and organiser reputation survive. A hard delete is neither
+offered nor possible — `bookings`/`messages`/`payments`/`reviews` reference `events` with
+`ON DELETE NO ACTION`. Cancelling a match already `completed`/`cancelled` is rejected
+(`EVENT_NOT_EDITABLE`). Cancelled matches drop out of the ranked feed and `/nearby` (both filter
+`open`/`ready`/`booked`), and `joinEvent` refuses new requests on a `cancelled`/`completed` match.
+
+**Nearby matches (`GET /nearby`)** — upcoming, **public**, live (`open`/`ready`/`booked`) matches
+within `radius` km of `lat`/`lng`, nearest first. Distance is a plain **haversine** on the turf's
+coordinates (no PostGIS dependency — same math as the feed ranking); turfs without coordinates are
+skipped (they can't exist for new turfs — geolocation is required at creation). Each row carries a
+rounded `distance_km`.
+
+**Feed ranking (`GET /`)** — the feed is always **recommended-ranked** (no sort param). Only
+**upcoming, live** games are listed (`event_date >= today`, status `open`/`ready`/`booked`); the
+filters (`sport`/`timeframe`/`q`/`openOnly`) narrow that set. Ordering is a weighted score
+(`utils/eventRanking.js`), computed in SQL so pagination is correct across the infinite scroll; ties
+break by soonest kickoff then id. Signals, highest weight first:
+
+| signal | weight | needs |
+| --- | --- | --- |
+| nearby turf (haversine, 25 km ramp) | 28 | caller's saved home `lat/lng` (optional auth) |
+| a turfmate is organising / joined | 22 | optional auth |
+| soonest (14-day decay) | 18 | — |
+| Friday/Saturday (BD weekend) | 12 | — |
+| high-rated turf (`turfs.rating`) | 9 | — |
+| popular turf (`total_bookings`, log) | 6 | — |
+| experienced organiser (matches organised, log) | 5 | — |
+
+Anonymous callers just lose the first two signals; the rest still rank. Location is read from the
+user's stored home coordinates — **no GPS prompt**. Because ranking is server-side, no client sort UI
+exists. **Turf geolocation is now required** on `POST /venues/create-venue` (valid `latitude`/`longitude`
+in `address_line_1`) so every turf can participate in the nearby signal (`VALIDATION_ERROR` otherwise).
 
 **Squad group chat (`/events/:event_id/messages`)** — private to the match's members
 (**approved players + organizer/co-organizers**, same rule as `canCommentOnEvent`). Non-members get
@@ -191,6 +385,41 @@ address_line_1: {
 **Schema additions** (run `npx prisma db push` + `npm run prisma:generate:pg`): `messages.reply_to_id`
 (self-relation) and a new **`message_reactions`** table (`message_id`,`user_id`,`emoji`, unique per
 person+emoji).
+
+### Chat (`/chat`) — direct messages + unified conversation list
+
+1:1 DMs reuse the shared `messages` table (`event_id` NULL, `recipient_id` set) — **no new tables**.
+The navbar chat box lists **all** the caller's conversations: DM threads **and** the match/squad chats
+they belong to.
+
+| method | path | auth | body / params | success `data` |
+| --- | --- | --- | --- | --- |
+| GET | `/chat/conversations` | **required** | — | `200` — `{ conversations:[{ type:'dm'\|'match', id, title, avatar, sport_type?, unread, last_message:{content,created_at,from_me}\|null }], total_unread }` (activity-sorted) |
+| GET | `/chat/dm/:user_id` | **required** | — | `200` — `{ user, messages:[dmDTO] }` (last 50, oldest→newest). Self → `SELF_MESSAGE_FORBIDDEN` |
+| POST | `/chat/dm/:user_id` | **required** | `{ content?, attachment_url?, reply_to_id? }` | `201` — dmDTO (fans out `dm:new` to both parties). Self → `SELF_MESSAGE_FORBIDDEN`; empty → `VALIDATION_ERROR`; `reply_to_id` must be in the same thread |
+| POST | `/chat/dm/:user_id/messages/:message_id/reactions` | **required, participant** | `{ emoji }` | `200` — `{ message_id, reactions }` (toggles; emits `dm:reaction` to both) |
+| POST | `/chat/dm/:user_id/read` | **required** | — | `200` — `{ user_id, count }` (marks partner→me messages read; emits `dm:read`) |
+
+- **A player cannot message themselves** — every DM route rejects `:user_id === caller` with
+  `SELF_MESSAGE_FORBIDDEN (400)`; the profile "Message" button is also hidden on your own profile.
+- **Conversations** = DM partners you've exchanged messages with (last message + unread count) merged
+  with the events you're a member of (their last squad-chat message + **per-user unread**). A DM opened
+  from a profile that has no history yet won't appear in the list until the first message is sent.
+  `total_unread` sums both kinds.
+- **Match-chat unread** is tracked per user via the **`event_chat_reads`** table (one row per
+  `(user_id, event_id)`, `last_read_at`). A squad message is unread for a member when it was sent by
+  someone else, after their marker (or they've never opened the chat). `POST
+  /events/:id/messages/read` upserts the marker; the client calls it whenever the panel is open.
+- **DM message DTO:** `{ id, recipient_id, content|null, attachment_url|null, message_type, is_edited,
+  is_deleted, created_at, reply_to:{id,sender_name,content}|null,
+  reactions:[{emoji,count,user_ids}], sender:{id,first_name,last_name,profile_picture_url} }`. DMs now
+  support **replies and emoji reactions** (reusing `messages.reply_to_id` + `message_reactions`); no
+  edits/deletes yet.
+- **Realtime:** `dm:new` + `dm:reaction` (to both participants' user rooms) and `dm:read` (to the
+  reader's own rooms), via the existing `emitToUser` socket channel.
+- **Migration:** adds the **`event_chat_reads`** table only (run `npx prisma db push` +
+  `npm run prisma:generate:pg`). DM replies/reactions need no schema change — `messages.reply_to_id`
+  and `message_reactions` already existed.
 
 **Socket events (Socket.IO)** — client connects to the server origin with `auth:{ token }`; each
 socket auto-joins its `user:<id>` room. Additional match-page realtime:
@@ -264,6 +493,12 @@ Joining a match is an **approval flow** — no instant joins:
 - **List:** `GET /:id/requests` — admins only; pending requests with requester profiles.
 - **Leave:** `DELETE /:id/leave` removes an approved participant and decrements `current_players`
   (clamped at 0 via `GREATEST`); pending requests use withdraw, not leave.
+
+> **Two directions, two statuses.** A **request** (`requested`) is player→match, decided by an admin
+> (accept/reject above). An **invitation** (`invited`) is match→player, decided by the invitee
+> (`/invitation/accept` | `/invitation/decline`). They never mix: the admin queue shows only
+> `requested`; accepting either path lands on `approved`. Decline **deletes** the invite so a later
+> self-initiated request is still possible.
 
 **Event admins** = the organizer (always, from `events.organizer_id`) **plus** any approved
 participant whose `event_participants.role = co_organizer`. Multiple admins supported.
@@ -578,6 +813,10 @@ PostgreSQL `notifications` model (`type` = `notification_type` enum, `is_read`, 
 | DELETE | `/:id` | path `id` | `200` — `{ id }` |
 
 **Errors:** `NOTIFICATION_NOT_FOUND` (mark/delete an id you don't own), `UNAUTHORIZED`/`INVALID_TOKEN`.
+
+**`notification_type` enum** includes `event_completed` (added for the sweeper): when the event
+sweeper auto-completes a finished game it sends this to the organizer + every approved participant
+(`action_url` = `/events/:id`). Adding the enum value needs `prisma db push` + client regen.
 
 Frontend hooks: `useGetNotificationsQuery`, `useMarkNotificationReadMutation`,
 `useMarkAllNotificationsReadMutation`, `useDeleteNotificationMutation`.

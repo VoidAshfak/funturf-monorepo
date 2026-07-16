@@ -28,7 +28,9 @@ const router = Router();
 // caller's OWN bookings on the grid (`my_slots`). It also makes the limiter key
 // on the user id rather than the shared IP.
 router.route("/available-slots").get(attachUserIfPresent, bookingReadLimiter, getAvailableSlots);
-router.route("/quote").get(bookingReadLimiter, calculateBookingPrice);
+// attachUserIfPresent: public, but when a token IS sent we know the booker — so
+// user/group-targeted coupons resolve in the price preview too (not just at create).
+router.route("/quote").get(attachUserIfPresent, bookingReadLimiter, calculateBookingPrice);
 
 // Turf-admin management. Static paths BEFORE the dynamic '/:booking_id'.
 // NOTE: authorizeRoles only gates who may REACH these; the controller further

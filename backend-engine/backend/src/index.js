@@ -3,6 +3,7 @@ import { createServer } from "http";
 import { app } from "./app.js";
 import { initSocket } from "./socket.js";
 import { startHoldSweeper } from "./jobs/holdSweeper.js";
+import { startEventSweeper } from "./jobs/eventSweeper.js";
 
 const PORT = process.env.PORT || 8080;
 
@@ -14,6 +15,9 @@ initSocket(server);
 
 // Reap expired unpaid booking holds in the background.
 startHoldSweeper();
+
+// Auto-complete games whose slot has ended.
+startEventSweeper();
 
 app.get('/health', (req, res) => {
   res.status(200).send('OK');

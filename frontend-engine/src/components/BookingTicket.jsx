@@ -33,6 +33,8 @@ export default function BookingTicket({ booking }) {
     const subtotal = Number(booking.total_amount ?? booking.final_amount ?? 0);
     const discount = Number(booking.discount_amount ?? 0);
     const total = Number(booking.final_amount ?? 0);
+    // The applied coupon code, if this booking used one.
+    const couponCode = booking.promotion_usage?.[0]?.promotions?.code ?? null;
     const money = (n) => `BDT ${Number(n).toLocaleString()}`;
 
     return (
@@ -116,7 +118,7 @@ export default function BookingTicket({ booking }) {
                         </div>
                         {discount > 0 && (
                             <div className="flex justify-between text-[#0f7a37]">
-                                <span>Discount</span>
+                                <span>Discount{couponCode ? ` (${couponCode})` : ""}</span>
                                 <span>-{money(discount)}</span>
                             </div>
                         )}

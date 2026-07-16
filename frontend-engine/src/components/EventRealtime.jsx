@@ -13,8 +13,9 @@ import { useDispatch, useSelector } from "react-redux";
  *     invalidates the Event + JoinRequests caches so the squad list and the admin
  *     request queue refetch instantly — no manual refresh.
  *
- * Renders nothing. Chat has its own live channel (see EventChat) and doesn't ride
- * on the roster room, so private messages never leak to non-members.
+ * Renders nothing. Chat has its own live channel (see MatchChatPanel / the navbar
+ * ChatLauncher) and doesn't ride on the roster room, so private messages never
+ * leak to non-members.
  */
 export default function EventRealtime({ eventId }) {
     const token = useSelector(selectToken);

@@ -196,6 +196,8 @@ const getVenues = asyncHandler(async (req, res) => {
     return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, response));
 })
 
+// Optionally authenticated (attachUserIfPresent): when a token is present the DTO
+// also carries `my_rating` so the client can pre-fill the caller's own star rating.
 const getVenueById = asyncHandler(async (req, res) => {
     const { venue_id } = req.params;
     const venue = await pgClient.turfs.findUnique({
@@ -211,15 +213,116 @@ const getVenueById = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Venue not found");
     }
 
+    // Live rating aggregate from approved TURF reviews (source of truth), plus the
+    // caller's own rating when signed in — both feed the interactive star widget.
+    const [agg, mine] = await Promise.all([
+        pgClient.reviews.aggregate({
+            where: { turf_id: venue_id, review_type: "turf", status: "approved" },
+            _avg: { rating: true },
+            _count: { _all: true },
+        }),
+        req.user?.id
+            ? pgClient.reviews.findFirst({
+                  where: { turf_id: venue_id, reviewer_id: req.user.id, review_type: "turf" },
+                  select: { rating: true },
+              })
+            : null,
+    ]);
+
+    const dto = VenueSerializer.toDto(venue);
+    // Prefer the live average; fall back to the stored turfs.rating.
+    dto.rating = agg._avg.rating != null
+        ? Math.round(Number(agg._avg.rating) * 10) / 10
+        : dto.rating;
+    dto.rating_count = agg._count._all;
+    dto.my_rating = mine?.rating ?? null;
+
     return res
         .status(200)
-        .json(new ApiResponse(
-            200,
-            "Venue found",
-            VenueSerializer.toDto(venue)
-        ));
+        .json(new ApiResponse(200, "Venue found", dto));
 }
 );
+
+// Rate a turf (1–5 stars). ONE rating per user per turf — enforced as an upsert on
+// (reviewer_id, turf_id, review_type='turf'): the first call creates it, later calls
+// UPDATE the same row, so a user can raise or lower their score but never stack
+// multiple. After writing, the turf's stored `rating` is recomputed as the average
+// of all approved turf reviews. Auth required (reviewer identity from the token).
+const rateTurf = asyncHandler(async (req, res) => {
+    const { venue_id } = req.params;
+    const reviewerId = req.user.id;
+    const { comment, title } = req.body;
+
+    // Validate the score: integer 1..5.
+    const rating = Number(req.body.rating);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "Rating must be a whole number from 1 to 5",
+        });
+    }
+
+    // The turf must exist before we attach a review to it.
+    const turf = await pgClient.turfs.findUnique({
+        where: { id: venue_id },
+        select: { id: true },
+    });
+    if (!turf) throw new ApiError(404, "Venue not found");
+
+    // Upsert the caller's single turf review.
+    const existing = await pgClient.reviews.findFirst({
+        where: { turf_id: venue_id, reviewer_id: reviewerId, review_type: "turf" },
+        select: { id: true },
+    });
+
+    if (existing) {
+        await pgClient.reviews.update({
+            where: { id: existing.id },
+            data: {
+                rating,
+                comment: comment ?? undefined,
+                title: title ?? undefined,
+                updated_at: new Date(),
+            },
+        });
+    } else {
+        await pgClient.reviews.create({
+            data: {
+                reviewer_id: reviewerId,
+                turf_id: venue_id,
+                review_type: "turf",
+                rating,
+                comment: comment ?? null,
+                title: title ?? null,
+                status: "approved",
+            },
+        });
+    }
+
+    // Recompute the turf's headline rating from all approved turf reviews.
+    const agg = await pgClient.reviews.aggregate({
+        where: { turf_id: venue_id, review_type: "turf", status: "approved" },
+        _avg: { rating: true },
+        _count: { _all: true },
+    });
+    const avg = agg._avg.rating != null ? Math.round(Number(agg._avg.rating) * 100) / 100 : 0;
+    await pgClient.turfs.update({
+        where: { id: venue_id },
+        data: { rating: avg },
+    });
+
+    logger.info(
+        `turf ${venue_id} rated ${rating} by ${reviewerId} (${existing ? "updated" : "created"}); avg=${avg} n=${agg._count._all}`
+    );
+
+    return res.status(200).json(
+        new ApiResponse(200, existing ? "Rating updated" : "Thanks for rating!", {
+            venue_id,
+            my_rating: rating,
+            rating: Math.round(avg * 10) / 10,
+            rating_count: agg._count._all,
+        })
+    );
+});
 
 const createVenue = asyncHandler(async (req, res) => {
     // One turf per turf_admin. A turf_admin owns exactly one turf and adds
@@ -265,6 +368,20 @@ const createVenue = asyncHandler(async (req, res) => {
     if (!address_line_1 || !address_line_1.area || !address_line_1.city || !address_line_1.state) {
         throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
             message: "Area/street, district and division are required",
+        });
+    }
+
+    // Geolocation is REQUIRED: the events feed ranks matches by how near their
+    // turf is to the user (utils/eventRanking.js), so a turf with no coordinates
+    // can never surface as "nearby". Enforce a valid lat/lng at creation time.
+    const turfLat = Number(address_line_1.latitude);
+    const turfLng = Number(address_line_1.longitude);
+    if (
+        !Number.isFinite(turfLat) || !Number.isFinite(turfLng) ||
+        turfLat < -90 || turfLat > 90 || turfLng < -180 || turfLng > 180
+    ) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "A valid map location (latitude & longitude) is required — pick the turf on the map",
         });
     }
 
@@ -610,6 +727,7 @@ export {
     getVenues,
     getVenueList,
     getVenueById,
+    rateTurf,
     createVenue,
     createGround,
     updateGround,
