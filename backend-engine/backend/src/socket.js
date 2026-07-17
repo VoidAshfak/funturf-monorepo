@@ -1,4 +1,6 @@
 import { Server } from "socket.io";
+import { Redis } from "ioredis";
+import { createAdapter } from "@socket.io/redis-adapter";
 import jwt from "jsonwebtoken";
 import { logger } from "../logs/logger.js";
 import { allowedOrigins } from "./utils/corsOrigins.js";
@@ -17,12 +19,77 @@ const userRoom = (userId) => `user:${userId}`;
 const eventRoom = (eventId) => `event:${eventId}`;
 
 /**
- * Attach Socket.IO to the HTTP server and wire JWT auth.
+ * Wire the Redis adapter onto an io instance, so multiple replicas behave as one.
  *
- * NOTE (production / multi-replica): this keeps connection state in-process. The
- * deploy runs 3 replicas behind nginx, so for real-time to work across replicas
- * you must add nginx sticky sessions (ip_hash) + a Redis adapter
- * (`@socket.io/redis-adapter`). Single-process dev works as-is.
+ * THE PROBLEM IT SOLVES: Socket.IO's connection registry is per-process. Run
+ * three replicas and a socket held by app2 simply does not exist as far as app1
+ * is concerned — so an `emitToUser()` triggered by a REST call that happened to
+ * land on app1 is silently dropped for a user connected to app2. No error, no
+ * log; the notification just never arrives. That bug is invisible on a single
+ * process, which is exactly why the local cluster runs three.
+ *
+ * HOW IT SOLVES IT: the adapter relays every emit over Redis pub/sub, so all
+ * replicas deliver to whichever sockets they personally hold.
+ *
+ * WHY TWO CLIENTS: a Redis connection in subscriber mode may not issue normal
+ * commands, so the adapter needs a dedicated subscriber alongside the publisher.
+ * `.duplicate()` clones the connection options rather than re-parsing the URL.
+ *
+ * WHY ioredis over node-redis: it re-establishes subscriptions automatically
+ * after a reconnect. node-redis can silently come back without them — the
+ * process looks healthy while cross-replica events quietly stop flowing.
+ *
+ * NOTE: this does NOT remove the need for nginx sticky sessions (see
+ * ../../nginx/nginx.conf). The adapter fixes cross-replica delivery; stickiness
+ * is what keeps a single client's HTTP long-polling handshake on one replica.
+ * Both are required.
+ *
+ * Returns false (and leaves io on its default in-memory adapter) when REDIS_URL
+ * is unset — the correct behaviour for host-side `npm run dev`, which is a single
+ * process and needs no backplane.
+ */
+function attachRedisAdapter(io) {
+    const url = process.env.REDIS_URL;
+
+    if (!url) {
+        // Not an error: single-process dev is a legitimate mode. Logged at warn
+        // rather than info because if this shows up in a MULTI-replica
+        // environment, real-time is broken in the subtle way described above.
+        logger.warn(
+            "REDIS_URL not set — Socket.IO running with the in-memory adapter. " +
+            "Fine for single-process dev; cross-replica emits WILL be dropped if more than one instance is running."
+        );
+        return false;
+    }
+
+    // `lazyConnect: false` (the default) means ioredis dials immediately and
+    // queues commands until it's up — so initSocket stays synchronous and the
+    // server can start listening without awaiting Redis. A brief Redis outage
+    // therefore delays events rather than crashing the process.
+    const pubClient = new Redis(url, {
+        // Keep retrying forever with a capped backoff. Default ioredis behaviour
+        // gives up after 20 attempts; a backplane that permanently stops
+        // reconnecting after a routine Redis restart would silently degrade the
+        // whole cluster's real-time layer until someone redeploys.
+        retryStrategy: (times) => Math.min(times * 200, 5000),
+        maxRetriesPerRequest: null,
+    });
+    const subClient = pubClient.duplicate();
+
+    // Redis being down must never take the API down with it: real-time is a
+    // degradation, REST still works. Without these handlers an ioredis error
+    // surfaces as an unhandled 'error' event and kills the process.
+    pubClient.on("error", (err) => logger.error(`Redis (pub) error: ${err.message}`));
+    subClient.on("error", (err) => logger.error(`Redis (sub) error: ${err.message}`));
+    pubClient.on("ready", () => logger.info("Redis (pub) connected — Socket.IO backplane live"));
+
+    io.adapter(createAdapter(pubClient, subClient));
+    return true;
+}
+
+/**
+ * Attach Socket.IO to the HTTP server, wire JWT auth, and connect the
+ * multi-replica backplane.
  */
 export function initSocket(server) {
     io = new Server(server, {
@@ -34,6 +101,10 @@ export function initSocket(server) {
             credentials: true,
         },
     });
+
+    // Must happen before any connection is accepted, so no early emit bypasses
+    // the backplane.
+    const clustered = attachRedisAdapter(io);
 
     // Handshake auth: the client sends its access token in `auth.token`.
     io.use((socket, next) => {
@@ -72,7 +143,9 @@ export function initSocket(server) {
         });
     });
 
-    logger.info("Socket.IO initialized");
+    logger.info(
+        `Socket.IO initialized (adapter: ${clustered ? "redis — multi-replica safe" : "in-memory — single process only"})`
+    );
     return io;
 }
 

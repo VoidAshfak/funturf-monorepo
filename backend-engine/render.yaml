@@ -1,38 +1,161 @@
+# =============================================================================
+# FunTurf — Render Blueprint (production)
+# =============================================================================
+# Deploys the API as ONE Docker web service plus a managed Key Value (Redis)
+# instance for the Socket.IO backplane.
+#
+# WHY NO NGINX HERE (this file used to declare one):
+# The previous blueprint ran a self-managed nginx in front of three hand-cloned
+# services (app1/app2/app3) with UPSTREAM1..3=http://app1:8080. That could never
+# have worked, for two independent reasons:
+#   1. nginx does not interpolate environment variables into a static config, so
+#      those UPSTREAM vars were read by nothing.
+#   2. Render's private network only covers private service types; free web
+#      services have no internal DNS between them, so `app1` does not resolve.
+# Beyond being broken, it was redundant: Render's own edge already terminates TLS
+# and load-balances across a service's instances. So the proxy layer is now
+# LOCAL-ONLY (../docker-compose.yml + ../nginx/), where it earns its keep by
+# reproducing multi-replica behaviour on a laptop.
+#
+# TO SCALE: raise `numInstances` below (paid plans) — Render distributes traffic
+# across instances for you. The Redis adapter is already wired for that day, which
+# is why it's here even though a single instance doesn't strictly need it.
+#
+# Apply changes: commit this file; Render syncs it on push (Blueprint auto-sync).
+# Secrets are NEVER in this file — `sync: false` means "prompt me in the
+# dashboard, keep the value out of git".
+# =============================================================================
+
 services:
-  # --- Public entrypoint (Nginx) ---
+  # ---------------------------------------------------------------------------
+  # The API
+  # ---------------------------------------------------------------------------
   - type: web
-    name: nginx
+    name: funturf-api
     runtime: docker
-    rootDir: ./nginx
+
+    # Monorepo pathing: rootDir is the Docker build context, and dockerfilePath is
+    # resolved relative to it. The app lives one level down from this file, so
+    # anything OUTSIDE ./backend (including this render.yaml) does not exist at
+    # build time — that's why docs/openapi.yaml must stay under backend/.
+    rootDir: ./backend
     dockerfilePath: ./Dockerfile
+
     plan: free
+    # Singapore is the closest region to Bangladesh — ~60-80ms RTT from Dhaka
+    # versus ~250ms from Oregon. Must match the keyvalue region below, or the
+    # private connection between them won't resolve.
+    region: singapore
+
+    # Render polls this path and refuses to route traffic to (or complete a
+    # deploy of) an instance that doesn't answer 200. Served by src/index.js.
+    # This is also what makes deploys zero-downtime: the old instance keeps
+    # serving until the new one passes.
+    healthCheckPath: /health
+
+    autoDeploy: true
+
+    # Free plan is capped at one instance. Uncomment on a paid plan to scale
+    # horizontally — Render load-balances across instances at its edge, and the
+    # Redis adapter below is what keeps Socket.IO coherent once there is >1.
+    # numInstances: 3
+
     envVars:
-      - key: UPSTREAM1
-        value: http://app1:8080
-      - key: UPSTREAM2
-        value: http://app2:8080
-      - key: UPSTREAM3
-        value: http://app3:8080
+      # --- Runtime configuration (non-secret; safe in git) ---------------------
+      # src/index.js reads PORT. Render injects its own value by default; pinning
+      # it to 8080 keeps prod identical to local and to the Dockerfile's EXPOSE.
+      - key: PORT
+        value: 8080
 
-  # --- Private backend replicas ---
-  - type: web 
-    name: app1
-    runtime: docker
-    rootDir: ./backend
-    dockerfilePath: ./Dockerfile
+      - key: NODE_ENV
+        value: production
+
+      # Swagger UI at /api/v1/docs. OFF in production on purpose: a complete
+      # endpoint/parameter/error-code inventory is free reconnaissance, and this
+      # is not a public or partner API (see src/utils/swagger.js). Flip to true in
+      # the dashboard temporarily if you must, then flip it back.
+      - key: DOCS_ENABLED
+        value: false
+
+      # Browser origins allowed to call the API — consumed by
+      # src/utils/corsOrigins.js, which feeds BOTH the REST CORS layer (app.js)
+      # and the Socket.IO handshake (socket.js). Comma-separated, no trailing
+      # slashes. localhost is intentionally absent: a production API should not
+      # trust a developer laptop's origin.
+      - key: CORS_ORIGINS
+        value: https://funturf-frontend.vercel.app
+
+      # Slot/booking maths is done against Bangladesh local time (UTC+06:00), but
+      # the container clock is UTC — so this offset is what stops a 9pm slot from
+      # being evaluated as 3pm. src/utils/eventService.js already defaults to 360;
+      # pinned here so the assumption is visible in the deploy config rather than
+      # buried in a `??` fallback.
+      - key: APP_TZ_OFFSET_MINUTES
+        value: 360
+
+      # --- Socket.IO backplane -------------------------------------------------
+      # Injected by Render from the keyvalue service below — the internal
+      # connection string, resolved at deploy time. Never hardcode it: it rotates
+      # if the instance is recreated.
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: funturf-keyvalue
+          property: connectionString
+
+      # --- Secrets (sync: false => set once in the Render dashboard) -----------
+      # `sync: false` tells Render to prompt for the value and never read it from
+      # this file. Nothing below should ever appear in git.
+
+      # Hosted PostgreSQL (Aiven). Prisma's `pg` datasource.
+      - key: POSTGRESQL_DATABASE_URL
+        sync: false
+
+      # Hosted MongoDB. DEPRECATED — still imported by src/prisma.js, so the
+      # process crashes on boot without it. Remove this once user.controller.js
+      # and turfmate.controller.js are migrated off mongoClient.
+      - key: MONGO_DATABASE_URL
+        sync: false
+
+      # JWT signing keys. MUST differ from the local .env values — a leaked dev
+      # secret would otherwise mint valid production tokens.
+      - key: ACCESS_TOKEN_SECRET
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRY
+        sync: false
+      - key: REFRESH_TOKEN_SECRET
+        sync: false
+      - key: REFRESH_TOKEN_EXPIRY
+        sync: false
+
+      # Cloudinary — image upload target (src/utils/mediaUpload.js).
+      # Only these two: `cloud_name` is currently hardcoded to 'funturf' in that
+      # file, so there is no CLOUDINARY_CLOUD_NAME to set. Worth externalising if
+      # a second Cloudinary account is ever used for staging.
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_SECRET_KEY
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Key Value (Redis) — Socket.IO adapter backplane
+  # ---------------------------------------------------------------------------
+  # Mirrors the `redis` service in docker-compose.yml. Carries only Socket.IO
+  # pub/sub, so its memory footprint is negligible and the free plan's 25MB is
+  # ample.
+  - type: keyvalue
+    name: funturf-keyvalue
     plan: free
+    # Must match the API's region — cross-region private networking doesn't work,
+    # and routing pub/sub over the public internet would add latency to every emit.
+    region: singapore
 
-  - type: web
-    name: app2
-    runtime: docker
-    rootDir: ./backend
-    dockerfilePath: ./Dockerfile
-    plan: free
+    # Empty list = internal connections only. This instance is unauthenticated on
+    # Render's private network; an open ipAllowList would put an unauthenticated
+    # Redis on the public internet, which is game over.
+    ipAllowList: []
 
-  - type: web
-    name: app3
-    runtime: docker
-    rootDir: ./backend
-    dockerfilePath: ./Dockerfile
-    plan: free
-
+    # Never silently evict under memory pressure. The adapter's data is pub/sub
+    # traffic, not a cache — quietly dropping it would mean quietly dropping
+    # users' real-time notifications. Fail loudly instead.
+    maxmemoryPolicy: noeviction

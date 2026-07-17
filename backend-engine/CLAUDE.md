@@ -22,15 +22,29 @@ There is **no test runner, linter, or build step** configured. Formatting is Pre
 
 ### Docker / local cluster
 
-`docker-compose.yml` (run from repo root) brings up postgres + 3 backend replicas (`app1/2/3`) + nginx. Prisma against the dockerized DB:
+> Full command reference, local-DB switching and pgAdmin setup: **`docs/DOCKER_GUIDE.md`** (umbrella root, one level above `backend-engine/`).
+
+`docker-compose.yml` (run from `backend-engine/`) brings up postgres + redis + 3 backend replicas (`app1/2/3`) + nginx. It exists to reproduce **multi-replica** behaviour locally — anything replica-unsafe (in-process socket state, in-process caches, the `src/jobs/` sweepers) breaks here rather than in production.
 
 ```bash
-docker compose run --rm app1 npx prisma generate --schema=prisma/postgresql/schema.prisma
-docker compose run --rm app1 npx prisma db pull --schema=prisma/postgresql/schema.prisma
-docker compose up -d
+docker compose up -d --build   # build + start the cluster
+docker compose logs -f app1    # follow one replica (winston logs to stdout)
+docker compose down            # stop; add -v to also wipe the postgres volume
 ```
 
-Postgres is exposed to the host at `127.0.0.1:8000`; nginx serves on port 80.
+- nginx serves on **:80**, postgres on **127.0.0.1:8000**, redis is not published to the host.
+- Env comes from `backend/.env` — the **same file** `npm run dev` uses. See `backend/.env.example`.
+- Replicas run the production image (plain `node`, no nodemon), so **code changes need `up -d --build`**. For a fast edit-reload loop use `npm run dev` on the host instead.
+- The postgres container is **idle by default**: `POSTGRESQL_DATABASE_URL` points at hosted Aiven. To use it, switch to the `@db:5432` URL commented in `.env`, then `docker compose exec app1 npx prisma db push --schema=prisma/postgresql/schema.prisma`.
+- nginx config edits don't need a rebuild (it's bind-mounted): `docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload`.
+
+**nginx is local-only.** It is not deployed — Render terminates TLS and load-balances at its own edge. Two things in `nginx/nginx.conf` are load-bearing and easy to break:
+- **Sticky sessions** (`hash $remote_addr consistent`) — Socket.IO's polling handshake must reach the same replica every time, or clients reconnect-loop on "Session ID unknown".
+- **The forwarded-header snippet** (`nginx/proxy_common.conf`) — `proxy_set_header` *replaces* rather than merges across levels, so every proxying location must `include` it. Read that file's header before editing.
+
+### Real-time / Socket.IO scaling
+
+`src/socket.js` attaches `@socket.io/redis-adapter` when `REDIS_URL` is set, so an `emitToUser()` on one replica reaches a socket held by another. Unset (host dev) it falls back to the in-memory adapter and logs a warning — correct for a single process, silently lossy for more than one. Sticky sessions do **not** replace this; both are required.
 
 
 
@@ -69,7 +83,13 @@ Routes, controllers, and middlewares are grouped by domain folder (`auth/`, `eve
 
 ## Deployment
 
-`render.yaml` deploys to Render: an nginx web service (`rootDir: ./nginx`) fronting three identical backend web services (`app1/2/3`, `rootDir: ./backend`), each built from its Dockerfile. Backend listens on `0.0.0.0:8080` and exposes `/health`.
+`render.yaml` deploys **one** Docker web service (`funturf-api`, `rootDir: ./backend`) plus a managed Key Value/Redis instance (`funturf-keyvalue`) for the Socket.IO backplane. Region `singapore` (closest to Dhaka); both services must share it. The app listens on `0.0.0.0:8080` and Render gates deploys on `healthCheckPath: /health`.
+
+No nginx in production, and no hand-cloned `app1/2/3`: Render already load-balances across instances of a single service. Scale by uncommenting `numInstances` (paid plan) — the Redis adapter is already wired for that.
+
+Secrets are `sync: false` (set once in the Render dashboard, never in git). Non-secret config (`PORT`, `NODE_ENV`, `CORS_ORIGINS`, `DOCS_ENABLED`, `APP_TZ_OFFSET_MINUTES`) is declared inline.
+
+Build context is `./backend`, so **anything outside `backend/` does not exist at build time** — that's why `docs/openapi.yaml` must stay under `backend/`.
 
 ## Notes & data model reference
 

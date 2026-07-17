@@ -1,88 +1,196 @@
+# =============================================================================
+# FunTurf — local development cluster
+# =============================================================================
+# Brings up a miniature of the production topology so multi-replica bugs surface
+# on your laptop instead of in prod:
+#
+#   client :80 -> nginx -> app1 | app2 | app3  (:8080, sticky-hashed by client IP)
+#                             |
+#                             +-> redis    (Socket.IO cross-replica fan-out)
+#                             +-> postgres (optional, see POSTGRESQL_DATABASE_URL below)
+#
+# Run from THIS directory (backend-engine/):
+#   docker compose up -d --build     # build + start
+#   docker compose logs -f           # follow all logs
+#   docker compose down              # stop (add -v to wipe the postgres volume)
+#
+# Env comes from ./backend/.env — the same file `npm run dev` uses, so the two
+# paths can't drift. See ./backend/.env.example for the full variable list.
+#
+# NOTE ON WORKFLOW: the replicas run the production image (plain `node`, no
+# nodemon), so code changes need `docker compose up -d --build`. That is
+# deliberate — this cluster exists to test the real artifact. For a fast
+# edit-reload loop, run `npm run dev` directly on the host instead.
+# =============================================================================
 
 name: funturf
 
 networks:
+  # nginx <-> app replicas. Split from db-net so the proxy has no route to the
+  # database or cache at all: if nginx is ever compromised, it cannot reach them.
   app-net:
     driver: bridge
+  # app replicas <-> backing services (postgres, redis). nginx is not on it.
   db-net:
     driver: bridge
 
 volumes:
-  logs:
+  # Named volume so `docker compose down` (without -v) preserves local data.
   postgres-data:
+  # No volume for redis on purpose: it only carries Socket.IO pub/sub traffic,
+  # which is worthless once the process restarts. Nothing to persist.
+  #
+  # No volume for app logs either: winston's Console transport writes to stdout,
+  # so `docker compose logs -f app1` is the log. A named volume mounted at
+  # /funturf/app/logs would actually BREAK the app — logs/logger.js lives in that
+  # directory and the mount would hide the source file.
 
+# YAML anchor: the three replicas are byte-identical apart from their name, so
+# their shared config is defined once here (DRY) and merged in with `<<: *`.
 x-backend-common: &backend-common
   build:
     context: ./backend
     dockerfile: Dockerfile
+
+  # Single source of env truth, shared with host-side `npm run dev`.
   env_file:
-    - .env
+    - ./backend/.env
+
+  # `environment` overrides `env_file` — used ONLY for values that are
+  # container-specific and therefore cannot live in a file shared with the host.
+  environment:
+    # Inside compose, redis is reachable by service name. On the host (bare
+    # `npm run dev`) there is no such name, which is why this is set here rather
+    # than in .env. If REDIS_URL is unset, src/socket.js skips the adapter and
+    # runs single-process — correct for host dev, wrong for this 3-replica setup.
+    REDIS_URL: redis://redis:6379
+
   restart: unless-stopped
+
+  # `expose`, not `ports`: the replicas are reachable from the docker network
+  # (i.e. from nginx) but NOT bound to a host port. All traffic goes through the
+  # proxy, which is the point of having one. To hit a replica directly for
+  # debugging: docker compose exec app1 wget -qO- localhost:8080/health
   expose:
     - "8080"
+
   networks:
     - app-net
     - db-net
+
   depends_on:
     db:
       condition: service_healthy
-  
-  healthcheck:
-    test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
-    interval: 10s
-    timeout: 3s
-    retries: 5
-    start_period: 40s
-  
+    redis:
+      condition: service_healthy
+
+  # No healthcheck here — it is baked into backend/Dockerfile (HEALTHCHECK), so
+  # the image reports its own liveness wherever it runs. nginx's
+  # depends_on: service_healthy consumes that.
 
 services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — local database (optional)
+  # ---------------------------------------------------------------------------
+  # IMPORTANT: this container is only used if backend/.env points at it. As
+  # shipped, POSTGRESQL_DATABASE_URL targets the hosted Aiven instance and this
+  # container just idles. To develop against a local database, switch to the
+  # `@db:5432` URL already commented in backend/.env, then create the schema:
+  #   docker compose exec app1 npx prisma db push --schema=prisma/postgresql/schema.prisma
+  #
+  # Credentials come from POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB in
+  # backend/.env — the postgres image reads those on first boot to initialise the
+  # cluster. Changing them later has NO effect unless the volume is wiped
+  # (`docker compose down -v`); the data directory is only initialised once.
   db:
     image: postgres:16-alpine
     container_name: funturf-db
     restart: unless-stopped
     env_file:
-      - .env
+      - ./backend/.env
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    # Bound to 127.0.0.1 so the database is reachable from your machine (psql,
+    # Prisma Studio, a GUI) but NOT from your local network. Dropping the
+    # 127.0.0.1 prefix would expose it on every interface — including café wifi.
+    # Host port 8000 avoids clashing with a native postgres on 5432.
     ports:
       - "127.0.0.1:8000:5432"
     networks:
       - db-net
     healthcheck:
+      # $$ escapes to a literal $ so the shell INSIDE the container expands the
+      # variable — a single $ would be interpolated by compose on the host.
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
 
+  # ---------------------------------------------------------------------------
+  # Redis — Socket.IO adapter backplane
+  # ---------------------------------------------------------------------------
+  # WHY THIS EXISTS: Socket.IO keeps its connection registry in-process. With
+  # three replicas, a socket held by app2 is invisible to app1 — so an
+  # emitToUser() from a REST call that happened to land on app1 silently vanishes.
+  # The Redis adapter (src/socket.js) publishes those emits over Redis pub/sub so
+  # every replica delivers to its own sockets. Sticky sessions in nginx are a
+  # separate concern and do not replace this; both are required.
+  redis:
+    image: redis:7-alpine
+    container_name: funturf-redis
+    restart: unless-stopped
+    # Persistence fully off: this instance carries only ephemeral pub/sub
+    # messages. `--save ""` disables RDB snapshots, `--appendonly no` disables the
+    # AOF. Nothing here survives a restart, and nothing needs to.
+    # noeviction: never silently drop keys under memory pressure — the adapter's
+    # footprint is tiny, so hitting the limit means something is wrong and should
+    # error loudly rather than lose messages.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "noeviction"]
+    # No `ports` — deliberately unreachable from the host. Redis has no auth here
+    # and binding it to a host port is a well-known way to get a machine owned.
+    networks:
+      - db-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # API replicas — three identical copies of the production image
+  # ---------------------------------------------------------------------------
+  # Three, so that anything replica-unsafe (in-process socket state, in-process
+  # caches, the background sweepers in src/jobs/) fails here rather than in prod.
   app1:
     <<: *backend-common
     container_name: backend-app-1
-    volumes:
-    - ./backend/prisma/postgresql:/funturf/app/prisma/postgresql
-    command: npm run dev
 
   app2:
     <<: *backend-common
     container_name: backend-app-2
-    volumes:
-    - ./backend/prisma/postgresql:/funturf/app/prisma/postgresql
-    command: npm run dev
 
   app3:
     <<: *backend-common
     container_name: backend-app-3
-    volumes:
-    - ./backend/prisma/postgresql:/funturf/app/prisma/postgresql
-    command: npm run dev
 
+  # ---------------------------------------------------------------------------
+  # nginx — the local edge proxy
+  # ---------------------------------------------------------------------------
+  # Built from ./nginx rather than pulling `nginx:alpine` + mounting a config, so
+  # the Dockerfile stays the single source of truth and is exercised on every
+  # build.
   nginx:
-    image: nginx:alpine
-    container_name: nginx
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: funturf-nginx
+    restart: unless-stopped
     depends_on:
-      # - app1
-      # - app2
-      # - app3
+      # Must be service_healthy, not just service_started: nginx resolves every
+      # `upstream` hostname while parsing its config and exits if one is missing.
+      # Waiting for the replicas to be healthy guarantees DNS is answerable.
       app1:
         condition: service_healthy
       app2:
@@ -92,7 +200,19 @@ services:
     ports:
       - "80:80"
     volumes:
+      # The same files the image already contains, bind-mounted read-only so a
+      # config edit needs only a reload, not a rebuild:
+      #   docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
+      # :ro so a compromised proxy cannot rewrite its own config.
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/proxy_common.conf:/etc/nginx/snippets/proxy_common.conf:ro
     networks:
       - app-net
-    restart: unless-stopped
+    healthcheck:
+      # Hits nginx's own self-answered endpoint (not the proxied /health), so
+      # this reports on the proxy itself rather than the replicas behind it.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

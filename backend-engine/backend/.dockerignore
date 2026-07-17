@@ -1,30 +1,59 @@
+# =============================================================================
+# Build-context exclusions for backend/Dockerfile
+# =============================================================================
+# Everything NOT listed here is uploaded to the docker daemon and can end up in
+# an image layer. Two reasons this file matters:
+#   1. SECRECY — a layer is permanently readable by anyone with the image, even
+#      if a later layer deletes the file. `.env` must never get in.
+#   2. CORRECTNESS — host artifacts (node_modules compiled for Windows, a stale
+#      generated Prisma client) would overwrite what the build produced for Alpine.
+#
+# Anything the running app needs MUST stay out of this file. In particular:
+#   - prisma/    (schemas — the image generates the clients from them)
+#   - docs/      (openapi.yaml — hand-written, served by src/utils/swagger.js)
+# =============================================================================
 
+# --- Secrets: never in a layer -----------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Host build artifacts ----------------------------------------------------
+# node_modules: compiled for the host OS/ABI. The image runs `npm ci` on Alpine;
+# copying these in would ship native addons (bcrypt) built for the wrong libc.
 node_modules/
+# src/generated: the image regenerates the Prisma clients for its own platform.
+# A host-generated client carries the wrong query-engine binary target.
+src/generated/
+dist/
+build/
+coverage/
+.nyc_output
+.npm
+.node_repl_history
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.npm
-.node_repl_history
-.nyc_output
-coverage/
-dist/
-build/
-src/generated/
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 
-# Version Control
+# --- Runtime scratch ---------------------------------------------------------
+# Local log output. Note this pattern only matches *.log — logs/logger.js itself
+# MUST reach the image (app.js imports it).
+logs/*.log
+# Multer's upload staging area. The directory is recreated by the Dockerfile;
+# stale uploads shouldn't be baked in.
+public/temp/*
+!public/temp/.gitkeep
+
+# --- Version control ---------------------------------------------------------
+# .git is often the largest thing in the context and leaks full history.
 .git/
 .gitignore
 .svn/
 .hg/
-.bzr/
-CVS/
 
-# Editors & IDEs
+# --- Editors / OS --------------------------------------------------------------
 .vscode/
 .idea/
 *.swp
@@ -32,17 +61,13 @@ CVS/
 *~
 .DS_Store
 Thumbs.db
-.project
-.classpath
-.settings/
-*.sublime-project
-*.sublime-workspace
 
-# Docker & Kubernetes
+# --- Tooling not needed at runtime --------------------------------------------
 Dockerfile*
+.dockerignore
 docker-compose*.yml
 docker-compose*.yaml
-.dockerignore
-k8s/
-kubernetes/
-*.kubeconfig
+.prettierrc
+.prettierignore
+.agents/
+skills-lock.json

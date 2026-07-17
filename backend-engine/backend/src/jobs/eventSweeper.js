@@ -13,9 +13,10 @@ import { logger } from "../../logs/logger.js";
  * The underlying UPDATE only touches rows still in a sweepable status, so it's
  * idempotent: a missed, doubled, or multi-replica run is harmless.
  *
- * NOTE: the API runs as 3 replicas behind nginx, so all three sweep. Safe (each
- * row is claimed by the UPDATE's WHERE), just mildly redundant. Move to a single
- * leader or a real scheduler if that ever costs.
+ * NOTE: every instance sweeps — 3 replicas in the local cluster
+ * (../../../docker-compose.yml), and one per instance on Render once
+ * numInstances > 1. Safe (each row is claimed by the UPDATE's WHERE), just mildly
+ * redundant. Move to a single leader or a real scheduler if that ever costs.
  */
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 

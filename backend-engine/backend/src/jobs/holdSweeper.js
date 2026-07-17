@@ -13,9 +13,11 @@ import { logger } from "../../logs/logger.js";
  * Deliberately dumb — an interval, not a cron dependency. It's idempotent, so a
  * missed or doubled run is harmless.
  *
- * NOTE: the API runs as 3 replicas behind nginx, so all three will sweep. That's
- * safe (the work is idempotent and each row is claimed by an UPDATE), just
- * mildly redundant. Move to a single leader or a real scheduler if that ever costs.
+ * NOTE: every instance sweeps — 3 replicas in the local cluster
+ * (../../../docker-compose.yml), and one per instance on Render once
+ * numInstances > 1. That's safe (the work is idempotent and each row is claimed
+ * by an UPDATE), just mildly redundant. Move to a single leader or a real
+ * scheduler if that ever costs.
  */
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000; // every 10 minutes
 
