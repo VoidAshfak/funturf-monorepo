@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { notifyError } from "@/lib/notify";
 import { useSession } from "next-auth/react";
-import { Check, Clock, Loader2, UserCheck, UserPlus, X } from "lucide-react";
+import { Check, Clock, Loader2, UserCheck, UserPlus, UserX, X } from "lucide-react";
 import { Button } from "./ui/button";
+import ConfirmDialog from "./ConfirmDialog";
 import { getApiErrorMessage } from "@/utils/apiError";
 import {
     useGetConnectionStatusQuery,
@@ -19,6 +21,8 @@ import {
 export default function ConnectButton({ userId }) {
     const { data: session } = useSession();
     const isSelf = session?.user?.id === userId;
+    // Guards the destructive "remove turfmate" action behind a confirm modal.
+    const [confirmRemove, setConfirmRemove] = useState(false);
 
     const { data: conn, isLoading } = useGetConnectionStatusQuery(userId, {
         skip: !session || isSelf,
@@ -52,18 +56,39 @@ export default function ConnectButton({ userId }) {
 
     const spinner = <Loader2 className="h-4 w-4 animate-spin" />;
 
-    // accepted -> already turfmates (click to remove)
+    // accepted -> already turfmates. Removing is destructive, so the click only
+    // opens a confirm modal; the actual unfriend runs from there.
     if (status === "accepted") {
         return (
-            <Button
-                variant="outline"
-                className="rounded-full"
-                disabled={busy}
-                onClick={() => run(remove, userId)}
-            >
-                {busy ? spinner : <UserCheck className="h-4 w-4 text-primary" />}
-                Turfmates
-            </Button>
+            <>
+                <Button
+                    variant="outline"
+                    className="rounded-full"
+                    disabled={busy}
+                    onClick={() => setConfirmRemove(true)}
+                >
+                    {busy ? spinner : <UserCheck className="h-4 w-4 text-primary" />}
+                    Turfmates
+                </Button>
+                <ConfirmDialog
+                    open={confirmRemove}
+                    onOpenChange={setConfirmRemove}
+                    Icon={UserX}
+                    title="Remove turfmate?"
+                    description="You'll both be disconnected. You can always send a new request later."
+                    confirmLabel="Remove"
+                    cancelLabel="Keep turfmate"
+                    // Throw on failure so the modal stays open and the toast shows.
+                    onConfirm={async () => {
+                        try {
+                            await remove(userId).unwrap();
+                        } catch (err) {
+                            notifyError(getApiErrorMessage(err, "Something went wrong."));
+                            throw err;
+                        }
+                    }}
+                />
+            </>
         );
     }
 

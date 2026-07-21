@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { useSession } from "next-auth/react";
 import { Check, Clock, Loader2, LogIn, UserMinus, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
+import ConfirmDialog from "./ConfirmDialog";
 import { getApiErrorMessage } from "@/utils/apiError";
 import {
     useJoinEventMutation,
@@ -27,6 +29,11 @@ export default function EventJoinButton({ event: initialEvent, isFull: initialIs
     const { data: session } = useSession();
     const me = session?.user?.id;
     const eventId = initialEvent?.id;
+
+    // Confirm gates for the two "you drop out" actions — a mis-tap shouldn't
+    // pull the caller from a match or silently withdraw their join request.
+    const [confirmLeave, setConfirmLeave] = useState(false);
+    const [confirmCancel, setConfirmCancel] = useState(false);
 
     // Read the event LIVE so the button reflects real-time roster changes (my
     // request accepted elsewhere, the squad filling up) without a refresh. Seeded
@@ -102,17 +109,41 @@ export default function EventJoinButton({ event: initialEvent, isFull: initialIs
         }
     };
 
+    // Same as `run`, but RETHROWS on failure so a ConfirmDialog keeps its modal
+    // open (and the error toast visible) instead of closing on a failed action.
+    const runConfirm = async (fn, successMessage, description) => {
+        try {
+            await fn(eventId).unwrap();
+            if (successMessage) notifySuccess(successMessage, description);
+        } catch (err) {
+            notifyError(getApiErrorMessage(err, "Something went wrong."));
+            throw err;
+        }
+    };
+
     if (status === "approved") {
         return (
-            <Button
-                size="lg"
-                variant="outline"
-                className="rounded-full px-8"
-                disabled={busy}
-                onClick={() => run(leave, "You left the match")}
-            >
-                {busy ? spinner : <UserMinus className="h-4 w-4" />} Leave match
-            </Button>
+            <>
+                <Button
+                    size="lg"
+                    variant="outline"
+                    className="rounded-full px-8"
+                    disabled={busy}
+                    onClick={() => setConfirmLeave(true)}
+                >
+                    {busy ? spinner : <UserMinus className="h-4 w-4" />} Leave match
+                </Button>
+                <ConfirmDialog
+                    open={confirmLeave}
+                    onOpenChange={setConfirmLeave}
+                    Icon={UserMinus}
+                    title="Leave this match?"
+                    description="Your spot opens up for someone else. You'd have to request to join again to get back in."
+                    confirmLabel="Leave match"
+                    cancelLabel="Stay in"
+                    onConfirm={() => runConfirm(leave, "You left the match")}
+                />
+            </>
         );
     }
 
@@ -146,15 +177,27 @@ export default function EventJoinButton({ event: initialEvent, isFull: initialIs
 
     if (status === "requested") {
         return (
-            <Button
-                size="lg"
-                variant="outline"
-                className="rounded-full px-8"
-                disabled={busy}
-                onClick={() => run(cancel, "Request withdrawn")}
-            >
-                {busy ? spinner : <Clock className="h-4 w-4" />} Requested — tap to cancel
-            </Button>
+            <>
+                <Button
+                    size="lg"
+                    variant="outline"
+                    className="rounded-full px-8"
+                    disabled={busy}
+                    onClick={() => setConfirmCancel(true)}
+                >
+                    {busy ? spinner : <Clock className="h-4 w-4" />} Requested — tap to cancel
+                </Button>
+                <ConfirmDialog
+                    open={confirmCancel}
+                    onOpenChange={setConfirmCancel}
+                    Icon={X}
+                    title="Cancel join request?"
+                    description="We'll withdraw your request to join this match. You can request again any time before it fills up."
+                    confirmLabel="Cancel request"
+                    cancelLabel="Keep request"
+                    onConfirm={() => runConfirm(cancel, "Request withdrawn")}
+                />
+            </>
         );
     }
 

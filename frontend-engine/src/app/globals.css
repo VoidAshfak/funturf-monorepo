@@ -352,6 +352,70 @@
   }
 }
 
+/*
+  Sporty confirm modal ("whistle-pop"). Destructive actions (leave match,
+  remove turfmate, cancel request) open this via ConfirmDialog. The content
+  springs in with a slight overshoot + kick-off tilt like a ball settling,
+  and the backdrop blurs in. `!important` intentionally overrides the default
+  Dialog's tw-animate classes so these keyframes own the transform.
+*/
+@keyframes sporty-pop-in {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -42%) scale(0.8) rotate(-2deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.045) rotate(0.6deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0);
+  }
+}
+@keyframes sporty-pop-out {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -47%) scale(0.9);
+  }
+}
+@keyframes sporty-overlay-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+.sporty-modal[data-state="open"] {
+  /* cubic-bezier overshoot = the "bounce" of a settling ball */
+  animation: sporty-pop-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+.sporty-modal[data-state="closed"] {
+  animation: sporty-pop-out 0.18s ease-in !important;
+}
+.sporty-overlay[data-state="open"] {
+  animation: sporty-overlay-in 0.3s ease-out forwards !important;
+}
+.sporty-overlay[data-state="closed"] {
+  animation: sporty-overlay-in 0.18s ease-in reverse forwards !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sporty-modal[data-state="open"],
+  .sporty-modal[data-state="closed"],
+  .sporty-overlay[data-state="open"],
+  .sporty-overlay[data-state="closed"] {
+    animation: none !important;
+  }
+}
+
 /* ---- Leaflet map theming (green-glass) ---- */
 
 /* Custom brand marker: green teardrop pin with white ring + ground pulse */

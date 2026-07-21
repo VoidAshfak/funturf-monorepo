@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
@@ -28,6 +29,9 @@ import {
     useSendTurfmateRequestMutation,
 } from "@/store/api/apiSlice";
 import EmptyState from "@/components/EmptyState";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import { notifyError } from "@/lib/notify";
+import { getApiErrorMessage } from "@/utils/apiError";
 
 const fullName = (u) =>
     [u?.first_name, u?.last_name].filter(Boolean).join(" ") || "Player";
@@ -236,6 +240,8 @@ function CardShell({ children, highlight }) {
 
 function TurfmateCard({ person }) {
     const [remove, { isLoading }] = useRemoveTurfmateMutation();
+    // Removing a turfmate is destructive -> confirm before it fires.
+    const [confirmOpen, setConfirmOpen] = useState(false);
     return (
         <CardShell>
             <PersonHeader person={person} sub={<AreaLine person={person} />} />
@@ -244,11 +250,28 @@ function TurfmateCard({ person }) {
                 size="sm"
                 className="shrink-0 rounded-full"
                 disabled={isLoading}
-                onClick={() => remove(person.id)}
+                onClick={() => setConfirmOpen(true)}
             >
                 <UserX className="h-4 w-4" />
                 Remove
             </Button>
+            <ConfirmDialog
+                open={confirmOpen}
+                onOpenChange={setConfirmOpen}
+                Icon={UserX}
+                title={`Remove ${fullName(person)}?`}
+                description="You'll both be disconnected. You can always send a new request later."
+                confirmLabel="Remove"
+                cancelLabel="Keep turfmate"
+                onConfirm={async () => {
+                    try {
+                        await remove(person.id).unwrap();
+                    } catch (err) {
+                        notifyError(getApiErrorMessage(err, "Something went wrong."));
+                        throw err; // keep the modal open on failure
+                    }
+                }}
+            />
         </CardShell>
     );
 }
