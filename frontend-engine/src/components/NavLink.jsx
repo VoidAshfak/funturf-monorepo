@@ -7,7 +7,7 @@ import {
     NavigationMenuList
 } from "@/components/ui/navigation-menu"
 import { usePathname } from "next/navigation"
-import { LandPlot, Ticket, Users } from "lucide-react"
+import { LandPlot, Shield, Ticket, Users } from "lucide-react"
 import SoccerBall from "@/components/icons/SoccerBall"
 
 export default function NavLink() {
@@ -45,6 +45,16 @@ export default function NavLink() {
                     >
                         <Users className="h-6 w-6 text-foreground" />
                         <span className="text-xl"> Turfmates </span>
+                    </Link>
+                </NavigationMenuItem>
+
+                <NavigationMenuItem>
+                    <Link
+                        href="/teams"
+                        className={`flex items-center p-2 rounded-2xl gap-1 ${pathname.startsWith("/teams") ? "backdrop-blur-sm bg-green-700/10" : ""}`}
+                    >
+                        <Shield className="h-6 w-6 text-foreground" />
+                        <span className="text-xl"> Teams </span>
                     </Link>
                 </NavigationMenuItem>
 

@@ -72,6 +72,18 @@ export const commentWriteLimiter = rateLimit({
 });
 
 /**
+ * Team writes — above all, invites. An invite pushes a high-priority
+ * notification to someone else's bell, so an unbounded loop would turn a team
+ * into a spam cannon. Roster edits ride the same limiter: a captain adjusts
+ * positions a few times, never dozens a minute.
+ */
+export const teamWriteLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 60 * 1000,
+    limit: 20,
+});
+
+/**
  * Swagger UI + raw spec (`utils/swagger.js`). Anonymous by definition, so this
  * keys on IP. One page load pulls the HTML plus a handful of static assets, so
  * the limit is generous — it exists to stop the ~9k-line spec being scraped in

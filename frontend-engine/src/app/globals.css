@@ -359,47 +359,109 @@
   and the backdrop blurs in. `!important` intentionally overrides the default
   Dialog's tw-animate classes so these keyframes own the transform.
 */
+
+/*
+  Scroll-lock layout shift — the OTHER half of the "modal jumps" bug.
+
+  Radix locks body scroll while a dialog is open (`react-remove-scroll` sets
+  `overflow: hidden` on <body> and tags it `data-scroll-locked`). On a scrollable
+  page that removes the scrollbar, the viewport gets ~15px wider, and everything
+  reflows sideways — then back on close.
+
+  react-remove-scroll compensates with `margin-right` on <body>, which fixes
+  in-flow content but CANNOT fix position:fixed elements — they're positioned
+  against the viewport, not the body box. This app has two (Navbar, BottomTabBar),
+  so those visibly slid on every open/close.
+
+  Reserving the gutter permanently means the scrollbar's appearance/disappearance
+  changes no geometry at all, for fixed and in-flow content alike. The body
+  compensation must then be cancelled or it over-corrects and shifts the page the
+  other way. The `html` prefix raises specificity above react-remove-scroll's own
+  `!important` rule, so this wins no matter which stylesheet loads last.
+*/
+html {
+  scrollbar-gutter: stable;
+}
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
+/*
+  Modal enter/exit.
+
+  These keyframes drive the STANDALONE `translate` / `scale` / `rotate`
+  properties, NOT the `transform` shorthand — and that is load-bearing.
+
+  Tailwind v4 compiles `translate-x-[-50%] translate-y-[-50%]` (the classes that
+  centre the dialog) to `translate: -50% -50%`, an individual property. CSS
+  applies `translate` and THEN `transform`, so a keyframe that also said
+  `transform: translate(-50%, -50%)` would stack on top of the class and shift
+  the modal a further -50%/-50% — half its own size up and to the left — for the
+  duration of the animation, then snap back to centre when the animation ended.
+  That was the visible "jump" on both open and close. Animating the same
+  property the class sets means the two can never disagree.
+*/
 @keyframes sporty-pop-in {
   0% {
     opacity: 0;
-    transform: translate(-50%, -42%) scale(0.8) rotate(-2deg);
+    translate: -50% -42%;
+    scale: 0.8;
+    rotate: -2deg;
   }
   55% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1.045) rotate(0.6deg);
+    translate: -50% -50%;
+    scale: 1.045;
+    rotate: 0.6deg;
   }
   100% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1) rotate(0);
+    translate: -50% -50%;
+    scale: 1;
+    rotate: 0deg;
   }
 }
 @keyframes sporty-pop-out {
   0% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    translate: -50% -50%;
+    scale: 1;
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -47%) scale(0.9);
+    translate: -50% -47%;
+    scale: 0.9;
   }
 }
+/*
+  Opacity only. The blur sits statically on the overlay below: animating
+  `backdrop-filter` forces the compositor to re-blur the whole page every frame,
+  which stutters on long pages. Fading the element fades its blur with it.
+*/
 @keyframes sporty-overlay-in {
   from {
     opacity: 0;
-    backdrop-filter: blur(0);
   }
   to {
     opacity: 1;
-    backdrop-filter: blur(4px);
   }
 }
 
+.sporty-overlay {
+  backdrop-filter: blur(4px);
+}
+
 .sporty-modal[data-state="open"] {
-  /* cubic-bezier overshoot = the "bounce" of a settling ball */
-  animation: sporty-pop-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  /* cubic-bezier overshoot = the "bounce" of a settling ball.
+     `both` holds the 0% frame before the first tick, so there is no flash of
+     the full-size modal before the animation starts. */
+  animation: sporty-pop-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both !important;
 }
 .sporty-modal[data-state="closed"] {
-  animation: sporty-pop-out 0.18s ease-in !important;
+  /* `forwards` holds the faded-out frame until Radix unmounts. Without it the
+     modal snapped back to full opacity for a frame at animation end. */
+  animation: sporty-pop-out 0.18s ease-in forwards !important;
 }
 .sporty-overlay[data-state="open"] {
   animation: sporty-overlay-in 0.3s ease-out forwards !important;

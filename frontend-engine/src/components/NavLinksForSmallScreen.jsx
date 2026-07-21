@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, LandPlot } from "lucide-react";
+import { House, LandPlot, Shield } from "lucide-react";
 import SoccerBall from "./icons/SoccerBall";
 import { DrawerClose, DrawerFooter } from "./ui/drawer";
 import { Button } from "./ui/button";
@@ -52,6 +52,12 @@ export default function NavLinksForSmallScreen({ session }) {
                     <Link href="/venues">
                         <LandPlot className="h-5 w-5" />
                         Book
+                    </Link>
+                </DrawerClose>
+                <DrawerClose asChild className={rowClass(pathname.startsWith("/teams"))}>
+                    <Link href="/teams">
+                        <Shield className="h-5 w-5" />
+                        Teams
                     </Link>
                 </DrawerClose>
             </div>

@@ -81,6 +81,14 @@ Defined in `backend-engine/backend/src/utils/errorCodes.js`. Throw them via `Api
 | `PROMO_SCOPE_FORBIDDEN` | 403 | Ground/turf doesn't belong to the caller |
 | `ALREADY_ADMIN` | 409 | Target is already an event admin |
 | `NOTIFICATION_NOT_FOUND` | 404 | Notification not found / not owned |
+| `TEAM_NOT_FOUND` | 404 | Team not found, or disbanded (`is_active: false`) |
+| `NOT_TEAM_CAPTAIN` | 403 | Caller isn't the captain (or, on invite routes, not a captain/co-captain) |
+| `NOT_TEAM_MEMBER` | 403 | Caller (or the target) isn't an active member of the team |
+| `ALREADY_TEAM_MEMBER` | 409 | Invited player is already on the roster |
+| `TEAM_INVITE_ALREADY_EXISTS` | 409 | A **pending** invite is already out for that player |
+| `TEAM_INVITE_NOT_FOUND` | 404 | No pending invite with that id for the caller / team |
+| `CANNOT_REMOVE_CAPTAIN` | 400 | Captain tried to remove themself — transfer captaincy or disband first |
+| `CANNOT_INVITE_SELF` | 400 | Tried to invite yourself to a team |
 
 ## Auth
 
@@ -302,7 +310,7 @@ address_line_1: {
 | POST | `/:event_id/admins` | **required, organizer** | `{ user_id }` | `200` — `{ event_id, user_id }` (grant admin → role `co_organizer`) |
 | DELETE | `/:event_id/admins/:user_id` | **required, organizer** | — | `200` — `{ event_id, user_id }` (revoke admin → role `player`) |
 | GET | `/my-events` | **required** | query `status?` | `200` — `{ events: [ { ...event, my_participation:{status,payment_status,joined_at} } ] }` |
-| POST | `/create-event` | **required** | event fields + `current_players[]` + optional `booking_id` | `200` — created event (organizer = token user; initial roster inserted as `approved`; if `booking_id` given, links it both ways) |
+| POST | `/create-event` | **required** | event fields + `current_players[]` + optional `booking_id` + optional `team_id` | `200` — created event (organizer = token user; initial roster inserted as `approved`; if `booking_id` given, links it both ways; if `team_id` given, tags the match with that team) |
 | PATCH | `/update-event/:event_id` | **required, organizer only** | any editable fields (below) | `200` — updated event |
 | POST | `/:event_id/rematch` | **required, match admin** | `{ event_date, start_time, end_time }` | `201` — new cloned event (prior squad re-invited as `invited`; each accepts/declines) |
 | DELETE | `/delete-event` | **required, organizer only** | `{ event_id }` | `200` — **soft cancel** (status → `cancelled`, booking detached, squad notified `event_cancelled`; row is NOT deleted). Rejects a settled match (`EVENT_NOT_EDITABLE`) |
@@ -819,6 +827,99 @@ Requests / Discover).
 (`connection_request`); accepting one notifies the original requester
 (`connection_accepted`) — both persisted **and** pushed over Socket.IO.
 
+### Teams (`/teams`)
+
+All routes require `Authorization: Bearer` — teams have **no public read surface** in this pass.
+Backed by the PostgreSQL `teams` / `team_members` / `team_invites` models.
+
+A team is a **persistent squad**: the durable counterpart to a single match's approved roster.
+It is strictly **additive** — an ad-hoc, teamless match behaves exactly as it always has. A team
+is an optional organizing layer on top of `events` (`events.team_id`), never a replacement for it.
+
+**Roles.** `captain` (one per team, mirrored on `teams.captain_id`) can do everything;
+`co_captain` can send and cancel invites; `member` is roster-only and may leave.
+
+| method | path | body / query | success `data` |
+| --- | --- | --- | --- |
+| GET | `/sports` | — | `200` — `{ sports:[{id,name,category,icon_url,team_size_min,team_size_max,sport_positions:[…]}] }` (cached reference data) |
+| POST | `/` | `{ name, sport_id, home_area?, crest_url?, description? }` | `201` — team + `my_role: "captain"` |
+| GET | `/my-teams` | `page?`, `limit?` | `200` — `{ teams:[{…team, member_count, my_role}], pagination }` |
+| GET | `/my-invites` | `page?`, `limit?` | `200` — `{ invites:[{inviteId,message,created_at,team,invited_by}], pagination }` |
+| GET | `/:teamId` | — | `200` — team + `members:[TeamMember]` + `member_count` + `my_role` (`null` for non-members) |
+| PATCH | `/:teamId` | **captain** — `{ name?, home_area?, crest_url?, description?, sport_id? }` | `200` — updated team |
+| DELETE | `/:teamId` | **captain** | `200` — `{ teamId }` (**soft** delete, `is_active: false`) |
+| GET | `/:teamId/events` | `page?`, `limit?` | `200` — `{ events, pagination }` (matches with `team_id = :teamId`) |
+| POST | `/:teamId/invites` | **captain/co-captain** — `{ invitedUserId, message? }` | `201` — created invite |
+| GET | `/:teamId/invites` | **captain/co-captain** — `page?`, `limit?` | `200` — `{ invites:[{inviteId,message,created_at,user,invited_by}], pagination }` |
+| POST | `/invites/:inviteId/accept` | **invited player** | `200` — the new `team_members` row |
+| POST | `/invites/:inviteId/decline` | **invited player** | `200` — invite (status `declined`) |
+| POST | `/invites/:inviteId/cancel` | **captain/co-captain** | `200` — invite (status `cancelled`) |
+| PATCH | `/:teamId/members/:userId` | **captain** — `{ role?, position_id? }` | `200` — updated `TeamMember` |
+| POST | `/:teamId/transfer-captaincy` | **captain** — `{ newCaptainId }` | `200` — `{ teamId, captain_id }` |
+| DELETE | `/:teamId/members/:userId` | **captain** (anyone but self) **or the member themself** | `200` — member row (status `removed` or `left`) |
+
+**Production hardening (this pass):**
+- **Atomic invite creation** — relies on `@@unique(team_id, invited_user_id)` and catches Prisma
+  `P2002` rather than a racy check-then-create (same pattern as turfmate requests). On a duplicate
+  the existing row is inspected: still `pending` → `409 TEAM_INVITE_ALREADY_EXISTS`;
+  `declined`/`cancelled` → **revived** to `pending` via a status-scoped `updateMany`, so a "no" last
+  month doesn't lock a player out forever, and two concurrent invites can't both win and double-notify.
+- **Transactional multi-row writes** — team+captain-row on create, roster-row+invite-status on accept,
+  and the three writes of transfer-captaincy. A team can never end up with two captains, or none, or a
+  captain who isn't on its own roster.
+- **Nothing is hard-deleted.** Disbanding a team sets `is_active: false`; leaving/removal sets
+  `team_members.status` to `left`/`removed` plus `left_at`. Matches referencing a team must stay readable
+  (`events.team_id` is `ON DELETE SET NULL`).
+- **Server-side authorization on every write** (`utils/teamService.js` — one place, so "who may do what"
+  can't drift between endpoints). The frontend's captain-only UI gating is a UX nicety, **not** the boundary.
+- **Rate limiting** — `teamWriteLimiter` (20/min per user) on every team write. An invite pushes a
+  high-priority notification to someone else's bell, so an unbounded loop is a spam vector.
+- **UUID screening** — path params (`validateUuidParams`, `middlewares/validateUuid.middleware.js`) and
+  body ids (`isUuid`) are checked before Prisma sees them. A malformed id raises Prisma `P2023`, which
+  the terminal `errorHandler` would otherwise serialize as a **500 carrying the raw Prisma code**;
+  it now returns a clean `400 VALIDATION_ERROR` and skips the database round-trip. Auth still runs
+  first, so an unauthenticated caller gets `401` and learns nothing about id shapes.
+- **`position_id` is validated against the team's sport**, and `sport_id` can only change while the
+  captain is still alone on the roster with no positions assigned — otherwise positions would point at
+  another sport's rows.
+
+**Notifications** (all via `notificationService.createNotification()` — no parallel path):
+
+| type | priority | to | when |
+| --- | --- | --- | --- |
+| `team_invite` | `high` | invited player | invite created |
+| `team_invite_accepted` | `medium` | captain + co-captains (not the joiner) | invite accepted |
+| `team_member_removed` | `medium` | removed player | captain removes them (**not** on self-leave) |
+| `team_captaincy_transferred` | `high` / `medium` | new captain / old captain | transfer |
+
+**Errors:** `VALIDATION_ERROR`, `TEAM_NOT_FOUND`, `NOT_TEAM_CAPTAIN`, `NOT_TEAM_MEMBER`,
+`ALREADY_TEAM_MEMBER`, `TEAM_INVITE_ALREADY_EXISTS`, `TEAM_INVITE_NOT_FOUND`, `CANNOT_REMOVE_CAPTAIN`,
+`CANNOT_INVITE_SELF`, `USER_NOT_FOUND`, `RATE_LIMITED`, `UNAUTHORIZED`/`INVALID_TOKEN`.
+
+**Team-organized matches:** `POST /events/create-event` accepts an optional `team_id`. The caller must be
+an **active member** of that team (any role) or it fails with `NOT_TEAM_MEMBER`. It is purely an
+organizing tag — the event's join/invite/roster/rematch flow is **unchanged**, and the team roster is
+**not** auto-invited (a reasonable fast-follow, deliberately out of scope here; see the `TODO` in
+`createEvent`).
+
+**Out of scope this pass** (future work, not built): league/table standings, team-vs-team challenge
+matchmaking, a team chat separate from event chat, team payments/wallets.
+
+Frontend hooks: `useGetSportsCatalogueQuery`, `useGetMyTeamsQuery`, `useGetTeamByIdQuery`,
+`useCreateTeamMutation`, `useUpdateTeamMutation`, `useDeleteTeamMutation`, `useGetTeamEventsQuery`,
+`useGetMyTeamInvitesQuery`, `useGetTeamInvitesQuery`, `useSendTeamInviteMutation`,
+`useAcceptTeamInviteMutation`, `useDeclineTeamInviteMutation`, `useCancelTeamInviteMutation`,
+`useUpdateTeamMemberMutation`, `useRemoveTeamMemberMutation`, `useTransferCaptaincyMutation`.
+Pages: `/teams` (my teams + incoming invites), `/teams/create`, `/teams/[teamId]`.
+
+> **Schema migration required:** this pass adds the `teams`, `team_members` and `team_invites` models,
+> the `team_member_role` / `team_member_status` / `team_invite_status` enums, four new
+> `notification_type` values (`team_invite`, `team_invite_accepted`, `team_member_removed`,
+> `team_captaincy_transferred`), and an optional `events.team_id` column. Run
+> `npm run prisma:push:pgsql` **and** `npm run prisma:generate:pg` from `backend-engine/backend/`
+> before starting the API. Additive only — no existing column changes type or becomes non-nullable, so
+> there is no backfill. The deprecated MongoDB schema is untouched.
+
 ### Notifications (`/notifications`)
 
 All routes require `Authorization: Bearer` and are **scoped to the caller** — a user can
@@ -835,6 +936,9 @@ PostgreSQL `notifications` model (`type` = `notification_type` enum, `is_read`, 
 | DELETE | `/:id` | path `id` | `200` — `{ id }` |
 
 **Errors:** `NOTIFICATION_NOT_FOUND` (mark/delete an id you don't own), `UNAUTHORIZED`/`INVALID_TOKEN`.
+
+**`notification_type` enum** also carries the four team values — `team_invite`,
+`team_invite_accepted`, `team_member_removed`, `team_captaincy_transferred` (see Teams).
 
 **`notification_type` enum** includes `event_completed` (added for the sweeper): when the event
 sweeper auto-completes a finished game it sends this to the organizer + every approved participant

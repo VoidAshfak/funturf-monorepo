@@ -16,7 +16,7 @@ export const apiSlice = createApi({
             return headers;
         },
     }),
-    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Messages", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications", "Conversations", "DmThread", "Promotions"],
+    tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Messages", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications", "Conversations", "DmThread", "Promotions", "Teams", "Team", "TeamInvites", "Sports"],
     endpoints: (builder) => ({
         // ---- Venues ----
         getVenues: builder.query({
@@ -478,6 +478,141 @@ export const apiSlice = createApi({
                 { type: "Turfmates", id: "LIST" },
                 { type: "ConnectionStatus", id: userId },
                 { type: "ConnectionStatus", id: "LIST" },
+            ],
+        }),
+
+        // ---- Teams (all auth-required) ----
+        // A team is a PERSISTENT squad. Every write below is authorized
+        // server-side by role (captain / co-captain / member) — the captain-only
+        // UI gating in the components is cosmetic, never the boundary.
+        //
+        // Sports + their positions. Reference data behind the `sport_id` /
+        // `position_id` foreign keys; cached on the server, so a plain query.
+        getSportsCatalogue: builder.query({
+            query: () => "teams/sports",
+            transformResponse: (res) => res?.data?.sports ?? [],
+            providesTags: [{ type: "Sports", id: "LIST" }],
+        }),
+        // Teams the caller is on: { teams:[{...team, member_count, my_role}], pagination }.
+        getMyTeams: builder.query({
+            query: (params) => ({ url: "teams/my-teams", params }),
+            transformResponse: (res) => res?.data ?? { teams: [], pagination: {} },
+            providesTags: (result) =>
+                result?.teams
+                    ? [
+                          ...result.teams.map((t) => ({ type: "Team", id: t.id })),
+                          { type: "Teams", id: "LIST" },
+                      ]
+                    : [{ type: "Teams", id: "LIST" }],
+        }),
+        // Team detail incl. the active roster and the caller's own `my_role`.
+        getTeamById: builder.query({
+            query: (teamId) => `teams/${teamId}`,
+            transformResponse: (res) => res?.data ?? {},
+            providesTags: (result, error, teamId) => [{ type: "Team", id: teamId }],
+        }),
+        createTeam: builder.mutation({
+            query: (body) => ({ url: "teams", method: "POST", body }),
+            invalidatesTags: [{ type: "Teams", id: "LIST" }],
+        }),
+        updateTeam: builder.mutation({
+            query: ({ teamId, ...body }) => ({ url: `teams/${teamId}`, method: "PATCH", body }),
+            invalidatesTags: (r, e, { teamId }) => [
+                { type: "Team", id: teamId },
+                { type: "Teams", id: "LIST" },
+            ],
+        }),
+        // Disband — a SOFT delete server-side; the team drops out of every list.
+        deleteTeam: builder.mutation({
+            query: (teamId) => ({ url: `teams/${teamId}`, method: "DELETE" }),
+            invalidatesTags: (r, e, teamId) => [
+                { type: "Team", id: teamId },
+                { type: "Teams", id: "LIST" },
+            ],
+        }),
+        // Matches organized under a team.
+        getTeamEvents: builder.query({
+            query: ({ teamId, ...params }) => ({ url: `teams/${teamId}/events`, params }),
+            transformResponse: (res) => res?.data ?? { events: [], pagination: {} },
+            providesTags: (r, e, { teamId }) => [{ type: "Events", id: `TEAM-${teamId}` }],
+        }),
+
+        // ---- Team invites ----
+        // The caller's own incoming invites, across every team.
+        getMyTeamInvites: builder.query({
+            query: (params) => ({ url: "teams/my-invites", params }),
+            transformResponse: (res) => res?.data ?? { invites: [], pagination: {} },
+            providesTags: [{ type: "TeamInvites", id: "MINE" }],
+        }),
+        // Invites a team has out — captain/co-captain only server-side.
+        getTeamInvites: builder.query({
+            query: ({ teamId, ...params }) => ({ url: `teams/${teamId}/invites`, params }),
+            transformResponse: (res) => res?.data ?? { invites: [], pagination: {} },
+            providesTags: (r, e, { teamId }) => [{ type: "TeamInvites", id: teamId }],
+        }),
+        sendTeamInvite: builder.mutation({
+            query: ({ teamId, invitedUserId, message }) => ({
+                url: `teams/${teamId}/invites`,
+                method: "POST",
+                body: { invitedUserId, message },
+            }),
+            invalidatesTags: (r, e, { teamId }) => [{ type: "TeamInvites", id: teamId }],
+        }),
+        // Accepting changes the roster, so the team itself goes stale too.
+        acceptTeamInvite: builder.mutation({
+            query: (inviteId) => ({ url: `teams/invites/${inviteId}/accept`, method: "POST" }),
+            invalidatesTags: [
+                { type: "TeamInvites", id: "MINE" },
+                { type: "Teams", id: "LIST" },
+            ],
+        }),
+        declineTeamInvite: builder.mutation({
+            query: (inviteId) => ({ url: `teams/invites/${inviteId}/decline`, method: "POST" }),
+            invalidatesTags: [{ type: "TeamInvites", id: "MINE" }],
+        }),
+        cancelTeamInvite: builder.mutation({
+            query: ({ inviteId, teamId }) => ({
+                url: `teams/invites/${inviteId}/cancel`,
+                method: "POST",
+            }),
+            invalidatesTags: (r, e, { teamId }) => [
+                { type: "TeamInvites", id: teamId },
+                { type: "TeamInvites", id: "MINE" },
+            ],
+        }),
+
+        // ---- Team roster management ----
+        // Role / position change (captain only server-side).
+        updateTeamMember: builder.mutation({
+            query: ({ teamId, userId, ...body }) => ({
+                url: `teams/${teamId}/members/${userId}`,
+                method: "PATCH",
+                body, // { role?, position_id? }
+            }),
+            invalidatesTags: (r, e, { teamId }) => [{ type: "Team", id: teamId }],
+        }),
+        // Captain removes someone, or a member leaves — same route, both cases
+        // authorized server-side. The list refreshes too, since leaving drops the
+        // team out of "my teams".
+        removeTeamMember: builder.mutation({
+            query: ({ teamId, userId }) => ({
+                url: `teams/${teamId}/members/${userId}`,
+                method: "DELETE",
+            }),
+            invalidatesTags: (r, e, { teamId }) => [
+                { type: "Team", id: teamId },
+                { type: "Teams", id: "LIST" },
+            ],
+        }),
+        transferCaptaincy: builder.mutation({
+            query: ({ teamId, newCaptainId }) => ({
+                url: `teams/${teamId}/transfer-captaincy`,
+                method: "POST",
+                body: { newCaptainId },
+            }),
+            invalidatesTags: (r, e, { teamId }) => [
+                { type: "Team", id: teamId },
+                { type: "Teams", id: "LIST" },
             ],
         }),
 
@@ -1094,6 +1229,23 @@ export const {
     useRejectTurfmateRequestMutation,
     useCancelTurfmateRequestMutation,
     useRemoveTurfmateMutation,
+    // teams
+    useGetSportsCatalogueQuery,
+    useGetMyTeamsQuery,
+    useGetTeamByIdQuery,
+    useCreateTeamMutation,
+    useUpdateTeamMutation,
+    useDeleteTeamMutation,
+    useGetTeamEventsQuery,
+    useGetMyTeamInvitesQuery,
+    useGetTeamInvitesQuery,
+    useSendTeamInviteMutation,
+    useAcceptTeamInviteMutation,
+    useDeclineTeamInviteMutation,
+    useCancelTeamInviteMutation,
+    useUpdateTeamMemberMutation,
+    useRemoveTeamMemberMutation,
+    useTransferCaptaincyMutation,
     useJoinEventMutation,
     useCancelJoinRequestMutation,
     useLeaveEventMutation,

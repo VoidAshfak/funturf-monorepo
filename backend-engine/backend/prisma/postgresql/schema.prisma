@@ -55,6 +55,10 @@ model users {
   reviews_reviews_reviewee_idTousers                 reviews[]            @relation("reviews_reviewee_idTousers")
   reviews_reviews_reviewer_idTousers                 reviews[]            @relation("reviews_reviewer_idTousers")
   slot_locks                                         slot_locks[]
+  team_invites_team_invites_invited_by               team_invites[]       @relation("team_invites_invited_by")
+  team_invites_team_invites_invited_user_id          team_invites[]       @relation("team_invites_invited_user")
+  team_members                                       team_members[]
+  teams_teams_captain                                teams[]              @relation("teams_captain")
   turfs                                              turfs[]
   wallets                                            wallets?
 
@@ -206,11 +210,6 @@ model event_comments {
   @@index([user_id], map: "idx_event_comments_user_id")
 }
 
-// Per-user read marker for a match's squad chat. One row per (user, event); its
-// `last_read_at` is bumped whenever the user opens that chat. A message counts as
-// unread for a user when it was sent by someone else, after their marker (or with
-// no marker yet). Kept relation-free on purpose — an orphaned marker is harmless,
-// so no FK back-relations on users/events are needed.
 model event_chat_reads {
   id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id      String   @db.Uuid
@@ -276,11 +275,13 @@ model events {
   created_at                           DateTime?               @default(now()) @db.Timestamp(6)
   updated_at                           DateTime?               @default(now()) @db.Timestamp(6)
   venue_id                             String?                 @db.Uuid
+  team_id                              String?                 @db.Uuid
   bookings_bookings_event_idToevents   bookings[]              @relation("bookings_event_idToevents")
   event_comments                       event_comments[]
   event_participants                   event_participants[]
   grounds                              grounds?                @relation(fields: [ground_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   users                                users                   @relation(fields: [organizer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teams                                teams?                  @relation(fields: [team_id], references: [id], onUpdate: NoAction)
   bookings_events_booking_idTobookings bookings?               @relation("events_booking_idTobookings", fields: [booking_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_events_booking")
   messages                             messages[]
   payments                             payments[]
@@ -288,6 +289,7 @@ model events {
 
   @@index([event_date], map: "idx_events_event_date")
   @@index([organizer_id], map: "idx_events_organizer")
+  @@index([team_id], map: "idx_events_team")
   @@index([sport_type], map: "idx_events_sport_type")
   @@index([status], map: "idx_events_status")
   @@index([visibility], map: "idx_events_visibility")
@@ -481,7 +483,7 @@ model promotion_usage {
 model promotions {
   id                      String                 @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   turf_id                 String?                @db.Uuid
-  code                    String                 @db.VarChar(50) // unique PER TURF (see @@unique below), not globally
+  code                    String                 @db.VarChar(50)
   title                   String                 @db.VarChar(255)
   description             String?
   discount_type           discount_type
@@ -495,11 +497,11 @@ model promotions {
   applicable_days         Json?
   applicable_hours        Json?
   applicable_sports       Json?
-  applicable_users        Json? // user-specific coupons: array of user UUIDs allowed to redeem (null = anyone)
   status                  promotion_status_type? @default(active)
   created_at              DateTime?              @default(now()) @db.Timestamp(6)
   updated_at              DateTime?              @default(now()) @db.Timestamp(6)
   ground_id               String?                @db.Uuid
+  applicable_users        Json?
   promotion_usage         promotion_usage[]
   ground_rate             grounds?               @relation(fields: [ground_id], references: [id], onDelete: Cascade, map: "fk_ground_promo")
   turfs                   turfs?                 @relation(fields: [turf_id], references: [id], onDelete: Cascade, map: "fk_turf_promo")
@@ -547,12 +549,13 @@ model reviews {
 }
 
 model sport_positions {
-  id            String  @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  sport_id      String  @db.Uuid
-  position_name String  @db.VarChar(100)
-  position_code String? @db.VarChar(20)
+  id            String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  sport_id      String         @db.Uuid
+  position_name String         @db.VarChar(100)
+  position_code String?        @db.VarChar(20)
   description   String?
-  sports        sports  @relation(fields: [sport_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sports        sports         @relation(fields: [sport_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  team_members  team_members[]
 
   @@index([sport_id], map: "idx_sport_positions_sport")
 }
@@ -567,6 +570,83 @@ model sports {
   rules_url       String?
   is_active       Boolean?          @default(true)
   sport_positions sport_positions[]
+  teams           teams[]
+}
+
+/// A PERSISTENT squad — the durable counterpart to a one-off match roster.
+///
+/// A team is an OPTIONAL organizing layer on top of `events`: it owns a named
+/// roster with roles and positions and can organize matches (`events.team_id`),
+/// but ad-hoc teamless matches keep working exactly as before.
+///
+/// Deletion is SOFT (`is_active = false`) — past `events` still point here and
+/// that history must survive.
+model teams {
+  id           String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name         String         @db.VarChar(100)
+  sport_id     String         @db.Uuid
+  captain_id   String         @db.Uuid
+  /// District/division the team plays out of — same style as `users.district`.
+  home_area    String?        @db.VarChar(100)
+  crest_url    String?
+  description  String?
+  is_active    Boolean?       @default(true)
+  created_at   DateTime?      @default(now()) @db.Timestamp(6)
+  updated_at   DateTime?      @default(now()) @db.Timestamp(6)
+  events       events[]
+  team_invites team_invites[]
+  team_members team_members[]
+  captain      users          @relation("teams_captain", fields: [captain_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sports       sports         @relation(fields: [sport_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([sport_id], map: "idx_teams_sport")
+  @@index([captain_id], map: "idx_teams_captain")
+}
+
+/// One person's membership of one team.
+///
+/// Rows are NEVER hard-deleted on leave/removal — `status` flips to `left` or
+/// `removed` and `left_at` is stamped, so a team's history stays readable.
+/// The unique index on (team_id, user_id) is what makes joins atomic: we let the
+/// DB reject a duplicate (P2002) instead of doing a racy check-then-create.
+model team_members {
+  id              String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  team_id         String             @db.Uuid
+  user_id         String             @db.Uuid
+  role            team_member_role   @default(member)
+  position_id     String?            @db.Uuid
+  status          team_member_status @default(active)
+  joined_at       DateTime?          @default(now()) @db.Timestamp(6)
+  left_at         DateTime?
+  sport_positions sport_positions?   @relation(fields: [position_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  teams           teams              @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([team_id, user_id], map: "unique_team_member")
+  @@index([team_id], map: "idx_team_members_team")
+  @@index([user_id], map: "idx_team_members_user")
+}
+
+/// A captain/co-captain's invitation for a player to join the team.
+///
+/// One row per (team, invited user) — re-inviting someone reuses the same row,
+/// which is why the unique index doubles as the anti-spam guard.
+model team_invites {
+  id                                 String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  team_id                            String             @db.Uuid
+  invited_user_id                    String             @db.Uuid
+  invited_by                         String             @db.Uuid
+  status                             team_invite_status @default(pending)
+  message                            String?
+  created_at                         DateTime?          @default(now()) @db.Timestamp(6)
+  responded_at                       DateTime?
+  users_team_invites_invited_by      users              @relation("team_invites_invited_by", fields: [invited_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users_team_invites_invited_user_id users              @relation("team_invites_invited_user", fields: [invited_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  teams                              teams              @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([team_id, invited_user_id], map: "unique_team_invite")
+  @@index([team_id], map: "idx_team_invites_team")
+  @@index([invited_user_id], map: "idx_team_invites_invited_user")
 }
 
 model turf_statistics {
@@ -847,6 +927,10 @@ enum notification_type {
   comment_added
   comment_reply
   event_completed
+  team_invite
+  team_invite_accepted
+  team_member_removed
+  team_captaincy_transferred
 }
 
 enum participant_role_type {
@@ -943,6 +1027,31 @@ enum surface_type {
   concrete
   synthetic
   other
+}
+
+/// Lifecycle of a team invitation. `cancelled` = withdrawn by the team before
+/// the invited player answered; `declined` = the player said no.
+enum team_invite_status {
+  pending
+  accepted
+  declined
+  cancelled
+}
+
+/// Authority inside a team. `captain` is single (mirrors `teams.captain_id`) and
+/// only changes via transfer-captaincy; `co_captain` may invite and cancel invites.
+enum team_member_role {
+  captain
+  co_captain
+  member
+}
+
+/// Membership state. Only `active` counts as being on the roster — `left` and
+/// `removed` are kept for history (see the `team_members` model comment).
+enum team_member_status {
+  active
+  left
+  removed
 }
 
 enum team_type {

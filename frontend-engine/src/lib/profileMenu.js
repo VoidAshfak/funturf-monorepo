@@ -6,6 +6,7 @@ import {
     User,
     Users,
     ClipboardList,
+    Shield,
 } from "lucide-react";
 
 // Single source of truth for the signed-in user's account menu.
@@ -57,6 +58,7 @@ export function getProfileMenuSections(user) {
                 { href: `/profile/${user?.id}`, label: "My profile", icon: User },
                 { href: "/bookings", label: "My bookings", icon: Ticket },
                 { href: "/turfmates", label: "Turfmates", icon: Users },
+                { href: "/teams", label: "My teams", icon: Shield },
             ],
         },
         {

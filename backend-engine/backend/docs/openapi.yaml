@@ -97,6 +97,10 @@ tags:
     description: Public comment thread on a match (writing is member-only).
   - name: Event Chat
     description: Private squad chat for a match's approved players and admins.
+  - name: Teams
+    description: Persistent squads — roster, roles, positions, team-organized matches.
+  - name: Team Invites
+    description: Recruiting players onto a team and responding to invitations.
   - name: Venues
     description: Turfs and their grounds; ratings.
   - name: Bookings
@@ -1576,6 +1580,16 @@ paths:
                   description: |
                     An existing booking of yours to run this match on. When set,
                     the schedule and venue below are ignored and derived from it.
+                team_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: |
+                    Optional — organize this match under one of your teams. You must
+                    be an ACTIVE member of it (any role), else `NOT_TEAM_MEMBER`.
+                    Purely an organizing tag: the join/invite/roster flow is
+                    unchanged, and the team's roster is **not** auto-invited.
+                    Omit it for an ordinary teamless match.
                 event_date:
                   type: string
                   format: date
@@ -3461,6 +3475,904 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: No such message in this chat (`MESSAGE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ===========================================================================
+  # Teams
+  # ===========================================================================
+  /teams/sports:
+    get:
+      tags: [Teams]
+      summary: Sports and their positions
+      operationId: getSportsCatalogue
+      description: |
+        Reference data for the create-team form and the position picker:
+        `teams.sport_id` and `team_members.position_id` are UUID foreign keys, and
+        this is the only endpoint that exposes the rows behind them. Cached
+        server-side (`utils/cache.js`) — it changes almost never.
+      responses:
+        '200':
+          description: Active sports, each with its positions.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [sports]
+                        properties:
+                          sports:
+                            type: array
+                            items:
+                              allOf:
+                                - $ref: '#/components/schemas/SportSummary'
+                                - type: object
+                                  properties:
+                                    team_size_min:
+                                      type: integer
+                                      nullable: true
+                                    team_size_max:
+                                      type: integer
+                                      nullable: true
+                                    sport_positions:
+                                      type: array
+                                      items:
+                                        $ref: '#/components/schemas/SportPosition'
+              example:
+                success: true
+                message: Sports catalogue
+                statusCode: 200
+                data:
+                  sports:
+                    - id: 5c4b3a29-1e8f-4d7c-6b5a-4f3e2d1c0b9a
+                      name: Football
+                      category: team
+                      icon_url: null
+                      team_size_min: 5
+                      team_size_max: 11
+                      sport_positions:
+                        - id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                          position_name: Centre Back
+                          position_code: CB
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /teams:
+    post:
+      tags: [Teams]
+      summary: Create a team
+      operationId: createTeam
+      description: |
+        The creator becomes the team's `captain`. The `teams` row and the captain's
+        `team_members` row are written in one transaction — a team whose captain
+        isn't on its own roster would break every membership check downstream.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, sport_id]
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                  example: Gulshan United
+                sport_id:
+                  allOf:
+                    - $ref: '#/components/schemas/Uuid'
+                  description: From `GET /teams/sports`.
+                home_area:
+                  type: string
+                  nullable: true
+                  example: Gulshan
+                crest_url:
+                  type: string
+                  format: uri
+                  nullable: true
+                description:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Team created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Team'
+              example:
+                success: true
+                message: Team created
+                statusCode: 201
+                data:
+                  id: 8b7a6c5d-4e3f-4a2b-1c0d-9e8f7a6b5c4d
+                  name: Gulshan United
+                  sport_id: 5c4b3a29-1e8f-4d7c-6b5a-4f3e2d1c0b9a
+                  captain_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  home_area: Gulshan
+                  crest_url: null
+                  description: Tuesday and Friday nights, 7-a-side.
+                  is_active: true
+                  created_at: '2026-07-21T19:00:00.000Z'
+                  my_role: captain
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /teams/my-teams:
+    get:
+      tags: [Teams]
+      summary: Teams you're on
+      operationId: getMyTeams
+      description: |
+        Paginated. Active teams where the caller has an `active` membership, each
+        carrying the caller's own `role` and the team's active `member_count`.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Your teams.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [teams, pagination]
+                        properties:
+                          teams:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Team'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /teams/{teamId}:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    get:
+      tags: [Teams]
+      summary: Team detail with roster
+      operationId: getTeamById
+      description: |
+        Readable by any signed-in user (teams are discoverable). `my_role` is the
+        caller's own role, or `null` for a non-member — UI gating only.
+        Each roster entry embeds the player's `player_profiles` form, so the client
+        never fetches profiles one-by-one.
+      responses:
+        '200':
+          description: The team, with its ACTIVE members (captain first).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Team'
+                          - type: object
+                            required: [members]
+                            properties:
+                              members:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/TeamMember'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: TEAM_NOT_FOUND
+                message: Team not found
+                errors: []
+                data: null
+    patch:
+      tags: [Teams]
+      summary: Edit a team
+      operationId: updateTeam
+      description: |
+        **Captain only.** Partial update. `captain_id` is not editable here — use
+        transfer-captaincy. `sport_id` is only changeable while the captain is
+        still alone on the roster and nobody holds a position; afterwards it is
+        rejected with `VALIDATION_ERROR`, because changing sport would leave every
+        `position_id` pointing at another sport's positions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                home_area:
+                  type: string
+                  nullable: true
+                crest_url:
+                  type: string
+                  format: uri
+                  nullable: true
+                description:
+                  type: string
+                  nullable: true
+                sport_id:
+                  $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Team updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Team'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: You are not the captain (`NOT_TEAM_CAPTAIN`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: NOT_TEAM_CAPTAIN
+                message: Only the team captain can do this
+                errors: []
+                data: null
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Teams]
+      summary: Disband a team
+      operationId: deleteTeam
+      description: |
+        **Captain only.** SOFT delete (`is_active: false`). A hard delete would
+        orphan the matches this team organized; retiring it keeps that history
+        readable.
+      responses:
+        '200':
+          description: Team disbanded.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          teamId:
+                            $ref: '#/components/schemas/Uuid'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: You are not the captain (`NOT_TEAM_CAPTAIN`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /teams/{teamId}/events:
+    get:
+      tags: [Teams]
+      summary: Matches organized by this team
+      operationId: getTeamEvents
+      description: |
+        Paginated, newest first. Events whose `team_id` is this team — the same
+        event shape the rest of the API returns, so the client reuses its card.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: The team's matches.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [events, pagination]
+                        properties:
+                          events:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Event'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /teams/{teamId}/members/{userId}:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Uuid'
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    patch:
+      tags: [Teams]
+      summary: Change a member's role or position
+      operationId: updateTeamMember
+      description: |
+        **Captain only.** Promote to `co_captain`, demote to `member`, or
+        assign/clear a position. `role: captain` is rejected — that also has to move
+        `teams.captain_id` and demote the incumbent, which is transfer-captaincy's
+        job. A `position_id` from a different sport is rejected too.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [co_captain, member]
+                position_id:
+                  allOf:
+                    - $ref: '#/components/schemas/Uuid'
+                  nullable: true
+                  description: '`null` clears the position.'
+      responses:
+        '200':
+          description: Member updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TeamMember'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Not the captain (`NOT_TEAM_CAPTAIN`), or the target is not on the
+            roster (`NOT_TEAM_MEMBER`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Teams]
+      summary: Remove a member, or leave the team
+      operationId: removeTeamMember
+      description: |
+        Two authorized callers on one route:
+          * the **captain** removing someone else -> `status: removed`, target notified
+          * a **member** removing themself (leave) -> `status: left`, nobody notified
+
+        The captain cannot remove themself — the team would be left with a dangling
+        `captain_id` (`CANNOT_REMOVE_CAPTAIN`); transfer the captaincy or disband
+        the team instead. The row is never hard-deleted: past matches reference
+        these people.
+      responses:
+        '200':
+          description: Member removed, or you left.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            $ref: '#/components/schemas/TeamMemberStatus'
+                          left_at:
+                            type: string
+                            format: date-time
+        '400':
+          description: The target is the captain (`CANNOT_REMOVE_CAPTAIN`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: CANNOT_REMOVE_CAPTAIN
+                message: Transfer captaincy before removing yourself, or delete the team
+                errors: []
+                data: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Removing someone else without being the captain (`NOT_TEAM_CAPTAIN`),
+            or the target isn't on the roster (`NOT_TEAM_MEMBER`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /teams/{teamId}/transfer-captaincy:
+    post:
+      tags: [Teams]
+      summary: Hand over the captaincy
+      operationId: transferCaptaincy
+      description: |
+        **Captain only.** `newCaptainId` must already be an active member. Three
+        writes that must agree — `teams.captain_id`, the outgoing captain's role,
+        the incoming captain's role — run in one transaction, so the team can never
+        end up with two captains or none. Both parties are notified.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newCaptainId]
+              properties:
+                newCaptainId:
+                  $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Captaincy transferred.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          teamId:
+                            $ref: '#/components/schemas/Uuid'
+                          captain_id:
+                            $ref: '#/components/schemas/Uuid'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Not the captain (`NOT_TEAM_CAPTAIN`), or the nominee isn't an active
+            member (`NOT_TEAM_MEMBER`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ===========================================================================
+  # Team Invites
+  # ===========================================================================
+  /teams/{teamId}/invites:
+    parameters:
+      - name: teamId
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    post:
+      tags: [Team Invites]
+      summary: Invite a player to the team
+      operationId: sendTeamInvite
+      description: |
+        **Captain or co-captain.** Creation is atomic: the
+        `unique(team_id, invited_user_id)` index decides, rather than a racy
+        check-then-create. On a duplicate (Prisma `P2002`) the existing row is
+        inspected — a `pending` invite returns `409`, while a `declined` or
+        `cancelled` one is revived to `pending` (a "no" last month must not lock a
+        player out forever). The invited user gets a high-priority `team_invite`
+        notification.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invitedUserId]
+              properties:
+                invitedUserId:
+                  $ref: '#/components/schemas/Uuid'
+                message:
+                  type: string
+                  nullable: true
+                  example: We're short a keeper on Fridays — join us?
+      responses:
+        '201':
+          description: Invite sent.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TeamInvite'
+        '400':
+          description: '`invitedUserId` missing, or it is your own id (`CANNOT_INVITE_SELF`).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: CANNOT_INVITE_SELF
+                message: You cannot invite yourself to a team
+                errors: []
+                data: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Not a captain or co-captain (`NOT_TEAM_CAPTAIN`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            No such team (`TEAM_NOT_FOUND`) or no such player (`USER_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            Already on the roster (`ALREADY_TEAM_MEMBER`) or an invite is already
+            pending (`TEAM_INVITE_ALREADY_EXISTS`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: TEAM_INVITE_ALREADY_EXISTS
+                message: A pending invite already exists for this player
+                errors: []
+                data: null
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    get:
+      tags: [Team Invites]
+      summary: The team's pending invites
+      operationId: getTeamInvites
+      description: '**Captain or co-captain.** Invites this team has out, newest first.'
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Pending invites.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [invites, pagination]
+                        properties:
+                          invites:
+                            type: array
+                            items:
+                              type: object
+                              required: [inviteId, user]
+                              properties:
+                                inviteId:
+                                  $ref: '#/components/schemas/Uuid'
+                                message:
+                                  type: string
+                                  nullable: true
+                                created_at:
+                                  type: string
+                                  format: date-time
+                                user:
+                                  allOf:
+                                    - $ref: '#/components/schemas/TurfmateProfile'
+                                  description: The invited player.
+                                invited_by:
+                                  $ref: '#/components/schemas/TurfmateProfile'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Not a captain or co-captain (`NOT_TEAM_CAPTAIN`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such team (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /teams/my-invites:
+    get:
+      tags: [Team Invites]
+      summary: Your incoming team invites
+      operationId: getMyTeamInvites
+      description: |
+        Paginated. The caller's own `pending` invites across every team — the team
+        equivalent of `GET /turfmates/get-pending-requests`.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Your pending invites.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [invites, pagination]
+                        properties:
+                          invites:
+                            type: array
+                            items:
+                              type: object
+                              required: [inviteId, team]
+                              properties:
+                                inviteId:
+                                  $ref: '#/components/schemas/Uuid'
+                                message:
+                                  type: string
+                                  nullable: true
+                                created_at:
+                                  type: string
+                                  format: date-time
+                                team:
+                                  $ref: '#/components/schemas/Team'
+                                invited_by:
+                                  $ref: '#/components/schemas/TurfmateProfile'
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /teams/invites/{inviteId}/accept:
+    post:
+      tags: [Team Invites]
+      summary: Accept a team invite
+      operationId: acceptTeamInvite
+      description: |
+        **Invited player only.** The roster row and the invite status move together
+        in one transaction, so a crash can't leave an `accepted` invite with nobody
+        on the roster. Uses an upsert — someone who left before still has a row, and
+        rejoining re-activates it as a plain `member` with no leftover position.
+        The captain and co-captains get a `team_invite_accepted` notification.
+      parameters:
+        - name: inviteId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: You joined the team.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          team_id:
+                            $ref: '#/components/schemas/Uuid'
+                          role:
+                            $ref: '#/components/schemas/TeamMemberRole'
+                          status:
+                            $ref: '#/components/schemas/TeamMemberStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: |
+            No pending invite for you with that id (`TEAM_INVITE_NOT_FOUND`), or the
+            team has since been disbanded (`TEAM_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: TEAM_INVITE_NOT_FOUND
+                message: Team invite not found
+                errors: []
+                data: null
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /teams/invites/{inviteId}/decline:
+    post:
+      tags: [Team Invites]
+      summary: Decline a team invite
+      operationId: declineTeamInvite
+      description: |
+        **Invited player only.** Marks the invite `declined`. The row is kept, so
+        the team can revive it later by re-inviting.
+      parameters:
+        - name: inviteId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Invite declined.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TeamInvite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No pending invite for you with that id (`TEAM_INVITE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /teams/invites/{inviteId}/cancel:
+    post:
+      tags: [Team Invites]
+      summary: Withdraw a team invite
+      operationId: cancelTeamInvite
+      description: |
+        **Captain or co-captain of the invite's team.** Withdraws a `pending` invite
+        before the player answers. Authorization is on the invite's TEAM, not on who
+        sent it — a co-captain may withdraw the captain's invite and vice versa.
+      parameters:
+        - name: inviteId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Invite cancelled.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TeamInvite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Not a captain or co-captain of that team (`NOT_TEAM_CAPTAIN`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No such pending invite (`TEAM_INVITE_NOT_FOUND`).
           content:
             application/json:
               schema:
@@ -6770,6 +7682,15 @@ components:
         - CANNOT_CONNECT_SELF
         - CONNECTION_ALREADY_EXISTS
         - CONNECTION_NOT_FOUND
+        # teams
+        - TEAM_NOT_FOUND
+        - NOT_TEAM_CAPTAIN
+        - NOT_TEAM_MEMBER
+        - ALREADY_TEAM_MEMBER
+        - TEAM_INVITE_ALREADY_EXISTS
+        - TEAM_INVITE_NOT_FOUND
+        - CANNOT_REMOVE_CAPTAIN
+        - CANNOT_INVITE_SELF
         # notifications
         - NOTIFICATION_NOT_FOUND
       example: SLOT_UNAVAILABLE
@@ -6956,6 +7877,217 @@ components:
           type: string
           nullable: true
           example: Left winger. Free most evenings after 8.
+
+    # ---- teams --------------------------------------------------------------
+    TeamMemberRole:
+      type: string
+      description: |
+        Authority inside a team (`team_member_role`). `captain` is single per team
+        and mirrors `teams.captain_id` — it changes only through
+        `POST /teams/{teamId}/transfer-captaincy`, never through a member PATCH.
+        `co_captain` may send and cancel invites. `member` is roster-only.
+      enum:
+        - captain
+        - co_captain
+        - member
+      example: member
+
+    TeamMemberStatus:
+      type: string
+      description: |
+        Membership state (`team_member_status`). Only `active` counts as being on
+        the roster; `left` (self-initiated) and `removed` (captain-initiated) are
+        retained for history and never satisfy an authorization check.
+      enum:
+        - active
+        - left
+        - removed
+      example: active
+
+    TeamInviteStatus:
+      type: string
+      description: |
+        Invitation lifecycle (`team_invite_status`). `cancelled` = withdrawn by the
+        team before a reply; `declined` = refused by the player. A `declined` or
+        `cancelled` invite can be revived by re-inviting the same player.
+      enum:
+        - pending
+        - accepted
+        - declined
+        - cancelled
+      example: pending
+
+    SportSummary:
+      type: object
+      description: A row from `sports`, as embedded in a team.
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+          example: Football
+        category:
+          type: string
+          nullable: true
+          example: team
+        icon_url:
+          type: string
+          format: uri
+          nullable: true
+
+    SportPosition:
+      type: object
+      description: A playable position for one sport (`sport_positions`).
+      required: [id, position_name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        position_name:
+          type: string
+          example: Centre Back
+        position_code:
+          type: string
+          nullable: true
+          example: CB
+
+    Team:
+      type: object
+      description: |
+        A persistent squad. `my_role` is the CALLING user's role on this team and
+        is `null` for a non-member — it drives UI gating only; the server re-checks
+        authorization on every write.
+      required: [id, name, sport_id, captain_id]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+          maxLength: 100
+          example: Gulshan United
+        sport_id:
+          $ref: '#/components/schemas/Uuid'
+        captain_id:
+          $ref: '#/components/schemas/Uuid'
+        home_area:
+          type: string
+          nullable: true
+          description: District/division the team plays out of.
+          example: Gulshan
+        crest_url:
+          type: string
+          format: uri
+          nullable: true
+        description:
+          type: string
+          nullable: true
+          example: Tuesday and Friday nights, 7-a-side.
+        is_active:
+          type: boolean
+          description: '`false` once the captain disbands the team (soft delete).'
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        sports:
+          $ref: '#/components/schemas/SportSummary'
+        captain:
+          $ref: '#/components/schemas/TurfmateProfile'
+        member_count:
+          type: integer
+          description: Active roster size.
+          example: 9
+        my_role:
+          allOf:
+            - $ref: '#/components/schemas/TeamMemberRole'
+          nullable: true
+
+    TeamMember:
+      type: object
+      description: |
+        One roster entry. The player's form (`rating`, `reliability_score`) is
+        joined server-side from `player_profiles` so the client never N+1s a
+        profile fetch per member.
+      required: [membershipId, role, status, user]
+      properties:
+        membershipId:
+          $ref: '#/components/schemas/Uuid'
+        role:
+          $ref: '#/components/schemas/TeamMemberRole'
+        status:
+          $ref: '#/components/schemas/TeamMemberStatus'
+        joined_at:
+          type: string
+          format: date-time
+          nullable: true
+        left_at:
+          type: string
+          format: date-time
+          nullable: true
+        position:
+          allOf:
+            - $ref: '#/components/schemas/SportPosition'
+          nullable: true
+        user:
+          allOf:
+            - $ref: '#/components/schemas/TurfmateProfile'
+            - type: object
+              properties:
+                profile:
+                  type: object
+                  nullable: true
+                  description: The player's `player_profiles` row, or `null`.
+                  properties:
+                    rating:
+                      type: number
+                      nullable: true
+                      example: 4.5
+                    reliability_score:
+                      type: integer
+                      nullable: true
+                      example: 96
+                    skill_level:
+                      type: string
+                      nullable: true
+                      example: intermediate
+                    preferred_foot:
+                      type: string
+                      nullable: true
+                      example: right
+                    jersey_number:
+                      type: integer
+                      nullable: true
+                      example: 10
+
+    TeamInvite:
+      type: object
+      description: A raw `team_invites` row, as returned by the write endpoints.
+      required: [id, team_id, invited_user_id, invited_by, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        team_id:
+          $ref: '#/components/schemas/Uuid'
+        invited_user_id:
+          $ref: '#/components/schemas/Uuid'
+        invited_by:
+          $ref: '#/components/schemas/Uuid'
+        status:
+          $ref: '#/components/schemas/TeamInviteStatus'
+        message:
+          type: string
+          nullable: true
+          example: We're short a keeper on Fridays — join us?
+        created_at:
+          type: string
+          format: date-time
+        responded_at:
+          type: string
+          format: date-time
+          nullable: true
 
     Address:
       type: object
@@ -8294,6 +9426,13 @@ components:
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
+        team_id:
+          allOf:
+            - $ref: '#/components/schemas/Uuid'
+          nullable: true
+          description: |
+            The organizing team, or `null` for an ordinary teamless match (still
+            the default). Only a tag — it does not change the join/roster flow.
         title:
           type: string
           example: Friday Night 7s

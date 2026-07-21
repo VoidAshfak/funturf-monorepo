@@ -102,6 +102,16 @@ export const ERROR_CODES = Object.freeze({
     CONNECTION_ALREADY_EXISTS:  { code: "CONNECTION_ALREADY_EXISTS",  statusCode: 409, message: "A turfmate connection or request already exists" },
     CONNECTION_NOT_FOUND:       { code: "CONNECTION_NOT_FOUND",       statusCode: 404, message: "Turfmate request not found" },
 
+    // ---- teams ----
+    TEAM_NOT_FOUND:            { code: "TEAM_NOT_FOUND",            statusCode: 404, message: "Team not found" },
+    NOT_TEAM_CAPTAIN:          { code: "NOT_TEAM_CAPTAIN",          statusCode: 403, message: "Only the team captain can do this" },
+    NOT_TEAM_MEMBER:           { code: "NOT_TEAM_MEMBER",           statusCode: 403, message: "You are not a member of this team" },
+    ALREADY_TEAM_MEMBER:       { code: "ALREADY_TEAM_MEMBER",       statusCode: 409, message: "This player is already on the team" },
+    TEAM_INVITE_ALREADY_EXISTS:{ code: "TEAM_INVITE_ALREADY_EXISTS",statusCode: 409, message: "A pending invite already exists for this player" },
+    TEAM_INVITE_NOT_FOUND:     { code: "TEAM_INVITE_NOT_FOUND",     statusCode: 404, message: "Team invite not found" },
+    CANNOT_REMOVE_CAPTAIN:     { code: "CANNOT_REMOVE_CAPTAIN",     statusCode: 400, message: "Transfer captaincy before removing yourself, or delete the team" },
+    CANNOT_INVITE_SELF:        { code: "CANNOT_INVITE_SELF",        statusCode: 400, message: "You cannot invite yourself to a team" },
+
     // ---- notifications ----
     NOTIFICATION_NOT_FOUND: { code: "NOTIFICATION_NOT_FOUND", statusCode: 404, message: "Notification not found" },
 });

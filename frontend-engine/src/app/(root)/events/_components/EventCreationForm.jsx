@@ -11,12 +11,12 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useCreateEventMutation, useGetMyBookingsQuery, useGetVenuesQuery } from "@/store/api/apiSlice";
+import { useCreateEventMutation, useGetMyBookingsQuery, useGetMyTeamsQuery, useGetVenuesQuery } from "@/store/api/apiSlice";
 import { getApiErrorMessage } from "@/utils/apiError";
 import { slotRangeLabel } from "@/utils/slots";
 import { format } from "date-fns";
 import AiRephraseButton from "@/components/AiRephraseButton";
-import { CalendarIcon, CircleDollarSign, Info, Link2, MapPin, Ticket, Trophy, Users, X } from "lucide-react";
+import { CalendarIcon, CircleDollarSign, Info, Link2, MapPin, Shield, Ticket, Trophy, Users, X } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { redirect, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -47,6 +47,10 @@ const groundSports = (b) => {
     const sp = b?.grounds?.sport_type;
     return (Array.isArray(sp) ? sp : [sp]).filter(Boolean);
 };
+
+// Sentinel for "no team" — Radix Select can't hold an empty-string value, so the
+// clear option needs a real one that we map back to "" on change.
+const NO_TEAM = "__none__";
 
 // A section card — keeps the long form scannable instead of one endless column.
 function Section({ icon: Icon, title, subtitle, children }) {
@@ -85,6 +89,9 @@ export default function EventCreationForm() {
     const { data: venues = [] } = useGetVenuesQuery();
     // The caller's own bookings — used to offer "attach a booking" to the match.
     const { data: myBookings = [] } = useGetMyBookingsQuery();
+    // Teams the caller is on — lets them organize the match under one of them.
+    const { data: myTeamsData } = useGetMyTeamsQuery();
+    const myTeams = myTeamsData?.teams ?? [];
     const [createEvent, { isLoading: isSubmitting }] = useCreateEventMutation();
     const [submitError, setSubmitError] = useState(null);
 
@@ -115,6 +122,7 @@ export default function EventCreationForm() {
             total_cost: "",
             cost_split_type: "equal",
             booking_id: "",
+            team_id: "",
         },
     });
 
@@ -187,6 +195,10 @@ export default function EventCreationForm() {
                 total_cost: values.total_cost,
                 cost_split_type: values.cost_split_type,
                 ...(values.booking_id ? { booking_id: values.booking_id } : {}),
+                // Optional organizing team. Omitted entirely for an ordinary
+                // teamless match — the backend treats the two paths identically
+                // apart from the tag (the roster is NOT auto-invited).
+                ...(values.team_id ? { team_id: values.team_id } : {}),
             };
             const data = await createEvent(payload).unwrap();
             if (data?.success) {
@@ -272,6 +284,51 @@ export default function EventCreationForm() {
                     </p>
                 )}
             </Section>
+
+            {/* ---- Organize as a team (optional) ----
+                Only shown when the caller is actually on a team — no point
+                offering an empty picker. The backend re-checks membership and
+                rejects a team you're not on (NOT_TEAM_MEMBER). */}
+            {myTeams.length > 0 && (
+                <Section
+                    icon={Shield}
+                    title="Organize as a team"
+                    subtitle="Optional — run this match under one of your teams."
+                >
+                    <div className="space-y-2 sm:max-w-sm">
+                        <Label>Team</Label>
+                        <Controller
+                            name="team_id"
+                            control={control}
+                            render={({ field }) => (
+                                <Select
+                                    value={field.value || NO_TEAM}
+                                    onValueChange={(value) =>
+                                        field.onChange(value === NO_TEAM ? "" : value)
+                                    }
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="No team — just me" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={NO_TEAM}>No team — just me</SelectItem>
+                                        {myTeams.map((team) => (
+                                            <SelectItem key={team.id} value={team.id}>
+                                                {team.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        />
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                            This tags the match with your team. Players still join the normal way —
+                            your roster isn't invited automatically.
+                        </p>
+                    </div>
+                </Section>
+            )}
 
             {/* ---- Basics ---- */}
             <Section icon={Info} title="Basics" subtitle="What's the match?">

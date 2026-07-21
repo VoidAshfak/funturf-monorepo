@@ -8,6 +8,8 @@ import { createNotification } from "../../utils/notificationService.js";
 import { broadcastToTurfmates, getAcceptedTurfmateIds } from "../../utils/turfmateService.js";
 import { isEventAdmin, notifyEventAdmins, notifyEventParticipants, resolveBookingAttachment } from "../../utils/eventService.js";
 import { getRankedEventPage } from "../../utils/eventRanking.js";
+import { requireActiveMembership } from "../../utils/teamService.js";
+import { isUuid } from "../../middlewares/validateUuid.middleware.js";
 import { logger } from "../../../logs/logger.js";
 import { emitToEvent } from "../../socket.js";
 
@@ -56,6 +58,9 @@ const createEvent = asyncHandler(async (req, res) => {
         // Optional: an existing booking (the ground reservation) the organizer
         // wants this match tied to. Linked bidirectionally after the event exists.
         booking_id,
+        // Optional: organize this match under one of the caller's teams. Purely an
+        // organizing tag — a teamless match simply omits it and behaves as before.
+        team_id,
     } = req.body
 
     // Always-required fields, independent of whether a booking is attached.
@@ -100,6 +105,20 @@ const createEvent = asyncHandler(async (req, res) => {
         });
     }
 
+    // Organizing under a team? Only someone actually ON that team may fly its
+    // name. Checked BEFORE the event exists so a rejected tag never leaves a
+    // half-created match behind.
+    if (team_id) {
+        // Screen the id first — a malformed uuid raises Prisma P2023, which would
+        // surface as a 500 instead of the 400 this is.
+        if (!isUuid(team_id)) {
+            throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+                message: "team_id must be a valid id",
+            });
+        }
+        await requireActiveMembership(team_id, req.user.id);
+    }
+
     // current_players counts the ORGANIZER (they play too) + any hand-picked
     // initial squad. Later approved joins increment on top of this base.
     const createdEvents = await pgClient.$queryRaw
@@ -128,6 +147,22 @@ const createEvent = asyncHandler(async (req, res) => {
 
     if (!createdEvent) {
         throw new ApiError(500, "Event creation failed!")
+    }
+
+    // Tag the match with its organizing team. Done as a follow-up update because
+    // the create path goes through the `fn_create_event` stored procedure, which
+    // has no team parameter.
+    //
+    // TODO (fast-follow, deliberately out of scope): auto-invite the team's
+    // roster to a team-organized match. Today the join/invite flow for the event
+    // is untouched — a team is only an organizing tag on it.
+    if (team_id) {
+        await pgClient.events.update({
+            where: { id: createdEvent.id },
+            data: { team_id },
+        });
+        createdEvent.team_id = team_id;
+        logger.info(`event ${createdEvent.id} organized under team ${team_id}`);
     }
 
     // Initial roster the organizer hand-picked at creation are approved outright
