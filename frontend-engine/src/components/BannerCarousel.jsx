@@ -6,31 +6,33 @@ import Autoplay from "embla-carousel-autoplay";
 import HeroCards from "@/components/HeroCards";
 import { cn } from "@/lib/utils";
 
-// Spotlight turfs for the hero. Swap freely for real /venues data later.
+// Spotlight turfs for the hero. Placeholder copy until this reads real /venues
+// data — but keep it Bangladesh-local (Dhaka areas, ৳ BDT, 7-a-side football),
+// since that is the market Funturf serves.
 const SPOTLIGHTS = [
     {
         image: "/assets/images/hero-1.jpg",
-        name: "Green Valley Arena",
-        location: "Andheri, Mumbai",
-        sport: "5-a-side Football",
+        name: "Banani Turf Arena",
+        location: "Banani, Dhaka",
+        sport: "7-a-side Football",
         rating: "4.8",
-        price: "₹1200",
+        price: "৳2,500",
     },
     {
         image: "/assets/images/hero-2.jpg",
-        name: "Skyline Box Cricket",
-        location: "Baner, Pune",
+        name: "Bashundhara Sports Hub",
+        location: "Bashundhara R/A, Dhaka",
         sport: "Box Cricket",
         rating: "4.6",
-        price: "₹900",
+        price: "৳2,000",
     },
     {
         image: "/assets/images/hero-3.jpg",
-        name: "Urban Kickturf",
-        location: "Indiranagar, Bengaluru",
+        name: "Uttara Kickoff Turf",
+        location: "Sector 7, Uttara, Dhaka",
         sport: "Futsal",
         rating: "4.9",
-        price: "₹1500",
+        price: "৳1,800",
     },
 ];
 
