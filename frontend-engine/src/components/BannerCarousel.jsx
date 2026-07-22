@@ -47,7 +47,10 @@ export default function BannerCarousel() {
     }, [api]);
 
     return (
-        <div className="relative mx-auto w-full max-w-[400px]">
+        // `lg:mr-0` cancels the auto right margin so the card sits flush against
+        // the hero's right rail instead of floating centred in its grid column —
+        // otherwise the hero looks lopsided, left edge further out than the right.
+        <div className="relative mx-auto w-full max-w-[400px] lg:mr-0">
             <Carousel
                 className="rounded-3xl"
                 setApi={setApi}

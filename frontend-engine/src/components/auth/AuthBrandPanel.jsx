@@ -1,6 +1,6 @@
 import { CalendarCheck2, MapPin, Users } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import { cn } from "@/lib/utils";
 
 const FEATURES = [
@@ -47,13 +47,7 @@ export default function AuthBrandPanel({ className }) {
 
             {/* logo */}
             <Link href="/" className="relative inline-flex w-fit items-center gap-2">
-                <Image
-                    src="/assets/icons/logo.svg"
-                    alt="Funturf"
-                    width={40}
-                    height={40}
-                    className="dark:brightness-0 dark:invert"
-                />
+                <Logo height={32} />
                 <span className="text-2xl font-extrabold tracking-tight text-foreground">
                     Fun
                     <span className="bg-gradient-to-r from-brand to-teal bg-clip-text text-transparent dark:from-brand-light">

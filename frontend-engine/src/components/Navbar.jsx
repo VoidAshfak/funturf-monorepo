@@ -2,8 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import Logo from "./Logo";
 import { gsap } from "@/lib/animations";
 import NavLink from "./NavLink";
 import ChatLauncher from "./ChatLauncher";
@@ -57,12 +57,7 @@ export default function Navbar({ session }) {
                 className="glass-nav mt-3 flex w-[min(94%,1080px)] items-center justify-between gap-6 rounded-full border border-border px-6 py-2 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.28)] will-change-transform"
             >
                 <Link href="/" className="shrink-0">
-                    <Image
-                        src="/assets/icons/logo.svg"
-                        alt="Logo"
-                        width={40}
-                        height={40}
-                    />
+                    <Logo height={30} priority />
                 </Link>
 
                 <NavLink />

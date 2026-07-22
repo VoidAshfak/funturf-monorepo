@@ -19,6 +19,7 @@ import { useGetVenuesByAdminQuery } from "@/store/api/apiSlice";
 import { disconnectSocket } from "@/lib/socket";
 import Image from "next/image";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import { usePathname } from "next/navigation";
 
 const MANAGE_LINKS = [
@@ -64,7 +65,7 @@ export default function AppSidebar() {
         <Sidebar>
             <SidebarHeader className="border-b border-border">
                 <Link href="/" className="flex items-center gap-2.5 px-2 py-3">
-                    <Image src="/assets/icons/logo.svg" alt="FunTurf" width={28} height={28} />
+                    <Logo height={22} />
                     <span className="text-xl font-extrabold tracking-tight text-primary">FUNTURF</span>
                 </Link>
                 <div className="px-2 pb-2">

@@ -13,7 +13,9 @@ import { gsap, heroReveal } from "@/lib/animations";
 const BannerCarousel = dynamic(() => import("@/components/BannerCarousel"), {
     ssr: false,
     loading: () => (
-        <div className="mx-auto w-full max-w-[400px]">
+        // Mirrors BannerCarousel's own wrapper (incl. `lg:mr-0`) so the real
+        // carousel drops in without shifting sideways.
+        <div className="mx-auto w-full max-w-[400px] lg:mr-0">
             <Skeleton className="aspect-[4/5] w-full rounded-3xl" />
         </div>
     ),
@@ -51,7 +53,14 @@ export default function Hero() {
             <div className="pointer-events-none absolute -top-32 -left-24 h-96 w-96 rounded-full bg-primary/20 blur-[120px]" />
             <div className="pointer-events-none absolute -bottom-40 right-0 h-96 w-96 rounded-full bg-teal/10 blur-[120px]" />
 
-            <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-6 pb-14 pt-24 md:px-12 md:pb-16 md:pt-28 lg:grid-cols-2 lg:px-20 lg:pb-20 lg:pt-28">
+            {/*
+                Rail matches the Navbar pill exactly — `w-[min(94%,1080px)] px-6`,
+                the same classes as Navbar.jsx. Copied rather than approximated:
+                the navbar is percentage-based below 1149px and capped above it,
+                so any fixed `max-w` + padding combo would only line up at one
+                viewport width. Keep the two in sync if either changes.
+            */}
+            <div className="relative mx-auto grid w-[min(94%,1080px)] items-center gap-12 px-6 pb-14 pt-24 md:pb-16 md:pt-28 lg:grid-cols-2 lg:pb-20 lg:pt-28">
                 {/* Copy column */}
                 <div className="text-center lg:text-left">
                     <span className="hero-item glass-chip mx-auto inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold text-muted-foreground lg:mx-0">

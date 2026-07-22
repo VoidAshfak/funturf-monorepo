@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
+import Logo from "./Logo";
 import {
     MapPin,
     Mail,
@@ -64,12 +64,7 @@ export default function Footer() {
                 <div className="flex flex-col gap-10 border-b border-border pb-12 lg:flex-row lg:items-start lg:justify-between">
                     <div className="max-w-sm">
                         <Link href="/" className="inline-flex items-center gap-2">
-                            <Image
-                                src="/assets/icons/logo.svg"
-                                alt="Funturf"
-                                width={40}
-                                height={40}
-                            />
+                            <Logo height={30} />
                             <span className="text-2xl font-extrabold tracking-tight text-foreground">
                                 Fun
                                 <span className="bg-gradient-to-r from-brand to-teal bg-clip-text text-transparent dark:from-brand-light">
