@@ -4576,9 +4576,9 @@ paths:
                     - id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
                       turf_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
                       name: Ground A (7-a-side)
-                      ground_type: outdoor
+                      ground_type: v7x7
                       sport_type: [football]
-                      surface_type: artificial_turf
+                      surface_type: artificial_grass
                       capacity_players: 14
                       hourly_rate: 2500
                       weekend_hourly_rate: 3000
@@ -4877,7 +4877,7 @@ paths:
                   hourly_rate: 2500
                   weekend_hourly_rate: 3000
                   capacity_players: 14
-                  surface_type: artificial_turf
+                  surface_type: artificial_grass
       responses:
         '201':
           description: Turf and grounds created.
@@ -4956,7 +4956,7 @@ paths:
               name: Ground B (5-a-side)
               sport_type: [football]
               hourly_rate: 1800
-              surface_type: artificial_turf
+              surface_type: artificial_grass
               capacity_players: 10
               amenities: [floodlights]
       responses:
@@ -8452,7 +8452,9 @@ components:
         ground_type:
           type: string
           nullable: true
-          example: outdoor
+          # Prisma client names (mapped to '5x5'/'7x7'/'11x11' in the DB).
+          enum: [v5x5, v6x6, v7x7, v11x11, cricket_pitch, tennis_court, badminton_court, custom]
+          example: v7x7
         sport_type:
           type: array
           description: Sports this ground hosts. At least one is required on write.
@@ -8462,7 +8464,8 @@ components:
         surface_type:
           type: string
           nullable: true
-          example: artificial_turf
+          enum: [natural_grass, artificial_grass, clay, concrete, synthetic, other]
+          example: artificial_grass
         dimensions_length_m:
           type: number
           nullable: true
@@ -8568,11 +8571,14 @@ components:
         ground_type:
           type: string
           nullable: true
-          example: outdoor
+          # Prisma client names (mapped to '5x5'/'7x7'/'11x11' in the DB).
+          enum: [v5x5, v6x6, v7x7, v11x11, cricket_pitch, tennis_court, badminton_court, custom]
+          example: v7x7
         surface_type:
           type: string
           nullable: true
-          example: artificial_turf
+          enum: [natural_grass, artificial_grass, clay, concrete, synthetic, other]
+          example: artificial_grass
         dimensions_length_m:
           type: number
           nullable: true

@@ -84,6 +84,13 @@ model activity_logs {
   @@index([user_id], map: "idx_activity_logs_user")
 }
 
+/// DB-managed PARTIAL unique index (Prisma cannot express partial indexes, so it
+/// is NOT declared below and won't survive `prisma db pull`):
+///   unique_ground_slot_date ON bookings (ground_id, booking_date, slot)
+///     WHERE booking_status IN ('confirmed','pending')
+/// Stops double-booking the same ground+date+slot for ACTIVE bookings, while
+/// allowing the same slot on different dates. Do NOT add an @@unique for this —
+/// that would build a full (non-partial) index and drift from the database.
 model bookings {
   id                                 String               @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   ground_id                          String               @db.Uuid
@@ -308,7 +315,7 @@ model grounds {
   weekend_hourly_rate   Decimal?             @db.Decimal(10, 2)
   peak_hour_rate        Decimal?             @db.Decimal(10, 2)
   off_peak_hour_rate    Decimal?             @db.Decimal(10, 2)
-  currency              String?              @default("USD") @db.VarChar(3)
+  currency              String?              @default("BDT") @db.VarChar(3)
   minimum_booking_hours Decimal?             @default(1) @db.Decimal(3, 1)
   maximum_booking_hours Decimal?             @default(4) @db.Decimal(3, 1)
   status                ground_status_type?  @default(available)
@@ -414,7 +421,7 @@ model payments {
   booking_id          String?               @db.Uuid
   event_id            String?               @db.Uuid
   amount              Decimal               @db.Decimal(10, 2)
-  currency            String?               @default("USD") @db.VarChar(3)
+  currency            String?               @default("BDT") @db.VarChar(3)
   payment_method      payment_method_type?
   payment_gateway     String?               @default("manual") @db.VarChar(50)
   transaction_id      String?               @unique @db.VarChar(255)
@@ -741,7 +748,7 @@ model wallets {
   id                  String                @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   user_id             String                @unique @db.Uuid
   balance             Decimal?              @default(0.00) @db.Decimal(10, 2)
-  currency            String?               @default("USD") @db.VarChar(3)
+  currency            String?               @default("BDT") @db.VarChar(3)
   total_credited      Decimal?              @default(0.00) @db.Decimal(10, 2)
   total_debited       Decimal?              @default(0.00) @db.Decimal(10, 2)
   status              wallet_status_type?   @default(active)

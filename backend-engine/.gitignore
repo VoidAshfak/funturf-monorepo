@@ -147,3 +147,5 @@ desktop.ini
 
 
 /backend/.agents
+/backend/prisma/postgresql/seed.js
+/backend/prisma/postgresql/funturf.seed.json

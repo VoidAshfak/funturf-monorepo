@@ -10,9 +10,11 @@
     "prisma:generate:pg": "prisma generate --schema=prisma/postgresql/schema.prisma",
     "prisma:generate:mongo": "prisma generate --schema=prisma/mongodb/schema.prisma",
     "prisma:generate": "npm run prisma:generate:pg && npm run prisma:generate:mongo",
-    "prisma:migrate": "prisma migrate dev --schema=prisma/postgresql/schema.prisma",
+    "prisma:pull": "prisma db pull --schema=prisma/postgresql/schema.prisma",
     "prisma:push:mongo": "prisma db push --schema=prisma/mongodb/schema.prisma",
-    "prisma:push:pgsql": "prisma db push --schema=prisma/postgresql/schema.prisma"
+    "prisma:push:pgsql": "prisma db push --schema=prisma/postgresql/schema.prisma",
+    "prisma:seed:pg": "node -r dotenv/config prisma/postgresql/seed.js",
+    "prisma:seed:pg:reset": "node -r dotenv/config prisma/postgresql/seed.js --reset"
   },
   "keywords": [
     "turf",
