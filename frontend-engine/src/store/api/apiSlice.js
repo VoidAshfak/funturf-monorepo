@@ -1,21 +1,75 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { getSession, signOut } from "next-auth/react";
 import { getSocket } from "@/lib/socket";
 import { toastIncomingNotification } from "@/lib/notify";
+import { clearCredentials, setCredentials } from "@/store/slices/authSlice";
 
 // Backend base from env (NEXT_PUBLIC_ so it's exposed client-side); see getData.js / NextAuth route.
 const BASE_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/`;
 
+const rawBaseQuery = fetchBaseQuery({
+    baseUrl: BASE_URL,
+    prepareHeaders: (headers, { getState }) => {
+        // token is synced from the NextAuth session into authSlice (see AuthSync)
+        const token = getState().auth?.token;
+        if (token) headers.set("authorization", `Bearer ${token}`);
+        return headers;
+    },
+});
+
+// De-dupes concurrent refreshes: many in-flight requests can 401 at once, but we
+// only want ONE call to NextAuth's session endpoint (which runs the jwt callback
+// and rotates the backend token) — the rest await the same promise.
+let refreshPromise = null;
+
+/**
+ * baseQuery wrapper that recovers from an expired access token.
+ *
+ * On a 401 we ask NextAuth for a fresh session (`getSession()` re-runs the server
+ * `jwt` callback, which silently refreshes the backend token), push the new token
+ * into Redux so `prepareHeaders` picks it up, and retry the request ONCE. If the
+ * session can't be refreshed (or the retry still 401s) the session is dead, so we
+ * sign the user out. This is the mid-session net; the jwt callback handles the
+ * common "expired between page loads" case proactively.
+ */
+const baseQueryWithReauth = async (args, api, extraOptions) => {
+    let result = await rawBaseQuery(args, api, extraOptions);
+
+    if (result.error?.status === 401) {
+        // Only attempt recovery if we actually had a token — a 401 with no token
+        // is just an unauthenticated call, not an expiry to refresh.
+        const hadToken = Boolean(api.getState().auth?.token);
+        if (!hadToken) return result;
+
+        // Single shared refresh across all concurrent 401s.
+        if (!refreshPromise) refreshPromise = getSession();
+        let session;
+        try {
+            session = await refreshPromise;
+        } finally {
+            refreshPromise = null;
+        }
+
+        const newToken = session?.user?.access_token;
+        if (session && !session.error && newToken) {
+            // Update Redux first so the retry's prepareHeaders sends the new token.
+            api.dispatch(setCredentials({ user: session.user, token: newToken }));
+            result = await rawBaseQuery(args, api, extraOptions);
+        }
+
+        // Refresh failed, or the retry still 401s -> the session is unusable.
+        if (session?.error || result.error?.status === 401) {
+            api.dispatch(clearCredentials());
+            await signOut({ callbackUrl: "/login" });
+        }
+    }
+
+    return result;
+};
+
 export const apiSlice = createApi({
     reducerPath: "api",
-    baseQuery: fetchBaseQuery({
-        baseUrl: BASE_URL,
-        prepareHeaders: (headers, { getState }) => {
-            // token is synced from the NextAuth session into authSlice (see AuthSync)
-            const token = getState().auth?.token;
-            if (token) headers.set("authorization", `Bearer ${token}`);
-            return headers;
-        },
-    }),
+    baseQuery: baseQueryWithReauth,
     tagTypes: ["Venues", "Venue", "Events", "Event", "JoinRequests", "Messages", "Comments", "Bookings", "Booking", "User", "Turfmates", "TurfmateRequests", "TurfmateRecs", "ConnectionStatus", "Notifications", "Conversations", "DmThread", "Promotions", "Teams", "Team", "TeamInvites", "Sports"],
     endpoints: (builder) => ({
         // ---- Venues ----

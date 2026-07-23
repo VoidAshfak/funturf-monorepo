@@ -7617,6 +7617,7 @@ components:
         # auth / users
         - MISSING_TOKEN
         - INVALID_TOKEN
+        - TOKEN_EXPIRED
         - INVALID_CREDENTIALS
         - USER_NOT_FOUND
         - USER_ALREADY_EXISTS

@@ -61,7 +61,8 @@ Defined in `backend-engine/backend/src/utils/errorCodes.js`. Throw them via `Api
 | `FORBIDDEN` | 403 | Authenticated but not allowed |
 | `CONFLICT` | 409 | Resource already exists |
 | `MISSING_TOKEN` | 401 | No `Authorization` header |
-| `INVALID_TOKEN` | 401 | Token invalid/expired |
+| `INVALID_TOKEN` | 401 | Token tampered/malformed — client should log out |
+| `TOKEN_EXPIRED` | 401 | Access token expired — client should refresh via `POST /users/refresh` and retry |
 | `INVALID_CREDENTIALS` | 401 | Wrong email/password |
 | `USER_NOT_FOUND` | 404 | No such user |
 | `USER_ALREADY_EXISTS` | 409 | Email/phone already registered |

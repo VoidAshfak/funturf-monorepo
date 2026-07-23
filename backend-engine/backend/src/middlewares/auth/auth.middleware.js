@@ -22,6 +22,12 @@ export const verifyJWT = asyncHandler(async (req, _, next) => {
         try {
             decodedInfo = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
         } catch (error) {
+            // A merely EXPIRED token is refreshable — the client can hit
+            // /users/refresh and retry. A tampered/malformed token is not, so
+            // surface a different code and let the client log the user out.
+            if (error?.name === "TokenExpiredError") {
+                throw ApiError.fromCode(ERROR_CODES.TOKEN_EXPIRED);
+            }
             throw ApiError.fromCode(ERROR_CODES.INVALID_TOKEN);
         }
 

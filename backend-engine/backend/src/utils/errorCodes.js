@@ -30,6 +30,9 @@ export const ERROR_CODES = Object.freeze({
     // ---- auth / users ----
     MISSING_TOKEN:        { code: "MISSING_TOKEN",        statusCode: 401, message: "Authentication token is missing" },
     INVALID_TOKEN:        { code: "INVALID_TOKEN",        statusCode: 401, message: "Access token is invalid or expired" },
+    // Distinct from INVALID_TOKEN so the client can tell a *refreshable* expiry
+    // (silently refresh via /users/refresh) from a dead/tampered token (log out).
+    TOKEN_EXPIRED:        { code: "TOKEN_EXPIRED",        statusCode: 401, message: "Access token has expired" },
     INVALID_CREDENTIALS:  { code: "INVALID_CREDENTIALS",  statusCode: 401, message: "Invalid email or password" },
     USER_NOT_FOUND:       { code: "USER_NOT_FOUND",       statusCode: 404, message: "User not found" },
     USER_ALREADY_EXISTS:  { code: "USER_ALREADY_EXISTS",  statusCode: 409, message: "A user with this email or phone already exists" },
