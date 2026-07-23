@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import SportIcon from "./icons/SportIcon";
 import { useGSAP } from "@gsap/react";
@@ -10,6 +11,7 @@ import {
     Loader2,
     Search,
     SlidersHorizontal,
+    UserCheck,
     Users,
     X,
 } from "lucide-react";
@@ -43,7 +45,11 @@ const PAGE_SIZE = 8;
 
 export default function EventsFeed({ initialStats }) {
     const dispatch = useDispatch();
-    const { query, sport, timeframe, openOnly, page } = useSelector(selectEventFilters);
+    // "Only my matches" only makes sense for a signed-in user (the backend no-ops
+    // it for anonymous callers), so the toggle is gated on an active session.
+    const { status: authStatus } = useSession();
+    const isAuthed = authStatus === "authenticated";
+    const { query, sport, timeframe, openOnly, joinedOnly, page } = useSelector(selectEventFilters);
 
     // Debounced search: type into local state, push to the filter (which refetches) after a pause.
     const [searchInput, setSearchInput] = useState(query);
@@ -55,6 +61,8 @@ export default function EventsFeed({ initialStats }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchInput]);
 
+    // Only send joinedOnly when authenticated — it's a no-op server-side otherwise.
+    const effectiveJoinedOnly = isAuthed && joinedOnly;
     const { data, isFetching, isLoading } = useGetEventsQuery({
         page,
         limit: PAGE_SIZE,
@@ -62,6 +70,7 @@ export default function EventsFeed({ initialStats }) {
         timeframe,
         q: query,
         openOnly: openOnly ? "true" : undefined,
+        joinedOnly: effectiveJoinedOnly ? "true" : undefined,
     });
 
     const events = data?.events ?? [];
@@ -71,14 +80,19 @@ export default function EventsFeed({ initialStats }) {
     const stats = data?.stats ?? initialStats ?? { sports: [] };
     const sportOptions = stats.sports ?? [];
 
-    const hasActiveFilters = query || sport !== "all" || timeframe !== "all" || openOnly;
+    const hasActiveFilters =
+        query || sport !== "all" || timeframe !== "all" || openOnly || effectiveJoinedOnly;
     const activeCount =
-        [Boolean(query), sport !== "all", timeframe !== "all", openOnly].filter(Boolean).length;
+        [Boolean(query), sport !== "all", timeframe !== "all", openOnly, effectiveJoinedOnly].filter(
+            Boolean
+        ).length;
 
     const setSport = (v) => dispatch(setEventFilter({ key: "sport", value: v }));
     const setTimeframe = (v) => dispatch(setEventFilter({ key: "timeframe", value: v }));
     const toggleOpenOnly = () =>
         dispatch(setEventFilter({ key: "openOnly", value: !openOnly }));
+    const toggleJoinedOnly = () =>
+        dispatch(setEventFilter({ key: "joinedOnly", value: !joinedOnly }));
     const clearAll = () => {
         setSearchInput("");
         dispatch(resetEventFilters());
@@ -95,6 +109,10 @@ export default function EventsFeed({ initialStats }) {
         setTimeframe,
         openOnly,
         toggleOpenOnly,
+        // "Only my matches" toggle is only offered to signed-in users.
+        showJoinedOnly: isAuthed,
+        joinedOnly,
+        toggleJoinedOnly,
         sportOptions,
         hasActiveFilters,
         onClear: clearAll,
@@ -253,6 +271,9 @@ function EventFilters({
     setTimeframe,
     openOnly,
     toggleOpenOnly,
+    showJoinedOnly,
+    joinedOnly,
+    toggleJoinedOnly,
     sportOptions,
     hasActiveFilters,
     onClear,
@@ -317,6 +338,22 @@ function EventFilters({
         </button>
     );
 
+    // Signed-in only: narrow the feed to matches the user organises or plays in.
+    const joinedOnlyToggle = showJoinedOnly ? (
+        <button
+            onClick={toggleJoinedOnly}
+            className={cn(
+                "inline-flex w-full items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all duration-300",
+                joinedOnly
+                    ? "border-primary bg-primary text-primary-foreground shadow-[0_0_18px_rgba(29,185,84,0.4)]"
+                    : "border-border bg-card/60 text-muted-foreground hover:text-foreground"
+            )}
+        >
+            <UserCheck className="h-4 w-4" />
+            Only matches I&apos;ve joined
+        </button>
+    ) : null;
+
     const sports = (
         <div>
             <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -354,6 +391,7 @@ function EventFilters({
             {search}
             {timeframeControl}
             {openToggle}
+            {joinedOnlyToggle}
             {sports}
             {clear}
         </div>

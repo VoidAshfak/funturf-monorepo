@@ -1205,6 +1205,16 @@ paths:
           schema:
             type: string
             enum: ['true', 'false']
+        - name: joinedOnly
+          in: query
+          description: >-
+            `true` -> return ONLY matches the caller is already involved in (as
+            organiser or any participant row: approved player, co-organiser, or a
+            pending request/invite). Requires an authenticated caller; ignored for
+            anonymous requests. Pairs with the per-event `my_role` field.
+          schema:
+            type: string
+            enum: ['true', 'false']
       responses:
         '200':
           description: A page of matches.
@@ -1288,6 +1298,7 @@ paths:
                         - id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
                           first_name: Shuvo
                           profile_picture_url: null
+                      my_role: player
                   pagination:
                     page: 1
                     limit: 12
@@ -9410,7 +9421,13 @@ components:
           format: date-time
           example: '2026-07-10T11:02:00.000Z'
         users:
-          $ref: '#/components/schemas/UserSummary'
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+          description: >-
+            On the detail read the squad card also gets public profile extras:
+            `district`, `division` (home area) and flattened player stats
+            (`skill_level`, `total_games_played`, `rating`) — used for the squad
+            member's role badge, join date and at-a-glance stats.
 
     Event:
       type: object
@@ -9664,6 +9681,17 @@ components:
             Present **only** on authenticated requests that have turfmates.
           items:
             $ref: '#/components/schemas/UserSummary'
+        my_role:
+          type: string
+          nullable: true
+          enum: [organizer, co_organizer, player, null]
+          description: >-
+            The CALLING user's own relationship to this match, so the feed can
+            highlight matches they run or play in. `organizer` (creator),
+            `co_organizer` (match admin), `player` (approved/invited/requested
+            participant), or `null` (not involved). Present **only** on
+            authenticated requests.
+          example: player
 
     NearbyEvent:
       type: object

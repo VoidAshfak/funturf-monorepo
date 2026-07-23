@@ -298,7 +298,7 @@ address_line_1: {
 
 | method | path | auth | body / params | success `data` |
 | --- | --- | --- | --- | --- |
-| GET | `/` | **optional auth** | query `page?`, `limit?`, `sport?`, `timeframe?`, `q?`, `openOnly?` | `200` — `{ events, pagination, stats? }` (**recommended-ranked** paginated feed) |
+| GET | `/` | **optional auth** | query `page?`, `limit?`, `sport?`, `timeframe?`, `q?`, `openOnly?`, `joinedOnly?` | `200` — `{ events, pagination, stats? }` (**recommended-ranked** paginated feed; authed → each event carries `my_role`) |
 | GET | `/nearby` | public | query `lat`, `lng`, `radius?` (km, 1–100, default 10) | `200` — `{ events:[{…, turf_name, ground_name, distance_km}], search_radius_km, center }` (nearest first, ≤50) |
 | POST | `/:event_id/join` | **required** | — | `201` — created **pending** request (status `requested`; does NOT bump `current_players`; notifies all admins + requester) |
 | DELETE | `/:event_id/join` | **required, requester** | — | `200` — `{ event_id }` (withdraw own pending request) |
@@ -482,12 +482,22 @@ booking: {
 The detail page renders this as a "Reserved ground" card with a **live hold countdown** when
 `hold_expires_at` is set.
 
+**`GET /events/:event_id` `participants` + `organizer`** — the roster rows carry
+`{ id, user_id, status, role, joined_at, users }`, and on this detail read each `users`
+(and the `organizer`) also embeds public profile extras: `district`, `division` (home area) and
+flattened player stats (`skill_level`, `total_games_played`, `rating`, sourced from
+`player_profiles`). The squad list (`EventSquad` → `PlayerItem`) uses these to show a **role badge**
+(Organizer/Admin), a **join date**, and at-a-glance skill/games chips. The organizer is synthesized
+as an `organizer` role row (they have no `event_participants` row).
+
 **`GET /events` is a paginated, filterable feed** (powers the infinite-scroll `/events` page):
 
 - **Query params (all optional):** `page` (1-based, default 1), `limit` (1–50, default 12),
   `sport` (exact `sport_type`, `"all"` = any), `timeframe` (`all` | `today` | `week` | `month`,
   filters `event_date` forward), `q` (search — matches event title or turf name, case-insensitive),
-  `openOnly` (`"true"` = only events still short of `min_players`).
+  `openOnly` (`"true"` = only events still short of `min_players`),
+  `joinedOnly` (`"true"` = only matches the **authenticated** caller is already involved in —
+  organiser or any participant row; no-op for anonymous callers).
 - **Response `data`:**
   ```
   {
@@ -501,10 +511,14 @@ The detail page renders this as a "Reserved ground" card with a **live hold coun
 - **Turfmate highlight:** `GET /events` uses **optional auth** (`attachUserIfPresent`) — when a
   valid token is sent, each event gains `turfmates_involved:[{id,first_name,profile_picture_url}]`
   listing the caller's turfmates who organize or play in it (the feed card rings + badges these).
+- **My-role highlight:** on an authenticated request each event also carries
+  `my_role` (`"organizer"` | `"co_organizer"` | `"player"` | `null`) — the caller's own
+  relationship to the match. The feed card badges organiser/admin matches and adds a stronger
+  ring. The `joinedOnly` filter keeps only events where `my_role` is non-`null`.
 - `stats` (global, unfiltered) is returned only on `page === 1` to save queries; the frontend
   caches it for the hero + sport chips. `openOnly` uses a Prisma **field reference**
   (`min_players > current_players`).
-- Frontend: `useGetEventsQuery({page,limit,sport,timeframe,q,openOnly})` accumulates pages via
+- Frontend: `useGetEventsQuery({page,limit,sport,timeframe,q,openOnly,joinedOnly})` accumulates pages via
   RTK Query `merge` (cache key excludes `page`); the server component pre-fetches `page 1` only
   for `stats`.
 

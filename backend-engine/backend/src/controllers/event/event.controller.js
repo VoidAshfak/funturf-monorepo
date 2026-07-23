@@ -232,8 +232,14 @@ const createEvent = asyncHandler(async (req, res) => {
 //   timeframe all | today | week | month      (filters event_date forward)
 //   q         search term (title or turf name, case-insensitive)
 //   openOnly  "true" -> only events still needing players
+//   joinedOnly "true" -> only events the caller is already involved in
+//              (organiser or any participant row). Needs an authenticated caller;
+//              a no-op otherwise. Pairs with the per-event `my_role` flag below.
 //
 // Response data: { events, pagination, stats }.
+// When authenticated, each event also carries `my_role`
+// ("organizer" | "co_organizer" | "player" | null) so the feed can highlight the
+// matches the caller runs or plays in.
 // `stats` (global, unfiltered) is only computed on page 1 to save queries — the
 // client keeps it from the first load to render the hero + sport chips.
 const getEvents = asyncHandler(async (req, res) => {
@@ -241,16 +247,17 @@ const getEvents = asyncHandler(async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 50);
     const skip = (page - 1) * limit;
 
-    const { sport, timeframe, q, openOnly } = req.query;
+    const { sport, timeframe, q, openOnly, joinedOnly } = req.query;
 
     // Ranking + filtering + pagination now live in the SQL scorer
     // (utils/eventRanking.js) — it returns the ordered ids for this page. We then
     // hydrate those ids with the rich select below and re-apply the ranked order.
     // The feed is personalised when the caller is known (optional auth):
-    //   nearby (their home location) + turfmate-involved signals switch on.
+    //   nearby (their home location) + turfmate-involved signals switch on, and
+    //   the `joinedOnly` filter can narrow to matches they're already in.
     const { orderedIds, total } = await getRankedEventPage({
         userId: req.user?.id,
-        filters: { sport, timeframe, q, openOnly },
+        filters: { sport, timeframe, q, openOnly, joinedOnly },
         skip,
         limit,
     });
@@ -343,13 +350,19 @@ const getEvents = asyncHandler(async (req, res) => {
         stats = { total: globalTotal, open: openTotal, sports };
     }
 
-    // Turfmate highlight: if the request is authenticated (optional auth), tag each
-    // event with which of the caller's turfmates are involved (organizer or player).
+    // Per-caller personalisation (optional auth). Two independent tags, both only
+    // meaningful when we know who's asking:
+    //   1. turfmates_involved — which of the caller's turfmates organise/play here.
+    //   2. my_role            — the caller's own relationship to the match, so the
+    //      feed can highlight the ones they organise or play in.
     let eventsOut = events;
     if (req.user?.id) {
-        const myTurfmates = new Set(await getAcceptedTurfmateIds(req.user.id));
+        const myId = req.user.id;
+
+        // 1. Turfmate highlight.
+        const myTurfmates = new Set(await getAcceptedTurfmateIds(myId));
         if (myTurfmates.size > 0) {
-            eventsOut = events.map((e) => {
+            eventsOut = eventsOut.map((e) => {
                 const involved = [];
                 const seen = new Set();
                 const consider = (u) => {
@@ -367,6 +380,26 @@ const getEvents = asyncHandler(async (req, res) => {
                 return { ...e, turfmates_involved: involved };
             });
         }
+
+        // 2. My role in each event on this page. One query for the caller's
+        // participant rows across the page, then organiser wins over any row.
+        const myRows = orderedIds.length
+            ? await pgClient.event_participants.findMany({
+                  where: { event_id: { in: orderedIds }, user_id: myId },
+                  select: { event_id: true, role: true },
+              })
+            : [];
+        const roleByEvent = new Map(myRows.map((r) => [r.event_id, r.role]));
+        eventsOut = eventsOut.map((e) => {
+            let my_role = null;
+            if (e.organizer_id === myId) {
+                my_role = "organizer";
+            } else if (roleByEvent.has(e.id)) {
+                // co_organizer is the admin role; anything else counts as a player.
+                my_role = roleByEvent.get(e.id) === "co_organizer" ? "co_organizer" : "player";
+            }
+            return { ...e, my_role };
+        });
     }
 
     return res.status(200).json(
@@ -399,7 +432,19 @@ const getEventById = asyncHandler(async (req, res) => {
                     id: true,
                     first_name: true,
                     last_name: true,
-                    profile_picture_url: true
+                    profile_picture_url: true,
+                    // Same public profile extras as the roster, so the organizer's
+                    // squad entry shows a home area + player stats too.
+                    district: true,
+                    division: true,
+                    player_profiles: {
+                        select: {
+                            skill_level: true,
+                            total_games_played: true,
+                            rating: true,
+                        },
+                        take: 1,
+                    },
                 }
             },
             description: true,
@@ -469,7 +514,9 @@ const getEventById = asyncHandler(async (req, res) => {
     }
 
     // Full roster with profiles + role/status so the client can render the squad,
-    // read the caller's own participation, and drive the admin panel.
+    // read the caller's own participation, and drive the admin panel. The user
+    // select carries a bit of public profile data (home area + player stats) so
+    // the squad list can show a role badge, join date and at-a-glance skill/games.
     const players_joined = await pgClient.event_participants.findMany({
         where: {
             event_id: event.id
@@ -486,6 +533,18 @@ const getEventById = asyncHandler(async (req, res) => {
                     first_name: true,
                     last_name: true,
                     profile_picture_url: true,
+                    // Public-safe profile extras for the squad card.
+                    district: true,
+                    division: true,
+                    // One player_profiles row holds the sport stats we surface.
+                    player_profiles: {
+                        select: {
+                            skill_level: true,
+                            total_games_played: true,
+                            rating: true,
+                        },
+                        take: 1,
+                    },
                 },
             },
         },

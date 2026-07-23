@@ -115,8 +115,12 @@ function scoreExpr(lat, lng, turfmateIds) {
  * Translate the feed filters into SQL WHERE conditions (same semantics as the
  * old Prisma `where`, plus a base "upcoming & live" restriction so the
  * recommendation feed never surfaces past or finished games).
+ *
+ * @param {Object} filters { sport, timeframe, q, openOnly, joinedOnly }
+ * @param {string|null} userId caller id — required for the `joinedOnly` filter
+ *        (an anonymous caller has no "joined" events, so the filter is a no-op).
  */
-function buildConditions({ sport, timeframe, q, openOnly }) {
+function buildConditions({ sport, timeframe, q, openOnly, joinedOnly }, userId) {
     const conds = [
         // Base: only games that haven't happened yet and are still live.
         Prisma.sql`e.event_date >= CURRENT_DATE`,
@@ -147,6 +151,21 @@ function buildConditions({ sport, timeframe, q, openOnly }) {
     // "Open" = still short of the minimum squad size.
     if (openOnly === "true") {
         conds.push(Prisma.sql`e.min_players > e.current_players`);
+    }
+
+    // "Only matches I've joined": keep ONLY the matches the caller is involved in
+    // — ones they organise OR hold any participant row for (approved player,
+    // co-organiser, or a still-pending request/invite). Lets a user see just their
+    // own matches in the feed. No-op without a known caller.
+    if (joinedOnly === "true" && userId) {
+        conds.push(Prisma.sql`(
+            e.organizer_id = ${userId}::uuid
+            OR EXISTS (
+                SELECT 1 FROM event_participants ep_me
+                WHERE ep_me.event_id = e.id
+                  AND ep_me.user_id = ${userId}::uuid
+            )
+        )`);
     }
 
     return Prisma.join(conds, " AND ");
@@ -183,7 +202,7 @@ export async function getRankedEventPage({ userId, filters, skip, limit }) {
     }
 
     const score = scoreExpr(lat, lng, turfmateIds);
-    const whereSql = buildConditions(filters);
+    const whereSql = buildConditions(filters, userId);
 
     // One query: ranked page ids + the total row count (window fn) for pagination.
     // Tie-break by soonest kickoff then id, so paging is deterministic.

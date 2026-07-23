@@ -165,11 +165,26 @@ export class EventSerializer {
     }
 
     static userToDto(user) {
+        // Only ever expose public-safe fields here (this DTO is returned to any
+        // viewer). Home area + player stats are optional — present only when the
+        // caller's select asked for them (e.g. the squad list on the detail read).
+        const profile = Array.isArray(user.player_profiles)
+            ? user.player_profiles[0]
+            : user.player_profiles;
         return {
             id: user.id,
             first_name: user.first_name,
             last_name: user.last_name,
-            profile_picture_url: user.profile_picture_url
+            profile_picture_url: user.profile_picture_url,
+            ...(user.district !== undefined ? { district: user.district } : {}),
+            ...(user.division !== undefined ? { division: user.division } : {}),
+            ...(profile
+                ? {
+                      skill_level: profile.skill_level ?? null,
+                      total_games_played: profile.total_games_played ?? null,
+                      rating: profile.rating ?? null,
+                  }
+                : {}),
         };
     }
 

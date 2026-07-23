@@ -15,16 +15,30 @@ export default function EventSquad({ eventId, initialEvent }) {
     const organizer = event.organizer;
     const participants = event.participants || [];
 
-    // Approved squad members' user objects (PlayerItem wants the user, not the row).
-    const approvedUsers = participants
-        .filter((p) => p.status === "approved")
-        .map((p) => p.users || { id: p.user_id });
+    // Build the roster as full rows carrying role + join date + user, so each
+    // squad item can show a role badge, when they joined, and profile stats.
+    // Only APPROVED rows count as squad members.
+    const approvedRows = participants.filter((p) => p.status === "approved");
 
-    // Ensure the organizer shows even if they aren't in event_participants.
-    const roster = [...approvedUsers];
-    if (organizer?.id && !roster.some((u) => u?.id === organizer.id)) {
-        roster.unshift(organizer);
+    // Organizer first, synthesized as an "organizer" row — they have no
+    // event_participants row of their own. joined_at falls back to when the match
+    // was created (not always present), so the badge stays graceful without it.
+    const roster = [];
+    if (organizer?.id) {
+        roster.push({
+            user_id: organizer.id,
+            users: organizer,
+            role: "organizer",
+            joined_at: event.created_at ?? null,
+            status: "approved",
+        });
     }
+    approvedRows.forEach((p) => {
+        const uid = p.user_id ?? p.users?.id;
+        // Guard against a stray organizer participant row (avoid a duplicate).
+        if (organizer?.id && uid === organizer.id) return;
+        roster.push(p);
+    });
 
     const min = event.min_players ?? 0;
     const cur = event.current_players ?? roster.length;
@@ -56,10 +70,13 @@ export default function EventSquad({ eventId, initialEvent }) {
                 </p>
             </div>
 
-            <div className="space-y-1">
+            {/* Roster scrolls once it outgrows ~6-7 rows, so a big squad doesn't
+                stretch the card down the page. Thin scrollbar, room for it on the
+                right so rows don't jump under it. */}
+            <div className="max-h-96 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
                 {roster.length > 0 ? (
-                    roster.map((u, i) => (
-                        <PlayerItem key={u?.id ?? i} participant={u} />
+                    roster.map((row, i) => (
+                        <PlayerItem key={row.user_id ?? row.users?.id ?? i} participant={row} />
                     ))
                 ) : (
                     <p className="rounded-xl bg-muted/50 p-4 text-center text-sm text-muted-foreground">

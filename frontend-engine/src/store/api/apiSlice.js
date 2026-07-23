@@ -177,9 +177,9 @@ export const apiSlice = createApi({
         // drops `page` from the cache key, `merge` appends each new page, and
         // `forceRefetch` re-runs the query whenever `page` changes.
         getEvents: builder.query({
-            query: ({ page = 1, limit = 12, sport, timeframe, q, openOnly } = {}) => ({
+            query: ({ page = 1, limit = 12, sport, timeframe, q, openOnly, joinedOnly } = {}) => ({
                 url: "events",
-                params: { page, limit, sport, timeframe, q, openOnly },
+                params: { page, limit, sport, timeframe, q, openOnly, joinedOnly },
             }),
             transformResponse: (res) => res?.data ?? { events: [], pagination: { page: 1, hasMore: false, total: 0 } },
             serializeQueryArgs: ({ queryArgs, endpointName }) => {

@@ -6,6 +6,9 @@ const initialState = {
         sport: "all",
         timeframe: "all",
         openOnly: false,
+        // Show ONLY matches the signed-in user is involved in (organiser or
+        // participant) — a "my matches" view of the feed.
+        joinedOnly: false,
         page: 1,
     },
     venues: {

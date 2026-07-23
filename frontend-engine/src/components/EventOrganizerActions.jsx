@@ -60,35 +60,52 @@ const bookingLabel = (b) => {
  * edit or re-cancel a finished game. "Rematch" stays enabled even on a finished one
  * (that's the point — a squad re-books after playing).
  */
-export default function EventOrganizerActions({ event }) {
+// True when the caller is the organizer of this match.
+function useIsOrganizer(event) {
     const { data: session } = useSession();
     const me = session?.user?.id;
+    return !!me && me === event?.organizer?.id;
+}
 
-    const organizerId = event?.organizer?.id;
-    const participants = event?.participants || [];
-    const isOrganizer = !!me && me === organizerId;
-    const isCoOrganizer = participants.some(
+// True when the caller is a match ADMIN (organizer or an approved co-organizer).
+function useIsAdmin(event) {
+    const { data: session } = useSession();
+    const me = session?.user?.id;
+    const isOrganizer = !!me && me === event?.organizer?.id;
+    const isCoOrganizer = (event?.participants || []).some(
         (p) =>
             (p.user_id ?? p.users?.id) === me &&
             p.role === "co_organizer" &&
             p.status === "approved"
     );
-    const isAdmin = isOrganizer || isCoOrganizer;
+    return isOrganizer || isCoOrganizer;
+}
 
+export default function EventOrganizerActions({ event }) {
+    const isOrganizer = useIsOrganizer(event);
     const settled = event?.status === "completed" || event?.status === "cancelled";
 
-    if (!isAdmin) return null;
+    // This row now holds only the organizer-only Edit + Cancel actions, both
+    // blocked once the match is settled — so it renders nothing otherwise. Rematch
+    // moved out to sit beside the join/leave CTA (see `RematchButton`).
+    if (!isOrganizer || settled) return null;
 
     return (
         <div className="mb-6 flex flex-wrap items-center gap-3">
-            {/* Edit is organizer-only and blocked once the match is settled. */}
-            {isOrganizer && !settled && <EditMatchDialog event={event} />}
-            {/* Rematch stays available even after the match is done — that's the point. */}
-            <RematchDialog event={event} />
-            {/* Cancel is organizer-only and blocked once the match is settled. */}
-            {isOrganizer && !settled && <CancelMatchDialog event={event} />}
+            <EditMatchDialog event={event} />
+            <CancelMatchDialog event={event} />
         </div>
     );
+}
+
+// Standalone Rematch button — any match ADMIN (organizer or co-organizer) can
+// clone the match and re-invite the squad, even after it's finished. Rendered in
+// the hero CTA row beside the join/leave button; self-gates on admin so a plain
+// player (or signed-out visitor) sees nothing.
+export function RematchButton({ event }) {
+    const isAdmin = useIsAdmin(event);
+    if (!isAdmin) return null;
+    return <RematchDialog event={event} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +456,7 @@ function RematchDialog({ event }) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="rounded-full gap-2">
+                <Button size="lg" variant="outline" className="rounded-full gap-2 px-8">
                     <RefreshCw className="h-4 w-4" /> Rematch
                 </Button>
             </DialogTrigger>

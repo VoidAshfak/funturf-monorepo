@@ -1,5 +1,5 @@
 import EventAdminPanel from "@/components/EventAdminPanel"
-import EventOrganizerActions from "@/components/EventOrganizerActions"
+import EventOrganizerActions, { RematchButton } from "@/components/EventOrganizerActions"
 import EventJoinButton from "@/components/EventJoinButton"
 import EventRealtime from "@/components/EventRealtime"
 import EventSquad from "@/components/EventSquad"
@@ -167,9 +167,10 @@ export default async function EventDetails({ params }) {
                         />
                     </div>
 
-                    {/* CTA */}
+                    {/* CTA — join/leave, then Rematch (admins only), then map. */}
                     <div className="flex flex-col gap-3 sm:flex-row">
                         <EventJoinButton event={event} isFull={isFull} />
+                        <RematchButton event={event} />
                         <MapDialog
                             lat={mapLat}
                             lng={mapLng}

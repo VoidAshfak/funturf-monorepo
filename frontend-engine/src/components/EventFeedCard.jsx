@@ -2,8 +2,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { ArrowUpRight, Clock, MapPin, Users } from "lucide-react";
+import { ArrowUpRight, Clock, Crown, MapPin, Shield, Users } from "lucide-react";
 import SportIcon from "./icons/SportIcon";
+
+// Badge describing the caller's own relationship to a match (from `my_role`),
+// so the feed spotlights the ones they run or play in. null -> no badge.
+const MY_ROLE_BADGE = {
+    organizer: { label: "You're organizing", Icon: Crown },
+    co_organizer: { label: "You're an admin", Icon: Shield },
+    player: { label: "You've joined", Icon: Users },
+};
 
 // Initials fallback for an avatar (e.g. "Rafi Ahmed" -> "RA").
 function initials(name = "") {
@@ -37,12 +45,18 @@ export default function EventFeedCard({ event }) {
         booking_id,
         event_participants = [],
         turfmates_involved = [],
+        my_role = null,
     } = event;
 
     // No booking backing the match -> its time is a probable range, not confirmed.
     const probableTime = !booking_id;
 
     const hasTurfmates = turfmates_involved.length > 0;
+
+    // The caller's own role in this match (organizer/admin/player), if any.
+    const myRoleBadge = MY_ROLE_BADGE[my_role] ?? null;
+    // Admin-level involvement (organiser or co-organiser) earns a stronger ring.
+    const isMyAdminEvent = my_role === "organizer" || my_role === "co_organizer";
 
     const date = event_date ? new Date(event_date) : null;
     const isFull = current_players >= min_players && min_players > 0;
@@ -65,7 +79,10 @@ export default function EventFeedCard({ event }) {
             className={cn(
                 "group flex flex-col gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 will-change-transform hover:-translate-y-1 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] md:flex-row",
                 // Highlight matches a turfmate is involved in.
-                hasTurfmates && "ring-1 ring-primary/40"
+                hasTurfmates && "ring-1 ring-primary/40",
+                // Stronger highlight for matches the caller organises or admins —
+                // takes precedence over the turfmate ring above.
+                isMyAdminEvent && "ring-2 ring-primary shadow-[0_0_0_1px_rgba(29,185,84,0.25)]"
             )}
         >
             {/* left poster panel — sport + big ticket date (frosted green) */}
@@ -95,6 +112,13 @@ export default function EventFeedCard({ event }) {
 
             {/* right content */}
             <div className="flex flex-1 flex-col gap-3 p-5">
+                {/* "your match" badge — organiser / admin / player highlight */}
+                {myRoleBadge && (
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                        <myRoleBadge.Icon className="h-3.5 w-3.5" />
+                        {myRoleBadge.label}
+                    </span>
+                )}
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <h3 className="line-clamp-1 bg-gradient-to-r from-brand to-teal bg-clip-text text-xl font-extrabold text-transparent dark:from-brand-light md:text-2xl">
