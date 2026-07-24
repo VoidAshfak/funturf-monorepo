@@ -13,6 +13,7 @@ import {
     getRecommendations,
 } from "../../controllers/user-connection/turfmate.controller.js";
 import { verifyJWT } from "../../middlewares/auth/auth.middleware.js";
+import { validateUuidQuery } from "../../middlewares/validateUuid.middleware.js";
 
 const router = Router();
 
@@ -30,7 +31,9 @@ router.route("/cancel-turfmate-request").post(cancelTurfmateRequest);
 // turfmates
 router.route("/remove-turfmate").post(removeTurfmate);
 router.route("/get-turfmates").get(getTurfmates);
-router.route("/get-mutual-turfmates").get(getMutualTurfmates);
+// `userTwo` is the other user's id and rides in the query string, so it misses
+// the path-param guard — same reason as /available-slots?ground=.
+router.route("/get-mutual-turfmates").get(validateUuidQuery("userTwo"), getMutualTurfmates);
 router.route("/recommendations").get(getRecommendations);
 // Dynamic path last so it doesn't swallow the static ones above.
 router.route("/connection-status/:userId").get(getConnectionStatus);

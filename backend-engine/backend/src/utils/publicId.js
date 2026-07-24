@@ -241,38 +241,92 @@ export function maskDeep(node, depth = 0) {
  */
 const ID_KEY_RE = /(^id$|_ids?$|Ids?$|_by$)/;
 
-const isIdKey = (key) => ID_KEY_RE.test(key);
+/**
+ * Keys that LOOK like ids by name but are not.
+ *
+ * `transaction_id` is the payment gateway's own reference (a bKash/Nagad trxID),
+ * typed in by a human. It is not a UUID and must never be run through the codec:
+ * a reference that happened to be 22 URL-safe characters would be silently
+ * rewritten into a random UUID and the payment record would stop matching.
+ */
+const NON_ID_KEYS = new Set(["transaction_id"]);
+
+const isIdKey = (key) => !NON_ID_KEYS.has(key) && ID_KEY_RE.test(key);
+
+/**
+ * Query-string keys that are free text or non-id codes, in the query walker's
+ * value-driven mode (see `unmaskQuery`). Everything NOT listed here is decoded
+ * when it is token-shaped, so this list is the only thing standing between a
+ * 22-character search term and the codec.
+ */
+const QUERY_FREE_TEXT_KEYS = new Set([
+    "q",
+    "search",
+    "code",
+    "promo_code",
+    "slot",       // slot CODE, e.g. "s_1800" — never a uuid
+    "cursor",     // opaque pagination cursor, already encoded by us
+    "sort",
+    "sort_by",
+    "order",
+    "status",
+    "sport",
+    "sport_type",
+]);
 
 /**
  * Walk an inbound payload and turn public tokens back into UUIDs.
  *
- * Mirror image of `maskDeep`, but KEY-driven, and that asymmetry is on purpose.
- * A 22-char base64url string is not rare — a password, a nonce or a short note
- * can easily match — and blindly "decoding" one would corrupt the field. Only
- * touching keys that are known to hold ids keeps that from happening.
+ * Two modes, because the request body and the query string carry different risk:
+ *
+ *   body  — KEY-driven (`valueDriven: false`). A body carries real secrets:
+ *           passwords, refresh tokens, access tokens. A 22-char base64url string
+ *           is not rare among those, and blindly "decoding" one would corrupt
+ *           it. Only keys known to hold ids are touched. Safe here because the
+ *           bodies are disciplined: every id in every request body is named
+ *           `*_id` or `*Id` (audited — 16 of 16).
+ *
+ *   query — VALUE-driven (`valueDriven: true`), with a free-text deny-list. The
+ *           query string carries no secrets, and it is where the naming
+ *           discipline breaks down: `?ground=<id>` and `?userTwo=<id>` both hold
+ *           ids under names no key rule would ever guess. A key-driven rule let
+ *           a raw token straight through to Prisma, which failed with
+ *           "Error creating UUID, invalid character ... found `k` at 1". Matching
+ *           on the value instead fails CLOSED: the next `?venue=` or `?team=`
+ *           param is handled the day it is written, with no code change here.
  */
-export function unmaskDeep(node, depth = 0) {
+function unmaskNode(node, valueDriven, depth) {
     if (depth > MAX_DEPTH || node === null || typeof node !== "object") return node;
     if (node instanceof Date || Buffer.isBuffer(node)) return node;
 
-    if (Array.isArray(node)) return node.map((item) => unmaskDeep(item, depth + 1));
+    if (Array.isArray(node)) return node.map((item) => unmaskNode(item, valueDriven, depth + 1));
 
     const out = {};
     for (const [key, value] of Object.entries(node)) {
-        if (isIdKey(key)) {
+        // In value-driven mode any token-shaped string is an id unless the key
+        // is known to hold prose; in key-driven mode only known id keys are.
+        const decodeHere = valueDriven ? !QUERY_FREE_TEXT_KEYS.has(key) : isIdKey(key);
+
+        if (decodeHere) {
             if (typeof value === "string") {
                 out[key] = toInternalId(value);
                 continue;
             }
-            // e.g. `user_ids: [...]` — an array of ids under one id-ish key.
+            // e.g. `user_ids: [...]`, or a repeated query param `?sport=a&sport=b`.
             if (Array.isArray(value)) {
                 out[key] = value.map((v) =>
-                    typeof v === "string" ? toInternalId(v) : unmaskDeep(v, depth + 1)
+                    typeof v === "string" ? toInternalId(v) : unmaskNode(v, valueDriven, depth + 1)
                 );
                 continue;
             }
         }
-        out[key] = unmaskDeep(value, depth + 1);
+        out[key] = unmaskNode(value, valueDriven, depth + 1);
     }
     return out;
 }
+
+/** Inbound request BODY — key-driven. See `unmaskNode`. */
+export const unmaskDeep = (body) => unmaskNode(body, false, 0);
+
+/** Inbound QUERY STRING — value-driven with a free-text deny-list. See `unmaskNode`. */
+export const unmaskQuery = (query) => unmaskNode(query, true, 0);

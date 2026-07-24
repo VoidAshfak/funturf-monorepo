@@ -42,3 +42,32 @@ export const validateUuidParams = (...names) => (req, _res, next) => {
     }
     return next();
 };
+
+/**
+ * Same check, for ids that arrive in the QUERY STRING (`?ground=`, `?userTwo=`).
+ *
+ * Worth having as its own guard: query ids skip the path-param middleware
+ * entirely, so an id that failed to decode used to travel all the way into
+ * Prisma and surface as a 500 reading "Inconsistent column data: Error creating
+ * UUID, invalid character ... found `k` at 1". By the time this runs the
+ * public-id layer has already translated tokens to UUIDs, so anything still not
+ * UUID-shaped is genuinely a bad request.
+ *
+ * Usage:
+ *   router.route("/available-slots").get(validateUuidQuery("ground"), getAvailableSlots);
+ *
+ * @param {...string} names query param names to check
+ */
+export const validateUuidQuery = (...names) => (req, _res, next) => {
+    for (const name of names) {
+        const value = req.query?.[name];
+        if (value !== undefined && !isUuid(value)) {
+            return next(
+                ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+                    message: `${name} must be a valid id`,
+                })
+            );
+        }
+    }
+    return next();
+};

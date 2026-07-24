@@ -134,14 +134,45 @@ express.json  →  publicIdTranslation  →  routes  →  errorHandler
 
 | direction | what it does | how it decides |
 | --- | --- | --- |
-| **inbound** | token → UUID in the path, query and body | **key**-driven: `id`, `*_id(s)`, `*Id(s)`, `*_by` |
+| **inbound — path** | token → UUID in every path segment | **value**-driven: any 22-char base64url segment |
+| **inbound — query** | token → UUID in every query param | **value**-driven, minus a free-text deny-list (`q`, `search`, `code`, `promo_code`, `slot`, `cursor`, `sort*`, `order`, `status`, `sport*`) |
+| **inbound — body** | token → UUID under id keys only | **key**-driven: `id`, `*_id(s)`, `*Id(s)`, `*_by` — minus `transaction_id` |
 | **outbound** | UUID → token in every `res.json` body | **value**-driven: anything UUID-shaped, except free-text keys (`message`, `notes`, `description`, …) |
 
-The asymmetry is intentional. Outbound is value-driven so it **fails closed** — a new
-id-bearing column is masked the day it is added, with no code change; a key-driven rule
-would have leaked the six `*_by` audit columns, which are `@db.Uuid` with no `_id` suffix.
-Inbound is key-driven because a 22-char base64url string is not rare (a password, a nonce),
-and blindly "decoding" one would corrupt the field.
+The asymmetry is intentional, and the split between query and body was **paid for in
+production**. Outbound is value-driven so it **fails closed** — a new id-bearing column is
+masked the day it is added, with no code change; a key-driven rule would have leaked the six
+`*_by` audit columns, which are `@db.Uuid` with no `_id` suffix.
+
+Inbound started key-driven everywhere, on the reasoning that a 22-char base64url string is
+not rare (a password, a nonce) and blindly decoding one would corrupt it. That held for
+bodies — every id in every request body is named `*_id` or `*Id` (audited, 16 of 16) — but
+**not for query strings**, where two params carry ids under names no key rule predicts:
+
+```
+GET /bookings/available-slots?ground=<id>      <- not `ground_id`
+GET /turfmates/get-mutual-turfmates?userTwo=<id>
+```
+
+Those tokens went through untouched and reached Prisma raw:
+
+```
+Inconsistent column data: Error creating UUID, invalid character:
+expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `k` at 1
+```
+
+So query is now value-driven too. Query strings carry filters, not secrets, so the objection
+that applied to bodies does not apply here — and it fails closed, meaning the next `?venue=`
+or `?team=` param works the day it is written. The deny-list is what protects a 22-character
+search term. **Bodies stay key-driven**: they carry `password`, `refresh_token`,
+`accessToken`, and those must never be run through the codec. `transaction_id` is excluded
+by name for the same reason — it is a bKash/Nagad reference typed in by a human, not a UUID.
+
+Ids that arrive in the query string also skip `validateUuidParams`, so the routes carrying
+them use **`validateUuidQuery(...)`** (`middlewares/validateUuid.middleware.js`). Anything
+still not UUID-shaped after the translation layer has run is a bad request, and this turns it
+into a clean `400 VALIDATION_ERROR` instead of a 500 carrying a raw Prisma error. Add it to
+any new route that takes an id as a query param.
 
 Path rewriting targets `req.url` rather than `req.params`, because at app level `req.params`
 is still empty — it is only populated once a route pattern matches. That is why all ~40

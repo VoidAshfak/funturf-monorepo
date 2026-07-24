@@ -284,7 +284,7 @@ paths:
                 message: User created successfully
                 statusCode: 201
                 data:
-                  id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  id: wy15PRvUY5HIn595VuVBGw
                   email: rafi@example.com
                   first_name: Rafi
                   last_name: Ahmed
@@ -363,7 +363,7 @@ paths:
                 statusCode: 200
                 data:
                   user:
-                    id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                    id: wy15PRvUY5HIn595VuVBGw
                     email: rafi@example.com
                     first_name: Rafi
                     last_name: Ahmed
@@ -809,7 +809,7 @@ paths:
                 message: User found
                 statusCode: 200
                 data:
-                  id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  id: wy15PRvUY5HIn595VuVBGw
                   email: rafi@example.com
                   phone: '+8801712345678'
                   first_name: Rafi
@@ -911,9 +911,9 @@ paths:
                 message: Turfmate request sent
                 statusCode: 201
                 data:
-                  id: 9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d
-                  requester_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
-                  recipient_id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                  id: g7pD_MRW35UQcTHImVMLMw
+                  requester_id: wy15PRvUY5HIn595VuVBGw
+                  recipient_id: kt8zjl-6u1_3Meib5CvAhQ
                   status: pending
                   connection_type: friend
                   message: We played at Gulshan last Friday — let's link up.
@@ -1002,11 +1002,11 @@ paths:
                 statusCode: 200
                 data:
                   requests:
-                    - connectionId: 9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d
+                    - connectionId: g7pD_MRW35UQcTHImVMLMw
                       message: We played at Gulshan last Friday — let's link up.
                       created_at: '2026-07-16T19:00:00.000Z'
                       user:
-                        id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                        id: kt8zjl-6u1_3Meib5CvAhQ
                         first_name: Shuvo
                         last_name: Islam
                         profile_picture_url: null
@@ -1098,9 +1098,9 @@ paths:
                 message: Turfmate request accepted
                 statusCode: 200
                 data:
-                  id: 9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d
-                  requester_id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
-                  recipient_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  id: g7pD_MRW35UQcTHImVMLMw
+                  requester_id: kt8zjl-6u1_3Meib5CvAhQ
+                  recipient_id: wy15PRvUY5HIn595VuVBGw
                   status: accepted
                   responded_at: '2026-07-16T19:20:00.000Z'
         '400':
@@ -1378,7 +1378,7 @@ paths:
                 statusCode: 200
                 data:
                   recommendations:
-                    - id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                    - id: kt8zjl-6u1_3Meib5CvAhQ
                       first_name: Shuvo
                       last_name: Islam
                       profile_picture_url: null
@@ -1439,7 +1439,7 @@ paths:
                 data:
                   status: pending
                   direction: incoming
-                  connectionId: 9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d
+                  connectionId: g7pD_MRW35UQcTHImVMLMw
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -1558,12 +1558,12 @@ paths:
                 statusCode: 200
                 data:
                   events:
-                    - id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    - id: cT_mdycwpvlQeYbFRFpSnQ
                       title: Friday Night 7s
                       description: Casual 7-a-side. Bring a dark and a light shirt.
-                      organizer_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                      organizer_id: wy15PRvUY5HIn595VuVBGw
                       users:
-                        id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                        id: wy15PRvUY5HIn595VuVBGw
                         first_name: Rafi
                         last_name: Ahmed
                         profile_picture_url: null
@@ -1574,23 +1574,23 @@ paths:
                       min_players: 10
                       max_players: 14
                       current_players: 11
-                      booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                      booking_id: 9THGhS2p7X9K0nSM-Fw0HA
                       grounds:
-                        id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                        id: 2z9lqMnkUULcaQwPtleYKg
                         name: Ground A (7-a-side)
                         turfs:
-                          id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                          id: Ma1EJ77m-kEjZ71zWSM4-A
                           name: Gulshan Sports Arena
                           address_line_1: House 42, Road 11
                       event_participants:
-                        - user_id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                        - user_id: kt8zjl-6u1_3Meib5CvAhQ
                           status: approved
                           users:
-                            id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                            id: kt8zjl-6u1_3Meib5CvAhQ
                             first_name: Shuvo
                             profile_picture_url: null
                       turfmates_involved:
-                        - id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                        - id: kt8zjl-6u1_3Meib5CvAhQ
                           first_name: Shuvo
                           profile_picture_url: null
                       my_role: player
@@ -1762,7 +1762,7 @@ paths:
                 statusCode: 200
                 data:
                   events:
-                    - id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    - id: cT_mdycwpvlQeYbFRFpSnQ
                       title: Friday Night 7s
                       sport_type: football
                       event_date: '2026-07-24'
@@ -1771,7 +1771,7 @@ paths:
                       min_players: 10
                       max_players: 14
                       current_players: 11
-                      turf_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                      turf_id: Ma1EJ77m-kEjZ71zWSM4-A
                       turf_name: Gulshan Sports Arena
                       turf_city: Gulshan
                       ground_name: Ground A (7-a-side)
@@ -1867,7 +1867,7 @@ paths:
                         description: Ignored by the server; convenient for picker UIs.
                         example: Shuvo Islam
                   example:
-                    - value: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                    - value: kt8zjl-6u1_3Meib5CvAhQ
                       label: Shuvo Islam
                 skill_level_required:
                   type: string
@@ -1928,8 +1928,8 @@ paths:
                   event_date: '2026-07-24'
                   start_time: '18:00'
                   end_time: '19:30'
-                  venue_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
-                  ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                  venue_id: Ma1EJ77m-kEjZ71zWSM4-A
+                  ground_id: 2z9lqMnkUULcaQwPtleYKg
                   max_players: 14
                   min_Players: 10
                   current_players: []
@@ -1942,11 +1942,11 @@ paths:
                   title: Friday Night 7s
                   sport_type: football
                   event_type: friendly
-                  booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                  booking_id: 9THGhS2p7X9K0nSM-Fw0HA
                   max_players: 14
                   min_Players: 10
                   current_players:
-                    - value: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                    - value: kt8zjl-6u1_3Meib5CvAhQ
                   skill_level_required: intermediate
                   total_cost: 3500
                   cost_split_type: equal
@@ -1970,8 +1970,8 @@ paths:
                 message: Event created successfully
                 statusCode: 200
                 data:
-                  id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
-                  organizer_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  id: cT_mdycwpvlQeYbFRFpSnQ
+                  organizer_id: wy15PRvUY5HIn595VuVBGw
                   title: Friday Night 7s
                   sport_type: football
                   event_date: '2026-07-24'
@@ -2257,7 +2257,7 @@ paths:
                 message: Match cancelled
                 statusCode: 200
                 data:
-                  id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                  id: cT_mdycwpvlQeYbFRFpSnQ
                   title: Friday Night 7s
                   status: cancelled
                   booking_id: null
@@ -2321,7 +2321,7 @@ paths:
                 message: Event found
                 statusCode: 200
                 data:
-                  id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                  id: cT_mdycwpvlQeYbFRFpSnQ
                   title: Friday Night 7s
                   description: Casual 7-a-side. Bring a dark and a light shirt.
                   sport_type: football
@@ -2337,20 +2337,20 @@ paths:
                   total_cost: 3500
                   cost_split_type: equal
                   visibility: public
-                  ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
-                  venue_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                  ground_id: 2z9lqMnkUULcaQwPtleYKg
+                  venue_id: Ma1EJ77m-kEjZ71zWSM4-A
                   status: booked
                   schedule_confirmed: true
                   organizer:
-                    id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                    id: wy15PRvUY5HIn595VuVBGw
                     first_name: Rafi
                     last_name: Ahmed
                     profile_picture_url: null
                   ground:
-                    id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                    id: 2z9lqMnkUULcaQwPtleYKg
                     name: Ground A (7-a-side)
                     turf:
-                      id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                      id: Ma1EJ77m-kEjZ71zWSM4-A
                       name: Gulshan Sports Arena
                       address_line_1:
                         city: Gulshan
@@ -2360,7 +2360,7 @@ paths:
                         latitude: 23.7925
                         longitude: 90.4078
                   booking:
-                    id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                    id: 9THGhS2p7X9K0nSM-Fw0HA
                     booking_date: '2026-07-24T00:00:00.000Z'
                     slot:
                       code: t1800
@@ -2373,13 +2373,13 @@ paths:
                     booking_status: confirmed
                     hold_expires_at: null
                   participants:
-                    - id: 6f7a8b9c-0d1e-4f2a-3b4c-5d6e7f8a9b0c
-                      user_id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                    - id: xpHrXcA9IXpQiE9c3rTHCg
+                      user_id: kt8zjl-6u1_3Meib5CvAhQ
                       status: approved
                       role: player
                       joined_at: '2026-07-10T11:02:00.000Z'
                       users:
-                        id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                        id: kt8zjl-6u1_3Meib5CvAhQ
                         first_name: Shuvo
                         last_name: Islam
                         profile_picture_url: null
@@ -2458,8 +2458,8 @@ paths:
                 message: Rematch created — your squad has been invited
                 statusCode: 201
                 data:
-                  id: 5e6f7a8b-9c0d-4e1f-2a3b-4c5d6e7f8a9b
-                  organizer_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  id: 3crnfaBk1mAtQ1wKIP-0Gg
+                  organizer_id: wy15PRvUY5HIn595VuVBGw
                   title: Friday Night 7s
                   event_date: '2026-07-31'
                   start_time: '18:00:00'
@@ -2530,9 +2530,9 @@ paths:
                 message: Join request sent
                 statusCode: 201
                 data:
-                  id: 6f7a8b9c-0d1e-4f2a-3b4c-5d6e7f8a9b0c
-                  event_id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
-                  user_id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                  id: xpHrXcA9IXpQiE9c3rTHCg
+                  event_id: cT_mdycwpvlQeYbFRFpSnQ
+                  user_id: kt8zjl-6u1_3Meib5CvAhQ
                   status: requested
                   role: player
                   joined_at: '2026-07-16T19:55:00.000Z'
@@ -2683,7 +2683,7 @@ paths:
                 message: Invitation accepted — you're in!
                 statusCode: 200
                 data:
-                  event_id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                  event_id: cT_mdycwpvlQeYbFRFpSnQ
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2789,11 +2789,11 @@ paths:
                 statusCode: 200
                 data:
                   requests:
-                    - id: 6f7a8b9c-0d1e-4f2a-3b4c-5d6e7f8a9b0c
-                      user_id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                    - id: xpHrXcA9IXpQiE9c3rTHCg
+                      user_id: kt8zjl-6u1_3Meib5CvAhQ
                       joined_at: '2026-07-16T19:55:00.000Z'
                       users:
-                        id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                        id: kt8zjl-6u1_3Meib5CvAhQ
                         first_name: Shuvo
                         last_name: Islam
                         profile_picture_url: null
@@ -3101,8 +3101,8 @@ paths:
                 statusCode: 200
                 data:
                   comments:
-                    - id: 0d1e2f3a-4b5c-4d6e-7f8a-9b0c1d2e3f4a
-                      event_id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    - id: 9Z2L44T-o-ivz9-nglCTrg
+                      event_id: cT_mdycwpvlQeYbFRFpSnQ
                       parent_comment_id: null
                       content: Who's bringing the ball?
                       is_deleted: false
@@ -3113,14 +3113,14 @@ paths:
                       created_at: '2026-07-16T12:00:00.000Z'
                       edited_at: null
                       author:
-                        id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                        id: wy15PRvUY5HIn595VuVBGw
                         first_name: Rafi
                         last_name: Ahmed
                         profile_picture_url: null
-                      user_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
-                    - id: 1e2f3a4b-5c6d-4e7f-8a9b-0c1d2e3f4a5b
-                      event_id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
-                      parent_comment_id: 0d1e2f3a-4b5c-4d6e-7f8a-9b0c1d2e3f4a
+                      user_id: wy15PRvUY5HIn595VuVBGw
+                    - id: Mex7fh5ddfTKThvVFW77pA
+                      event_id: cT_mdycwpvlQeYbFRFpSnQ
+                      parent_comment_id: 9Z2L44T-o-ivz9-nglCTrg
                       content: null
                       is_deleted: true
                       is_edited: false
@@ -3377,7 +3377,7 @@ paths:
                 message: Liked
                 statusCode: 200
                 data:
-                  comment_id: 0d1e2f3a-4b5c-4d6e-7f8a-9b0c1d2e3f4a
+                  comment_id: 9Z2L44T-o-ivz9-nglCTrg
                   liked: true
                   likes_count: 4
         '401':
@@ -3439,8 +3439,8 @@ paths:
                 statusCode: 200
                 data:
                   messages:
-                    - id: 2f3a4b5c-6d7e-4f8a-9b0c-1d2e3f4a5b6c
-                      event_id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                    - id: ia9t5_LZurp-yTOBaQtCUw
+                      event_id: cT_mdycwpvlQeYbFRFpSnQ
                       content: On my way, 10 mins late.
                       attachment_url: null
                       message_type: text
@@ -3449,17 +3449,17 @@ paths:
                       created_at: '2026-07-16T17:41:00.000Z'
                       edited_at: null
                       reply_to:
-                        id: 3a4b5c6d-7e8f-4a9b-0c1d-2e3f4a5b6c7d
+                        id: NsZpwcEXczuS9MA0g-uRWg
                         sender_name: Rafi Ahmed
                         content: Who's bringing the ball?
                       reactions:
                         - emoji: 🔥
                           count: 2
                           user_ids:
-                            - 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
-                            - 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                            - wy15PRvUY5HIn595VuVBGw
+                            - kt8zjl-6u1_3Meib5CvAhQ
                       sender:
-                        id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                        id: kt8zjl-6u1_3Meib5CvAhQ
                         first_name: Shuvo
                         last_name: Islam
                         profile_picture_url: null
@@ -3771,11 +3771,11 @@ paths:
                 message: Reaction updated
                 statusCode: 200
                 data:
-                  message_id: 2f3a4b5c-6d7e-4f8a-9b0c-1d2e3f4a5b6c
+                  message_id: ia9t5_LZurp-yTOBaQtCUw
                   reactions:
                     - emoji: 🔥
                       count: 1
-                      user_ids: [3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e]
+                      user_ids: [wy15PRvUY5HIn595VuVBGw]
         '400':
           description: Missing or oversized emoji (`VALIDATION_ERROR`).
           content:
@@ -3849,14 +3849,14 @@ paths:
                 statusCode: 200
                 data:
                   sports:
-                    - id: 5c4b3a29-1e8f-4d7c-6b5a-4f3e2d1c0b9a
+                    - id: 8kBzXGJ8rtgKogsN10x4Tw
                       name: Football
                       category: team
                       icon_url: null
                       team_size_min: 5
                       team_size_max: 11
                       sport_positions:
-                        - id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                        - id: cT_mdycwpvlQeYbFRFpSnQ
                           position_name: Centre Back
                           position_code: CB
         '401':
@@ -3915,10 +3915,10 @@ paths:
                 message: Team created
                 statusCode: 201
                 data:
-                  id: 8b7a6c5d-4e3f-4a2b-1c0d-9e8f7a6b5c4d
+                  id: sSi4v3UaMpUV2bjs6XUD_Q
                   name: Gulshan United
-                  sport_id: 5c4b3a29-1e8f-4d7c-6b5a-4f3e2d1c0b9a
-                  captain_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  sport_id: 8kBzXGJ8rtgKogsN10x4Tw
+                  captain_id: wy15PRvUY5HIn595VuVBGw
                   home_area: Gulshan
                   crest_url: null
                   description: Tuesday and Friday nights, 7-a-side.
@@ -4729,7 +4729,7 @@ paths:
                 message: 1 turfs found
                 statusCode: 200
                 data:
-                  - id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                  - id: Ma1EJ77m-kEjZ71zWSM4-A
                     name: Gulshan Sports Arena
                     address_line_1:
                       city: Gulshan
@@ -4749,7 +4749,7 @@ paths:
                     images:
                       - https://res.cloudinary.com/funturf/image/upload/v1718000000/images/arena.jpg
                     grounds:
-                      - id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                      - id: 2z9lqMnkUULcaQwPtleYKg
                         name: Ground A (7-a-side)
                         sport_type: [football]
 
@@ -4779,10 +4779,10 @@ paths:
                 message: 1 turfs found
                 statusCode: 200
                 data:
-                  - id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                  - id: Ma1EJ77m-kEjZ71zWSM4-A
                     name: Gulshan Sports Arena
                     grounds:
-                      - id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                      - id: 2z9lqMnkUULcaQwPtleYKg
                         name: Ground A (7-a-side)
                         sport_type: [football]
 
@@ -4855,8 +4855,8 @@ paths:
                 message: Venue found
                 statusCode: 200
                 data:
-                  id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
-                  admin_user_id: 9b0c1d2e-3f4a-4b5c-6d7e-8f9a0b1c2d3e
+                  id: Ma1EJ77m-kEjZ71zWSM4-A
+                  admin_user_id: IgLcrxhkq6IfAXDg96E0hA
                   name: Gulshan Sports Arena
                   slug: gulshan-sports-arena
                   description: Two floodlit 7-a-side pitches with parking.
@@ -4892,8 +4892,8 @@ paths:
                   logo_url: https://i.ibb.co/abc123/gulshan-arena-logo.png
                   theme_color: '#1e6fd9'
                   grounds:
-                    - id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
-                      turf_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                    - id: 2z9lqMnkUULcaQwPtleYKg
+                      turf_id: Ma1EJ77m-kEjZ71zWSM4-A
                       name: Ground A (7-a-side)
                       ground_type: v7x7
                       sport_type: [football]
@@ -5119,7 +5119,7 @@ paths:
                 message: Thanks for rating!
                 statusCode: 200
                 data:
-                  venue_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                  venue_id: Ma1EJ77m-kEjZ71zWSM4-A
                   my_rating: 5
                   rating: 4.6
                   rating_count: 38
@@ -5570,7 +5570,7 @@ paths:
                 message: Available slots found
                 statusCode: 200
                 data:
-                  ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                  ground_id: 2z9lqMnkUULcaQwPtleYKg
                   date: '2026-07-20T00:00:00.000Z'
                   t0000: true
                   t0130: true
@@ -5591,11 +5591,14 @@ paths:
                   held_slots: [t1930]
                   my_slots:
                     - code: t1930
-                      booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                      booking_id: 9THGhS2p7X9K0nSM-Fw0HA
                       booking_status: pending
                       payment_status: pending
         '400':
-          description: '`ground` or `date` missing (`VALIDATION_ERROR`).'
+          description: |
+            `VALIDATION_ERROR` — `ground` or `date` missing, or `ground` is not a
+            valid id (an unreadable public id fails here rather than reaching the
+            database).
           content:
             application/json:
               schema:
@@ -5672,7 +5675,7 @@ paths:
                   discount: 350
                   final_price: 3150
                   promotion:
-                    id: 5d4c3b2a-1e0f-4a9b-8c7d-6e5f4a3b2c1d
+                    id: 0z1yMLnMesVGt7n4yb8GBQ
                     code: EID10
         '400':
           description: A required query parameter is missing (`VALIDATION_ERROR`).
@@ -5789,13 +5792,13 @@ paths:
               unpaidHold:
                 summary: Unpaid soft hold (2h TTL)
                 value:
-                  ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                  ground_id: 2z9lqMnkUULcaQwPtleYKg
                   booking_date: '2026-07-20'
                   slot: t1800
               paidClaim:
                 summary: Paid claim with a coupon
                 value:
-                  ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                  ground_id: 2z9lqMnkUULcaQwPtleYKg
                   booking_date: '2026-07-20'
                   slot: t1800
                   paid: true
@@ -5820,9 +5823,9 @@ paths:
                 message: Booking placed — awaiting payment verification
                 statusCode: 201
                 data:
-                  id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
-                  ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
-                  user_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  id: 9THGhS2p7X9K0nSM-Fw0HA
+                  ground_id: 2z9lqMnkUULcaQwPtleYKg
+                  user_id: wy15PRvUY5HIn595VuVBGw
                   event_id: null
                   booking_date: '2026-07-20T00:00:00.000Z'
                   total_amount: 3500
@@ -5949,9 +5952,9 @@ paths:
                 statusCode: 200
                 data:
                   bookings:
-                    - id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
-                      ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
-                      user_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                    - id: 9THGhS2p7X9K0nSM-Fw0HA
+                      ground_id: 2z9lqMnkUULcaQwPtleYKg
+                      user_id: wy15PRvUY5HIn595VuVBGw
                       booking_date: '2026-07-20T00:00:00.000Z'
                       slot:
                         code: t1930
@@ -5964,11 +5967,11 @@ paths:
                       payment_status: pending
                       hold_expires_at: '2026-07-16T20:12:00.000Z'
                       grounds:
-                        id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                        id: 2z9lqMnkUULcaQwPtleYKg
                         name: Ground A (7-a-side)
                         sport_type: [football]
                         turfs:
-                          id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                          id: Ma1EJ77m-kEjZ71zWSM4-A
                           name: Gulshan Sports Arena
                           city: Gulshan
                       promotion_usage: []
@@ -6070,7 +6073,7 @@ paths:
                     - status: cancelled
                       count: 33
                   top_grounds:
-                    - ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                    - ground_id: 2z9lqMnkUULcaQwPtleYKg
                       name: Ground A (7-a-side)
                       revenue: 512000
                       bookings: 164
@@ -6385,7 +6388,7 @@ paths:
                     message: Booking cancelled
                     statusCode: 200
                     data:
-                      booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                      booking_id: 9THGhS2p7X9K0nSM-Fw0HA
                 mutualRequested:
                   summary: Confirmed booking — handshake opened
                   value:
@@ -6393,7 +6396,7 @@ paths:
                     message: Cancellation requested — awaiting the other party's acceptance
                     statusCode: 200
                     data:
-                      booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                      booking_id: 9THGhS2p7X9K0nSM-Fw0HA
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -6476,7 +6479,7 @@ paths:
                     message: Booking cancelled by mutual acceptance
                     statusCode: 200
                     data:
-                      booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                      booking_id: 9THGhS2p7X9K0nSM-Fw0HA
                 declined:
                   summary: Declined — booking stands
                   value:
@@ -6484,7 +6487,7 @@ paths:
                     message: Cancellation declined
                     statusCode: 200
                     data:
-                      booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                      booking_id: 9THGhS2p7X9K0nSM-Fw0HA
         '400':
           description: You opened this request — the other party must respond (`VALIDATION_ERROR`).
           content:
@@ -6554,9 +6557,9 @@ paths:
                 message: Checked in
                 statusCode: 200
                 data:
-                  id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
-                  ground_id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
-                  user_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                  id: 9THGhS2p7X9K0nSM-Fw0HA
+                  ground_id: 2z9lqMnkUULcaQwPtleYKg
+                  user_id: wy15PRvUY5HIn595VuVBGw
                   booking_date: '2026-07-20T00:00:00.000Z'
                   slot:
                     code: t1800
@@ -6640,8 +6643,8 @@ paths:
                 statusCode: 200
                 data:
                   promotions:
-                    - id: 5d4c3b2a-1e0f-4a9b-8c7d-6e5f4a3b2c1d
-                      turf_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
+                    - id: 0z1yMLnMesVGt7n4yb8GBQ
+                      turf_id: Ma1EJ77m-kEjZ71zWSM4-A
                       ground_id: null
                       code: EID10
                       title: Eid weekend 10% off
@@ -7174,7 +7177,7 @@ paths:
                     message: Promotion deleted
                     statusCode: 200
                     data:
-                      id: 5d4c3b2a-1e0f-4a9b-8c7d-6e5f4a3b2c1d
+                      id: 0z1yMLnMesVGt7n4yb8GBQ
                 deactivated:
                   summary: Had redemptions — deactivated
                   value:
@@ -7182,7 +7185,7 @@ paths:
                     message: Promotion had redemptions — deactivated instead of deleted
                     statusCode: 200
                     data:
-                      id: 5d4c3b2a-1e0f-4a9b-8c7d-6e5f4a3b2c1d
+                      id: 0z1yMLnMesVGt7n4yb8GBQ
                       code: EID10
                       status: inactive
                       effective_status: inactive
@@ -7329,13 +7332,13 @@ paths:
                 statusCode: 200
                 data:
                   notifications:
-                    - id: 4b5c6d7e-8f9a-4b0c-1d2e-3f4a5b6c7d8e
-                      user_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                    - id: kMg9HF9y4agyBIT_HVmTvQ
+                      user_id: wy15PRvUY5HIn595VuVBGw
                       type: payment_received
                       title: Payment confirmed
                       message: Your booking for Gulshan Sports Arena is confirmed
                       data:
-                        bookingId: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+                        bookingId: 9THGhS2p7X9K0nSM-Fw0HA
                       priority: high
                       action_url: /bookings
                       is_read: false
@@ -7521,7 +7524,7 @@ paths:
                 data:
                   conversations:
                     - type: dm
-                      id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                      id: kt8zjl-6u1_3Meib5CvAhQ
                       title: Shuvo Islam
                       avatar: null
                       unread: 2
@@ -7531,7 +7534,7 @@ paths:
                         from_me: false
                       activity: 1784223660000
                     - type: match
-                      id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                      id: cT_mdycwpvlQeYbFRFpSnQ
                       title: Friday Night 7s
                       sport_type: football
                       avatar: null
@@ -7588,13 +7591,13 @@ paths:
                 statusCode: 200
                 data:
                   user:
-                    id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                    id: kt8zjl-6u1_3Meib5CvAhQ
                     first_name: Shuvo
                     last_name: Islam
                     profile_picture_url: null
                   messages:
-                    - id: 6d7e8f9a-0b1c-4d2e-3f4a-5b6c7d8e9f0a
-                      recipient_id: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+                    - id: q5pjAdlAK2txg3n_Pr9N7g
+                      recipient_id: wy15PRvUY5HIn595VuVBGw
                       content: On my way, 10 mins late.
                       attachment_url: null
                       message_type: text
@@ -7604,7 +7607,7 @@ paths:
                       reply_to: null
                       reactions: []
                       sender:
-                        id: 7d6c5b4a-3f2e-4d1c-8b0a-9e8d7c6b5a4f
+                        id: kt8zjl-6u1_3Meib5CvAhQ
                         first_name: Shuvo
                         last_name: Islam
                         profile_picture_url: null
@@ -9512,7 +9515,7 @@ components:
                 $ref: '#/components/schemas/PaymentStatus'
           example:
             - code: t1930
-              booking_id: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+              booking_id: 9THGhS2p7X9K0nSM-Fw0HA
               booking_status: pending
               payment_status: pending
 
@@ -9586,7 +9589,7 @@ components:
               type: string
               example: EID10
           example:
-            id: 5d4c3b2a-1e0f-4a9b-8c7d-6e5f4a3b2c1d
+            id: 0z1yMLnMesVGt7n4yb8GBQ
             code: EID10
 
     Booking:
@@ -10538,7 +10541,7 @@ components:
           description: Context ids for deep-linking (e.g. `bookingId`, `eventId`, `userId`).
           additionalProperties: true
           example:
-            bookingId: 8c2d1f0a-3b4e-4a5c-9d6e-7f8a9b0c1d2e
+            bookingId: 9THGhS2p7X9K0nSM-Fw0HA
         priority:
           type: string
           enum: [low, medium, high, urgent]

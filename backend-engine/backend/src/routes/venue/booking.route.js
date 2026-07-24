@@ -20,6 +20,7 @@ import {
     attachUserIfPresent,
 } from "../../middlewares/auth/auth.middleware.js";
 import { bookingReadLimiter, bookingWriteLimiter } from "../../middlewares/rateLimit.middleware.js";
+import { validateUuidQuery } from "../../middlewares/validateUuid.middleware.js";
 
 const router = Router();
 
@@ -27,10 +28,17 @@ const router = Router();
 // `attachUserIfPresent`: still public, but when a token IS sent we can flag the
 // caller's OWN bookings on the grid (`my_slots`). It also makes the limiter key
 // on the user id rather than the shared IP.
-router.route("/available-slots").get(attachUserIfPresent, bookingReadLimiter, getAvailableSlots);
+// `validateUuidQuery("ground")`: the ground id rides in the query string, so it
+// misses the path-param guard. Without it an id that failed to decode reaches
+// Prisma and comes back as a 500 instead of a 400.
+router
+    .route("/available-slots")
+    .get(attachUserIfPresent, bookingReadLimiter, validateUuidQuery("ground"), getAvailableSlots);
 // attachUserIfPresent: public, but when a token IS sent we know the booker — so
 // user/group-targeted coupons resolve in the price preview too (not just at create).
-router.route("/quote").get(attachUserIfPresent, bookingReadLimiter, calculateBookingPrice);
+router
+    .route("/quote")
+    .get(attachUserIfPresent, bookingReadLimiter, validateUuidQuery("ground_id"), calculateBookingPrice);
 
 // Turf-admin management. Static paths BEFORE the dynamic '/:booking_id'.
 // NOTE: authorizeRoles only gates who may REACH these; the controller further

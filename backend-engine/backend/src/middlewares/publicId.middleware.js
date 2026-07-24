@@ -1,4 +1,4 @@
-import { decodeId, isPublicId, maskDeep, unmaskDeep } from "../utils/publicId.js";
+import { decodeId, isPublicId, maskDeep, unmaskDeep, unmaskQuery } from "../utils/publicId.js";
 
 /**
  * Public-id translation layer.
@@ -61,8 +61,12 @@ export function unmaskRequestIds(req, _res, next) {
 
     // Express 4 exposes `req.query` as a plain writable property (this would need
     // `Object.defineProperty` on Express 5, where it became a getter).
+    //
+    // The query walker is VALUE-driven, unlike the body one — query params hold
+    // no secrets but do hold ids under names no key rule predicts (`?ground=`,
+    // `?userTwo=`), which is how a raw token once reached Prisma. See unmaskNode.
     if (req.query && typeof req.query === "object") {
-        req.query = unmaskDeep(req.query);
+        req.query = unmaskQuery(req.query);
     }
 
     if (req.body && typeof req.body === "object") {
