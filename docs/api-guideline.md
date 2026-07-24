@@ -210,6 +210,69 @@ server-side login POST, curl, mobile) are allowed — the boundary is browser-on
 | `CORS_ORIGINS` | `http://localhost:3000,https://funturf-frontend.vercel.app` | Comma-separated allowed origins. Trailing slashes ignored. If unset, falls back to `localhost:3000` + the Vercel frontend. |
 | `PUBLIC_ID_SECRET` | *(32 random bytes, base64url)* | Key for the public-id codec — see [Object ids](#object-ids-url-masking). Identical on all three replicas; permanent. Falls back to `ACCESS_TOKEN_SECRET` if unset. |
 | `APP_TZ_OFFSET_MINUTES` | `360` | Minutes offset of the app's local wall-clock from UTC. Used by the event sweeper to decide when a game's naive `event_date`+`end_time` has passed. Default `360` (Bangladesh, UTC+6). |
+| `PG_CONNECTION_LIMIT` | `2` | Max PostgreSQL connections **per replica** — see [Database connections](#database-connections). |
+| `PG_POOL_TIMEOUT` | `20` | Seconds a query waits for a free pooled connection before failing with `P2024`. |
+| `PG_CONNECT_TIMEOUT` | `10` | Seconds to wait for the initial connect before giving up. |
+
+### Database connections
+
+The managed PostgreSQL instance is small and the API is not:
+
+```
+max_connections                 20
+superuser_reserved_connections   3
+---------------------------------
+usable by this app              17     <- shared by 3 replicas
+```
+
+Prisma opens **one pool per `PrismaClient`, per process**, and its default size is
+`num_physical_cpus * 2 + 1`. A container reports the *host's* cpu count, so each of
+`app1/2/3` was sizing its pool for a machine it does not own and taking 9–17 connections.
+One replica could exhaust the server by itself, and the next connection attempt — from
+any replica, from pgAdmin, from `prisma migrate` — failed with:
+
+```
+FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute
+```
+
+**The fix** is an explicit per-replica cap, applied centrally in `src/prisma.js`: the pool
+parameters are appended to `POSTGRESQL_DATABASE_URL` at client construction, so no
+connection string has to be hand-edited on three Render services. Anything already present
+in the URL wins, so a single value can still be overridden from the connection string.
+
+The budget behind the default of **2**:
+
+| | connections |
+| --- | --- |
+| 3 replicas × 2 | 6 (steady state) |
+| × 2 while a rolling deploy overlaps old and new containers | 12 (worst case) |
+| + pgAdmin / psql / `prisma migrate` | ~15 — under 17 ✅ |
+
+Prisma's own rule is *(pool size) / (number of app instances)*. Two consequences worth
+knowing:
+
+- **Requests queue rather than fail.** With 2 connections per replica, a burst waits for a
+  free one for up to `PG_POOL_TIMEOUT` seconds, then errors with `P2024`. That is the
+  intended trade — queueing beats taking the database down for everyone.
+- **Interactive transactions hold a connection for their whole duration** (`$transaction(async tx => …)`,
+  used by bookings, teams, events, comments). Keep them short; never do network I/O inside one.
+
+Two other pieces of the same problem:
+
+- **Graceful shutdown** (`src/index.js`) — SIGTERM/SIGINT closes Socket.IO, drains in-flight
+  HTTP, then calls `disconnectPrisma()`. Without it a replaced replica keeps its sockets open
+  until the server times them out, so a deploy needs double the budget exactly when all three
+  replicas are restarting. A 10s timer force-exits if a hung socket stalls the drain.
+- **Sweeper jitter** (`jobs/*.js`) — the replicas boot seconds apart, so an un-jittered
+  interval had all three querying on the same offset. Each now waits a random 0–60s before
+  its interval starts.
+
+**Raising the cap.** Increase `PG_CONNECTION_LIMIT` only if the replica count drops or the
+database plan grows. If a real pooler is put in front (the provider's built-in PgBouncer,
+your own, or Prisma Accelerate), point the URL at the pooler and raise this — the pooler
+then owns the real connections and `connection_limit` becomes a client-side cap. With
+PgBouncer in *transaction* mode, add `pgbouncer=true` to the URL so Prisma stops using
+named prepared statements.
 
 ### Background jobs
 

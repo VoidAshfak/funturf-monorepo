@@ -19,6 +19,13 @@ import { logger } from "../../logs/logger.js";
  */
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 
+/**
+ * Random delay applied to both the boot sweep and the interval start, so the
+ * three replicas don't fire their queries in lockstep against a database with a
+ * very small connection budget (see the pool notes in src/prisma.js).
+ */
+const JITTER_MS = 60 * 1000;
+
 export function startEventSweeper() {
     const sweep = async () => {
         try {
@@ -31,14 +38,30 @@ export function startEventSweeper() {
         }
     };
 
+    const jitter = Math.floor(Math.random() * JITTER_MS);
+    let timer = null;
+
     // Run once shortly after boot so a freshly started process doesn't wait a
-    // full interval to catch games that expired while it was down.
-    setTimeout(sweep, 15 * 1000).unref?.();
+    // full interval to catch games that expired while it was down. The jitter
+    // keeps three replicas from doing that boot sweep simultaneously.
+    const boot = setTimeout(sweep, 15 * 1000 + jitter);
+    boot.unref?.();
 
-    const timer = setInterval(sweep, SWEEP_INTERVAL_MS);
-    // Don't hold the event loop open on shutdown.
-    timer.unref?.();
+    const starter = setTimeout(() => {
+        timer = setInterval(sweep, SWEEP_INTERVAL_MS);
+        // Don't hold the event loop open on shutdown.
+        timer.unref?.();
+    }, jitter);
+    starter.unref?.();
 
-    logger.info(`event sweeper started (every ${SWEEP_INTERVAL_MS / 60000} min)`);
-    return timer;
+    logger.info(
+        `event sweeper started (every ${SWEEP_INTERVAL_MS / 60000} min, +${Math.round(jitter / 1000)}s jitter)`
+    );
+    // A stop handle rather than the timer itself: the interval doesn't exist yet
+    // when this returns, so there is no timer to hand back.
+    return () => {
+        clearTimeout(boot);
+        clearTimeout(starter);
+        if (timer) clearInterval(timer);
+    };
 }

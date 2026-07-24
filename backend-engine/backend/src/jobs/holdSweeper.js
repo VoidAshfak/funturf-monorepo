@@ -19,6 +19,16 @@ import { logger } from "../../logs/logger.js";
  */
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000; // every 10 minutes
 
+/**
+ * Random delay before the interval starts ticking.
+ *
+ * The three replicas boot within seconds of each other, so an un-jittered
+ * interval has all of them sweeping at the same moment — three simultaneous
+ * bursts of queries against a database with a very small connection budget (see
+ * the pool notes in src/prisma.js). Spreading the start spreads the load.
+ */
+const JITTER_MS = 60 * 1000;
+
 export function startHoldSweeper() {
     const sweep = async () => {
         try {
@@ -31,10 +41,23 @@ export function startHoldSweeper() {
         }
     };
 
-    const timer = setInterval(sweep, SWEEP_INTERVAL_MS);
-    // Don't hold the event loop open on shutdown.
-    timer.unref?.();
+    const jitter = Math.floor(Math.random() * JITTER_MS);
+    let timer = null;
 
-    logger.info(`hold sweeper started (every ${SWEEP_INTERVAL_MS / 60000} min)`);
-    return timer;
+    const starter = setTimeout(() => {
+        timer = setInterval(sweep, SWEEP_INTERVAL_MS);
+        // Don't hold the event loop open on shutdown.
+        timer.unref?.();
+    }, jitter);
+    starter.unref?.();
+
+    logger.info(
+        `hold sweeper started (every ${SWEEP_INTERVAL_MS / 60000} min, +${Math.round(jitter / 1000)}s jitter)`
+    );
+    // A stop handle rather than the timer itself: the interval doesn't exist yet
+    // when this returns, so there is no timer to hand back.
+    return () => {
+        clearTimeout(starter);
+        if (timer) clearInterval(timer);
+    };
 }
