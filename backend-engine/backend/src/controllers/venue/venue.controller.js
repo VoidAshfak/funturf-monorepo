@@ -4,6 +4,7 @@ import { ApiError } from "../../utils/apiError.js";
 import { ApiResponse } from "../../utils/apiResponse.js";
 import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { VenueSerializer } from "../../utils/dataSerializer.js"
+import { coerceHexColor, coerceImageUrl, coerceImageUrlArray } from "../../utils/imageUrl.js";
 import { logger } from "../../../logs/logger.js";
 
 
@@ -171,6 +172,7 @@ const getVenues = asyncHandler(async (req, res) => {
             id: true,
             name: true,
             images: true,
+            logo_url: true,
             operating_hours: true,
             rating: true,
             city: true,
@@ -703,6 +705,108 @@ const updateGround = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, "Ground updated", updated));
 })
 
+// Columns a turf owner may change about their own turf after onboarding.
+// Deliberately an ALLOWLIST, not a blocklist: adding a column to the schema must
+// never silently become client-writable. Notably absent — `slug` (see below),
+// `verified`/`status` (platform decisions, not the owner's), `admin_user_id`,
+// `rating`, `total_bookings` (all derived).
+const TURF_EDITABLE_FIELDS = ["name", "description", "logo_url", "images", "theme_color"];
+
+/**
+ * Edit a turf's own identity — name, blurb, logo, photos, panel accent colour.
+ *
+ * Scoped to the turf's OWNING admin (super_admin is global). Role alone is not
+ * enough here: every turf owner has the `turf_admin` role, so without the
+ * row-level owner check below, admin A could edit admin B's turf.
+ *
+ * Partial update — only the keys present in the body are touched. Sending an
+ * explicit null clears the column (that's how "remove my logo" works); an absent
+ * key leaves it alone.
+ */
+const updateVenue = asyncHandler(async (req, res) => {
+    const { venue_id } = req.params;
+    const isSuper = req.user.user_type === "super_admin";
+
+    const turf = await pgClient.turfs.findUnique({
+        where: { id: venue_id },
+        select: { id: true, admin_user_id: true },
+    });
+    if (!turf) throw ApiError.fromCode(ERROR_CODES.TURF_NOT_FOUND);
+    if (!isSuper && turf.admin_user_id !== req.user.id) {
+        logger.warn(`turf ${venue_id} edit refused for user=${req.user.id} (not the owner)`);
+        throw ApiError.fromCode(ERROR_CODES.NOT_TURF_ADMIN);
+    }
+
+    const data = {};
+    for (const field of TURF_EDITABLE_FIELDS) {
+        if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+        const raw = req.body[field];
+
+        // "" and null both mean "clear it" for the optional columns.
+        const cleared = raw === null || raw === undefined || raw === "";
+
+        switch (field) {
+            case "name": {
+                const name = String(raw ?? "").trim();
+                if (!name) {
+                    throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+                        message: "Turf name can't be empty",
+                    });
+                }
+                if (name.length > 255) {
+                    throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+                        message: "Turf name is too long (max 255 characters)",
+                    });
+                }
+                // `slug` is intentionally NOT regenerated on rename. It's a UNIQUE
+                // column produced without a collision suffix, so re-deriving it
+                // from a common name can 409 on an unrelated turf — and nothing
+                // routes by slug today (every route uses the turf id), so a stale
+                // slug costs nothing while a failed rename costs the owner.
+                data.name = name;
+                break;
+            }
+            case "description":
+                if (cleared) { data.description = null; break; }
+                if (String(raw).length > 2000) {
+                    throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+                        message: "Description is too long (max 2000 characters)",
+                    });
+                }
+                data.description = String(raw).trim();
+                break;
+            case "logo_url":
+                data.logo_url = cleared ? null : coerceImageUrl("logo_url", raw);
+                break;
+            case "images":
+                // Element 0 is the turf's cover photo everywhere it's rendered.
+                data.images = cleared ? [] : coerceImageUrlArray("images", raw);
+                break;
+            case "theme_color":
+                // null => the panel falls back to the default FunTurf green.
+                data.theme_color = cleared ? null : coerceHexColor("theme_color", raw);
+                break;
+        }
+    }
+
+    if (Object.keys(data).length === 0) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "No editable turf fields were provided",
+        });
+    }
+
+    const updated = await pgClient.turfs.update({
+        where: { id: venue_id },
+        data: { ...data, updated_at: new Date() },
+        include: { grounds: true },
+    });
+
+    logger.info(`turf ${venue_id} updated by admin=${req.user.id} fields=[${Object.keys(data)}]`);
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Turf updated", VenueSerializer.toDto(updated)));
+});
+
 const getVenueByAdminId = asyncHandler(async (req, res) => {
     const { admin_id } = req.params;
     const venues = await pgClient.turfs.findMany({
@@ -729,6 +833,7 @@ export {
     getVenueById,
     rateTurf,
     createVenue,
+    updateVenue,
     createGround,
     updateGround,
     getVenueByAdminId

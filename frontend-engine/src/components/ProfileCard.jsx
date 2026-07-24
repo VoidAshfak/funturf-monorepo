@@ -26,6 +26,7 @@ import EmptyState from "./EmptyState";
 import EditProfileDialog from "./EditProfileDialog";
 import ProfileAvatarEditor from "./ProfileAvatarEditor";
 import ProfileCompletionCard from "./ProfileCompletionCard";
+import PhotoViewer from "./PhotoViewer";
 
 function age(dob) {
     if (!dob) return null;
@@ -143,12 +144,24 @@ export default async function ProfileCard({ userId, isOwner = false }) {
                 {/* avatar (overlaps banner) — `relative` so the owner's camera
                     badge can anchor to it */}
                 <div className="relative -mt-24 shrink-0 self-center md:-mt-28 md:self-start">
-                    <Avatar className="h-32 w-32 ring-4 ring-card shadow-xl md:h-36 md:w-36">
-                        <AvatarImage src={profile_picture_url} alt={fullName} />
-                        <AvatarFallback className="bg-gradient-to-br from-brand to-teal text-2xl font-extrabold text-primary-foreground">
-                            {initials}
-                        </AvatarFallback>
-                    </Avatar>
+                    {/* Click-to-enlarge. PhotoViewer is a no-op passthrough when
+                        there's no photo, so the initials fallback stays inert
+                        rather than opening an empty dialog. The owner's camera
+                        badge is a SIBLING (not nested) — nested buttons are
+                        invalid, and it needs its own click anyway. */}
+                    <PhotoViewer
+                        src={profile_picture_url}
+                        alt={fullName}
+                        label={`View ${fullName}'s profile photo`}
+                        className="rounded-full"
+                    >
+                        <Avatar className="h-32 w-32 ring-4 ring-card shadow-xl md:h-36 md:w-36">
+                            <AvatarImage src={profile_picture_url} alt={fullName} />
+                            <AvatarFallback className="bg-gradient-to-br from-brand to-teal text-2xl font-extrabold text-primary-foreground">
+                                {initials}
+                            </AvatarFallback>
+                        </Avatar>
+                    </PhotoViewer>
                     {isOwner && <ProfileAvatarEditor />}
                 </div>
 

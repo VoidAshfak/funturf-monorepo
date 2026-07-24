@@ -267,8 +267,13 @@
     .dark .glass-chip { background: #242424; }
   }
 
+  /*
+    Reads --glow-rgb so the glow follows the accent instead of being welded to
+    the FunTurf green. The fallback IS the green, so every existing usage is
+    byte-identical; only the turf-branded dashboard subtree overrides it.
+  */
   .green-glow {
-    box-shadow: 0 0 20px rgba(29, 185, 84, 0.25);
+    box-shadow: 0 0 20px rgba(var(--glow-rgb, 29, 185, 84), 0.25);
   }
 }
 

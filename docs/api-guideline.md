@@ -291,6 +291,43 @@ Notes:
 | POST | `/create-venue` | **turf_admin / super_admin** | venue payload incl. `grounds[]` (see `frontend-engine/src/utils/constants.js`) | `201` — created venue DTO |
 | POST | `/create-ground` | **turf_admin / super_admin** | single ground payload (name + ≥1 `sport_type` + `hourly_rate` required) | `201` — created ground |
 | PATCH | `/grounds/:ground_id` | **turf_admin / super_admin** | partial ground fields (incl. `status`) | `200` — updated ground (scoped to the ground's owning turf admin) |
+| PATCH | `/:venue_id` | **turf_admin / super_admin** | partial turf identity — `name`, `description`, `logo_url`, `images[]`, `theme_color` | `200` — updated venue DTO (scoped to the turf's own admin) |
+
+#### Turf branding (`PATCH /venues/:venue_id`)
+
+Lets a turf owner rename their turf and change its imagery after onboarding — before this,
+everything set in the create-turf wizard was frozen.
+
+**Allowlist.** Only `name`, `description`, `logo_url`, `images`, `theme_color` are writable.
+Adding a column to `turfs` never makes it client-writable by accident. Explicitly **not** editable:
+
+| field | why |
+| --- | --- |
+| `slug` | UNIQUE, generated with no collision suffix — re-deriving it on rename could `409` against an unrelated turf. Nothing routes by slug (every route uses the turf id), so a stale slug is harmless while a failed rename is not. |
+| `verified`, `status` | Platform decisions, not the owner's. |
+| `admin_user_id` | Reassigning ownership is not a self-service action. |
+| `rating`, `total_bookings` | Derived from reviews / bookings. |
+
+**Ownership.** The role gate (`turf_admin`/`super_admin`) is only the outer fence — every turf owner
+holds the same role, so the controller *also* checks `turf.admin_user_id === req.user.id`.
+`super_admin` bypasses that check; a mismatch logs a warning and returns `NOT_TURF_ADMIN` (403).
+
+**Partial semantics.** Absent key = untouched. `null` or `""` = clear the column. That's how
+"remove my logo" and "reset to the default palette" are expressed. A body with no editable keys
+is a `VALIDATION_ERROR`, not a silent no-op.
+
+**Image URLs are untrusted.** `logo_url` and every entry of `images` must be an **https** URL on an
+allowlisted host (`backend/src/utils/imageUrl.js`, extensible via `PROFILE_IMAGE_HOSTS`) — the same
+validator the profile write path uses. Without it a turf could point the panel logo at any address on
+the internet, making our pages a hotlink/tracking surface for content we never vetted.
+Upload via `POST /api/upload` first, PATCH the returned URL.
+
+**`theme_color`** must be a literal `#RRGGBB` triple. It is written into a CSS custom property in the
+admin panel, so anything looser (named colours, `rgb()`, shorthand) is a style-injection vector and is
+rejected. The frontend samples it from the logo at upload time and lets the owner override it.
+`null` means the panel renders in the default FunTurf green.
+
+Rate-limited by `profileWriteLimiter` (20 writes / 60s).
 
 **Turf ratings.** A rating is a `reviews` row with `review_type='turf'`. One per `(reviewer, turf)`:
 `POST /:venue_id/rating` looks for the caller's existing turf review and **updates** it, else creates one

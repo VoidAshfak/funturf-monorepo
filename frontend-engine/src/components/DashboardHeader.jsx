@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import ChatLauncher from "@/components/ChatLauncher";
 import NotificationBell from "@/components/NotificationBell";
 import ThemeToggle from "@/components/ThemeToggle";
+import TurfBrand from "@/components/TurfBrand";
 
 // Known dashboard routes -> readable label. Anything not listed falls back to a
 // prettified last path segment (and skips UUID segments like /verify/<id>).
@@ -27,7 +28,13 @@ const prettify = (seg) =>
     seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const labelFor = (seg) => LABELS[seg] ?? prettify(seg);
 
-export default function DashboardHeader() {
+/**
+ * @param {{id:string,name:string,logo_url:string|null}|null} brand
+ *   Turf identity from the dashboard layout. Repeated here (not just in the
+ *   sidebar) because the sidebar collapses on mobile — without this the panel
+ *   would lose every trace of whose turf it is on a phone.
+ */
+export default function DashboardHeader({ brand = null }) {
     const pathname = usePathname() || "/dashboard";
 
     // Build the breadcrumb trail from the path, dropping id segments so a deep
@@ -47,6 +54,15 @@ export default function DashboardHeader() {
     return (
         <header className="glass-nav sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border px-4 md:px-5">
             <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
+
+            {/* Turf mark — logo only, since the name is right there in the sidebar
+                on desktop and the top bar is tight on mobile. */}
+            {brand && (
+                <Link href={`/dashboard/turfs/${brand.id}`} className="shrink-0">
+                    <TurfBrand name={brand.name} logoUrl={brand.logo_url} size={26} showName={false} />
+                </Link>
+            )}
+
             <div className="hidden h-6 w-px bg-border sm:block" />
 
             {/* Title + breadcrumb trail */}

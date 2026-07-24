@@ -20,6 +20,7 @@ import { disconnectSocket } from "@/lib/socket";
 import Image from "next/image";
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import TurfBrand from "@/components/TurfBrand";
 import { usePathname } from "next/navigation";
 
 const MANAGE_LINKS = [
@@ -30,7 +31,13 @@ const MANAGE_LINKS = [
     { href: "/dashboard/promotions", label: "Coupons", icon: Ticket },
 ];
 
-export default function AppSidebar() {
+/**
+ * @param {{id:string,name:string,logo_url:string|null}|null} brand
+ *   The turf this panel belongs to, resolved server-side in the dashboard
+ *   layout. `null` for super_admin, who owns no turf — the panel then shows
+ *   FunTurf's own mark instead.
+ */
+export default function AppSidebar({ brand = null }) {
     const pathname = usePathname();
     const { data: session } = useSession();
 
@@ -64,10 +71,30 @@ export default function AppSidebar() {
     return (
         <Sidebar>
             <SidebarHeader className="border-b border-border">
-                <Link href="/" className="flex items-center gap-2.5 px-2 py-3">
-                    <Logo height={22} />
-                    <span className="text-xl font-extrabold tracking-tight text-primary">FUNTURF</span>
-                </Link>
+                {/*
+                    The panel belongs to the TURF, so the turf's own logo and name
+                    lead — an owner should recognise their business here, not ours.
+                    FunTurf keeps a "powered by" credit in the footer. A super_admin
+                    owns no turf, so they get the FunTurf mark instead.
+                */}
+                {brand ? (
+                    <Link
+                        href={`/dashboard/turfs/${brand.id}`}
+                        className="px-2 py-3 transition-opacity hover:opacity-80"
+                    >
+                        <TurfBrand
+                            name={brand.name}
+                            logoUrl={brand.logo_url}
+                            size={38}
+                            subtitle="Turf panel"
+                        />
+                    </Link>
+                ) : (
+                    <Link href="/" className="flex items-center gap-2.5 px-2 py-3">
+                        <Logo height={22} />
+                        <span className="text-xl font-extrabold tracking-tight text-primary">FUNTURF</span>
+                    </Link>
+                )}
                 <div className="px-2 pb-2">
                     <Button asChild className="green-glow w-full rounded-full">
                         <Link href={primaryAction.href}>
@@ -160,6 +187,20 @@ export default function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>
+
+                {/* Platform credit. The turf owns the branding above; this is the
+                    one place that says whose software it is. Hidden for
+                    super_admin, whose header already carries the FunTurf mark. */}
+                {brand && (
+                    <Link
+                        href="/"
+                        className="flex items-center justify-center gap-1.5 px-2 pb-1 pt-2 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                        Powered by
+                        <Logo height={12} />
+                        <span className="font-bold tracking-tight">FunTurf</span>
+                    </Link>
+                )}
             </SidebarFooter>
         </Sidebar>
     );

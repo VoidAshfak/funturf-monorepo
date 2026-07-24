@@ -710,6 +710,8 @@ model turfs {
   operating_hours       Json?
   holiday_dates         Json?
   images                Json?
+  logo_url              String?
+  theme_color           String?              @db.VarChar(9)
   created_at            DateTime?            @default(now()) @db.Timestamp(6)
   updated_at            DateTime?            @default(now()) @db.Timestamp(6)
   grounds               grounds[]

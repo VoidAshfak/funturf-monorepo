@@ -1,5 +1,8 @@
 import { ApiError } from "./apiError.js";
 import { ERROR_CODES } from "./errorCodes.js";
+// Shared with the turf write path — see utils/imageUrl.js for why client-supplied
+// image URLs have to be host-allowlisted.
+import { coerceImageUrl } from "./imageUrl.js";
 
 /**
  * Player-profile domain rules: what a user may edit about themselves, how each
@@ -54,29 +57,6 @@ const TEXT_LIMITS = {
     achievements: 1000,
 };
 
-/**
- * Image URLs are supplied by the CLIENT (it uploads to the image host first and
- * PATCHes the resulting URL back), so they are untrusted input. Without a host
- * allowlist a user could point their avatar at any URL on the internet: that
- * turns our profile pages into a hotlink/tracking surface for a third party and
- * lets someone embed content we never vetted. Only https, only hosts we upload
- * to. Extend via PROFILE_IMAGE_HOSTS (comma-separated) if the image host changes.
- */
-const DEFAULT_IMAGE_HOSTS = [
-    "i.ibb.co",
-    "ibb.co",
-    "image.ibb.co",
-    "res.cloudinary.com",
-];
-
-const allowedImageHosts = () => {
-    const extra = (process.env.PROFILE_IMAGE_HOSTS || "")
-        .split(",")
-        .map((h) => h.trim().toLowerCase())
-        .filter(Boolean);
-    return new Set([...DEFAULT_IMAGE_HOSTS, ...extra]);
-};
-
 /** Columns on `users` a user may edit about themselves. */
 export const USER_EDITABLE_FIELDS = [
     "first_name", "last_name", "phone", "date_of_birth", "gender",
@@ -116,24 +96,6 @@ function coerceStringArray(field, value, max = 20) {
     if (list.length > max) throw fail(`${field} accepts at most ${max} entries`);
     if (list.some((v) => v.length > 60)) throw fail(`${field} entries are too long`);
     return list;
-}
-
-/** An https URL on an allowed image host. */
-function coerceImageUrl(field, value) {
-    let url;
-    try {
-        url = new URL(String(value));
-    } catch {
-        throw fail(`${field} must be a valid URL`);
-    }
-    if (url.protocol !== "https:") {
-        throw fail(`${field} must be an https URL`);
-    }
-    if (!allowedImageHosts().has(url.hostname.toLowerCase())) {
-        // Named explicitly: a silent reject here looks like "my photo didn't save".
-        throw fail(`${field} must be an image uploaded through FunTurf`);
-    }
-    return url.toString();
 }
 
 /** A calendar date that isn't in the future and implies an age of 10..120. */

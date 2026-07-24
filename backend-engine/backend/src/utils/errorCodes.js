@@ -78,6 +78,7 @@ export const ERROR_CODES = Object.freeze({
     TURF_NOT_VERIFIED:{ code: "TURF_NOT_VERIFIED", statusCode: 403, message: "This turf is not verified for bookings yet" },
     GROUND_NOT_AVAILABLE: { code: "GROUND_NOT_AVAILABLE", statusCode: 409, message: "This ground is not available for bookings" },
     TURF_ALREADY_EXISTS: { code: "TURF_ALREADY_EXISTS", statusCode: 409, message: "You already have a turf. Add grounds to it instead of creating another turf" },
+    TURF_NOT_FOUND:   { code: "TURF_NOT_FOUND",   statusCode: 404, message: "Turf not found" },
     NO_TURF_FOR_ADMIN: { code: "NO_TURF_FOR_ADMIN", statusCode: 404, message: "Create your turf first, then add grounds to it" },
     INVALID_SLOT_CODE: { code: "INVALID_SLOT_CODE", statusCode: 400, message: "Invalid slot code" },
     BOOKING_NOT_FOUND: { code: "BOOKING_NOT_FOUND", statusCode: 404, message: "Booking not found" },

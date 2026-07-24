@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Cropper from "react-easy-crop";
-import { Check, Loader2, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, Loader2, TriangleAlert, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "./ui/button";
 import {
     Dialog,
@@ -12,7 +12,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "./ui/dialog";
-import { cropAndUpload } from "@/utils/cropImage";
+import { cropAndUpload, cropOutputSize } from "@/utils/cropImage";
 import { notifyError } from "@/lib/notify";
 
 /**
@@ -26,12 +26,21 @@ import { notifyError } from "@/lib/notify";
  * @param {boolean}  open
  * @param {Function} onOpenChange
  * @param {string}   imageSrc     object URL of the picked file
- * @param {number}   aspect       width / height of the destination frame
- * @param {string}   [cropShape]  "rect" (default) or "round" for avatars
- * @param {number}   [maxWidth]   cap on the uploaded image's width
+ * The crop is exported at its NATIVE resolution — see the resolution policy in
+ * `utils/cropImage.js`. The readout under the stage shows the exact output size,
+ * and warns when the selection is too small to look sharp, so the user can zoom
+ * out or pick a bigger file instead of discovering it after upload.
+ *
+ * @param {boolean}  open
+ * @param {Function} onOpenChange
+ * @param {string}   imageSrc      object URL of the picked file
+ * @param {number}   aspect        width / height of the destination frame
+ * @param {string}   [cropShape]   "rect" (default) or "round" for avatars
+ * @param {number}   [maxWidth]    ceiling on the uploaded width; omit to keep native
+ * @param {number}   [idealWidth]  below this the readout warns about softness
  * @param {string}   title
  * @param {string}   description
- * @param {Function} onUploaded   called with the hosted image URL
+ * @param {Function} onUploaded    called with the hosted image URL
  */
 export default function ImageCropDialog({
     open,
@@ -39,7 +48,8 @@ export default function ImageCropDialog({
     imageSrc,
     aspect = 1,
     cropShape = "rect",
-    maxWidth = 1600,
+    maxWidth,
+    idealWidth = 0,
     title = "Position your photo",
     description = "Drag to move, pinch or use the slider to zoom.",
     onUploaded,
@@ -60,6 +70,15 @@ export default function ImageCropDialog({
     const onCropComplete = useCallback((_area, croppedAreaPixels) => {
         setAreaPixels(croppedAreaPixels);
     }, []);
+
+    // Exactly what will be uploaded, recomputed as the user zooms. Zooming IN
+    // selects fewer source pixels, so the output genuinely shrinks — showing the
+    // number makes that trade visible instead of silent.
+    const output = useMemo(
+        () => (areaPixels ? cropOutputSize(areaPixels, maxWidth) : null),
+        [areaPixels, maxWidth]
+    );
+    const tooSmall = Boolean(output && idealWidth && output.width < idealWidth);
 
     const save = async () => {
         if (!imageSrc || !areaPixels) return;
@@ -116,6 +135,26 @@ export default function ImageCropDialog({
                     />
                     <ZoomIn className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </div>
+
+                {/* Output readout — the crop is saved at full source resolution,
+                    so this is the honest answer to "will this look sharp?". */}
+                {output?.width > 0 && (
+                    <p
+                        className={`flex items-center gap-1.5 px-1 text-xs ${
+                            tooSmall ? "text-orange-500" : "text-muted-foreground"
+                        }`}
+                    >
+                        {tooSmall && <TriangleAlert className="h-3.5 w-3.5 shrink-0" />}
+                        <span>
+                            Saves at {output.width} × {output.height} px
+                            {tooSmall
+                                ? " — zoom out or pick a larger photo for a sharper result."
+                                : output.scaled
+                                  ? " (scaled down from a very large source)."
+                                  : " — full resolution, nothing resized."}
+                        </span>
+                    </p>
+                )}
 
                 <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>

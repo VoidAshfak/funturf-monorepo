@@ -79,7 +79,10 @@ export default function ProfileAvatarEditor() {
                 imageSrc={pickedSrc}
                 aspect={1}
                 cropShape="round"
-                maxWidth={512}
+                // Native resolution, same as the cover — the avatar is also used
+                // at 144px on the profile card and much smaller in lists, and
+                // next/image picks the right size per slot.
+                idealWidth={512}
                 title="Position your profile photo"
                 description="Drag to move, zoom to frame your face."
                 onUploaded={onUploaded}

@@ -67,6 +67,11 @@ export class VenueSerializer {
                 closing_time: venue.operating_hours?.close ?? null,
             },
             images: venue.images,
+            // Turf branding. `logo_url` is the mark shown in the admin panel and
+            // on the public turf page; `theme_color` is the accent the panel
+            // themes itself with (null => default FunTurf green).
+            logo_url: venue.logo_url ?? null,
+            theme_color: venue.theme_color ?? null,
             grounds: groundsSource, //.map((ground) => this.toGroundDto(ground)),
             created_at: venue.created_at,
             updated_at: venue.updated_at
@@ -101,6 +106,8 @@ export class VenueSerializer {
                 closing_time: venue.operating_hours?.close ?? null,
             },
             images: venue.images,
+            logo_url: venue.logo_url ?? null,
+            theme_color: venue.theme_color ?? null,
             grounds: venue.grounds
         };
     }

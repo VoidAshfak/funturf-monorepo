@@ -102,6 +102,19 @@ export const apiSlice = createApi({
             }),
             invalidatesTags: [{ type: "Venues", id: "LIST" }],
         }),
+        // Edit the turf's own identity — name / description / logo / photos /
+        // panel accent. Server-scoped to the turf's owning admin.
+        updateVenue: builder.mutation({
+            query: ({ venueId, ...body }) => ({
+                url: `venues/${venueId}`,
+                method: "PATCH",
+                body,
+            }),
+            invalidatesTags: (r, e, { venueId }) => [
+                { type: "Venue", id: venueId },
+                { type: "Venues", id: "LIST" },
+            ],
+        }),
         // ---- Promotions / coupons (turf manager) ----
         // All promotion endpoints are turf-manager scoped server-side.
         getPromotions: builder.query({
@@ -1278,6 +1291,7 @@ export const {
     useUpdatePromotionMutation,
     useDeletePromotionMutation,
     useCreateVenueMutation,
+    useUpdateVenueMutation,
     useCreateGroundMutation,
     useUpdateGroundMutation,
     useGetEventsQuery,

@@ -4860,6 +4860,8 @@ paths:
                     closing_time: '23:59'
                   images:
                     - https://res.cloudinary.com/funturf/image/upload/v1718000000/images/arena.jpg
+                  logo_url: https://i.ibb.co/abc123/gulshan-arena-logo.png
+                  theme_color: '#1e6fd9'
                   grounds:
                     - id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
                       turf_id: 4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f8a
@@ -4891,6 +4893,129 @@ paths:
                 message: Venue not found
                 errors: []
                 data: null
+    patch:
+      tags: [Venues]
+      summary: Edit a turf's identity
+      operationId: updateVenue
+      security:
+        - bearerAuth: []
+      description: |
+        Update the turf's own branding — name, description, logo, photos, and the
+        accent colour its admin panel themes itself with.
+
+        **Ownership.** `turf_admin` or `super_admin` only, and a `turf_admin` may
+        only edit the turf they own — the role gate alone is not sufficient, since
+        every turf owner holds the same role.
+
+        **Partial.** Only the keys present in the body are written. `null` (or
+        `""`) clears an optional column — that's how "remove my logo" and "reset
+        to the default palette" are expressed. An absent key is left untouched.
+
+        **Not editable here:** `slug` (frozen — it's UNIQUE and generated without
+        a collision suffix, so re-deriving it from a renamed turf could 409 on an
+        unrelated one; nothing routes by slug), `verified` / `status` (platform
+        decisions), `admin_user_id`, `rating`, `total_bookings` (derived).
+
+        `logo_url` and every entry in `images` must be an **https URL on an
+        allowed image host** — upload through `POST /api/upload` first and send
+        back the resulting URL. `theme_color` must be a literal `#RRGGBB` triple;
+        it is written into a CSS custom property, so nothing else is accepted.
+      parameters:
+        - name: venue_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                  description: Cannot be blanked.
+                description:
+                  type: string
+                  maxLength: 2000
+                  nullable: true
+                logo_url:
+                  type: string
+                  format: uri
+                  nullable: true
+                  description: https URL on an allowed image host. `null` removes the logo.
+                images:
+                  type: array
+                  maxItems: 10
+                  nullable: true
+                  items:
+                    type: string
+                    format: uri
+                  description: Turf photos; element 0 is the cover shown everywhere.
+                theme_color:
+                  type: string
+                  pattern: '^#[0-9a-fA-F]{6}$'
+                  nullable: true
+                  description: Admin-panel accent. `null` restores the default FunTurf green.
+            example:
+              name: Gulshan Sports Arena
+              logo_url: https://i.ibb.co/abc123/gulshan-arena-logo.png
+              theme_color: '#1e6fd9'
+      responses:
+        '200':
+          description: Turf updated. Returns the full turf DTO.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Venue'
+        '400':
+          description: Validation failed (blank name, bad image host, malformed colour, or no editable fields sent).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: VALIDATION_ERROR
+                message: logo_url must be an image uploaded through FunTurf
+                errors: []
+                data: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Not this turf's admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: NOT_TURF_ADMIN
+                message: Only a turf admin can perform this action
+                errors: []
+                data: null
+        '404':
+          description: No such turf.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: TURF_NOT_FOUND
+                message: Turf not found
+                errors: []
+                data: null
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /venues/{venue_id}/rating:
     post:
@@ -9110,6 +9235,24 @@ components:
             type: string
             format: uri
           example: [https://res.cloudinary.com/funturf/image/upload/v1718000000/images/arena.jpg]
+        logo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            The turf's own mark. Rendered in the turf-admin panel (sidebar, top
+            bar, turf page header); `null` falls back to an initials tile. Also
+            returned on the public reads so a client can use it.
+          example: https://i.ibb.co/abc123/gulshan-arena-logo.png
+        theme_color:
+          type: string
+          nullable: true
+          pattern: '^#[0-9a-fA-F]{6}$'
+          description: |
+            Accent colour the admin panel themes itself with, normally sampled
+            from the logo at upload time and overridable by the owner. `null`
+            means the panel uses the default FunTurf green.
+          example: '#1e6fd9'
         grounds:
           type: array
           items:
