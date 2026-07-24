@@ -1,6 +1,6 @@
 "use client";
 
-import { notifyError } from "@/lib/notify";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
@@ -144,7 +144,7 @@ export default function BookingDialog({ venue }) {
             if (paid && proof) {
                 payment_proof_url = await uploadSingleImageObj(proof);
             }
-            await createBooking({
+            const res = await createBooking({
                 ground_id: groundId,
                 booking_date: dateStr,
                 slot,
@@ -154,6 +154,20 @@ export default function BookingDialog({ venue }) {
                 event_id: eventId !== "none" ? eventId : undefined,
                 promo_code: promoCode || undefined,
             }).unwrap();
+
+            // Toast-only feedback: the user caused this, so it must NOT also become
+            // a bell notification (see lib/notify.js). The server already phrases the
+            // paid/unpaid distinction ("awaiting payment verification" vs "hold
+            // placed"), so echo its message rather than duplicating that logic here.
+            //
+            // Built BEFORE the state reset below — `slot`/`date` are cleared on the
+            // next lines and would otherwise read as null in the description.
+            notifySuccess(
+                res?.message || (paid ? "Booking placed" : "Slot held"),
+                `${ground?.name ? `${ground.name} · ` : ""}${slotRangeLabel(slot)} · ${format(date, "PPP")}${
+                    paid ? "" : " — hold expires in 2 hours"
+                }`
+            );
 
             // Reset + close.
             setOpen(false);

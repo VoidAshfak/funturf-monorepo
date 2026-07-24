@@ -1,6 +1,6 @@
 "use client";
 
-import { notifyError } from "@/lib/notify";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
@@ -22,7 +22,9 @@ import {
     PaymentStatusBadge,
     EventTrustPanel,
 } from "@/components/BookingStatus";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { getApiErrorMessage } from "@/utils/apiError";
+import { cancelBookingCopy } from "@/utils/bookingCancel";
 import { slotRangeLabel } from "@/utils/slots";
 import {
     useGetManageBookingsQuery,
@@ -68,6 +70,24 @@ export default function DashboardBookingsPage() {
             await fn(arg).unwrap();
         } catch (err) {
             notifyError(getApiErrorMessage(err, "Something went wrong."));
+        }
+    };
+
+    // The booking the confirm modal is asking about (null = closed). One dialog
+    // for the whole list, not one per row.
+    const [cancelTarget, setCancelTarget] = useState(null);
+    const cancelCopy = cancelBookingCopy(cancelTarget);
+
+    // Same gate as the user-facing /bookings page: cancelling is destructive and
+    // hits someone else's booking here, so it must not fire on a stray click.
+    // Errors re-throw so ConfirmDialog stays open behind the error toast.
+    const confirmCancel = async () => {
+        try {
+            const res = await cancel({ bookingId: cancelTarget.id }).unwrap();
+            notifySuccess(res?.message || "Booking cancelled");
+        } catch (err) {
+            notifyError(getApiErrorMessage(err, "Could not cancel this booking."));
+            throw err;
         }
     };
 
@@ -261,11 +281,7 @@ export default function DashboardBookingsPage() {
                                             variant="outline"
                                             className="ml-auto text-destructive"
                                             disabled={busy}
-                                            onClick={() => {
-                                                if (confirm("Cancel this booking?")) {
-                                                    run(cancel, { bookingId: b.id });
-                                                }
-                                            }}
+                                            onClick={() => setCancelTarget(b)}
                                         >
                                             <Ban className="h-4 w-4" /> Cancel
                                         </Button>
@@ -276,6 +292,18 @@ export default function DashboardBookingsPage() {
                     })}
                 </ul>
             )}
+
+            {/* Cancel gate — copy adapts to the target booking's state. */}
+            <ConfirmDialog
+                open={Boolean(cancelTarget)}
+                onOpenChange={(next) => !next && setCancelTarget(null)}
+                title={cancelCopy.title}
+                description={cancelCopy.description}
+                confirmLabel={cancelCopy.confirmLabel}
+                cancelLabel="Keep booking"
+                Icon={Ban}
+                onConfirm={confirmCancel}
+            />
         </div>
     );
 }
