@@ -185,6 +185,33 @@ const FREE_TEXT_KEYS = new Set([
 const MAX_DEPTH = 12;
 
 /**
+ * Is this object a VALUE to be left alone, rather than a container to walk into?
+ *
+ * Both walkers rebuild every object they descend into (`out[key] = …`), and that
+ * rebuild is lossy for anything that serializes through `toJSON`: the copy is a
+ * bare `{}` carrying none of the original's prototype, so `JSON.stringify` falls
+ * back to dumping raw internals.
+ *
+ * That is not hypothetical. Prisma returns money and coordinates as `Decimal`,
+ * whose `toJSON` renders "3000". Rebuilt, it serialized as its internals:
+ *
+ *     final_amount: "3000"  ->  { "s": 1, "e": 3, "d": [3000] }
+ *
+ * which reached the UI as `Number(...)` = **NaN** on every booking amount,
+ * hourly rate, entry fee and venue rating.
+ *
+ * WHY `toJSON` AND NOT "is it a plain object"
+ * The prototype test looks like the obvious rule and is wrong: `ApiResponse` and
+ * the serializer DTOs are class instances too, so it would skip whole payloads
+ * and mask nothing at all. `toJSON` is the precise property — an object that
+ * defines it renders as something other than its own enumerable keys and must be
+ * preserved; an object without it renders exactly as the rebuild would, so
+ * walking in costs nothing. Date, Decimal and Buffer all define it; ApiResponse
+ * and the DTOs do not.
+ */
+const isValueObject = (value) => typeof value?.toJSON === "function";
+
+/**
  * Walk an outbound payload and replace every UUID with its public token.
  *
  * Deliberately matches on the VALUE (does this look like a UUID?) rather than on
@@ -202,11 +229,12 @@ export function maskDeep(node, depth = 0) {
 
     if (typeof node === "string") return isUuidLike(node) ? encodeId(node) : node;
     if (node === null || typeof node !== "object") return node;
-    // Dates, Decimals and Buffers are leaves — recursing into them would
-    // reduce them to a bag of internal properties.
-    if (node instanceof Date || Buffer.isBuffer(node)) return node;
 
     if (Array.isArray(node)) return node.map((item) => maskDeep(item, depth + 1));
+
+    // Date, Decimal, Buffer: leaves. Rebuilding one strips its `toJSON` and
+    // serializes its internals instead — see isValueObject.
+    if (isValueObject(node)) return node;
 
     const out = {};
     for (const [key, value] of Object.entries(node)) {
@@ -297,9 +325,13 @@ const QUERY_FREE_TEXT_KEYS = new Set([
  */
 function unmaskNode(node, valueDriven, depth) {
     if (depth > MAX_DEPTH || node === null || typeof node !== "object") return node;
-    if (node instanceof Date || Buffer.isBuffer(node)) return node;
 
     if (Array.isArray(node)) return node.map((item) => unmaskNode(item, valueDriven, depth + 1));
+
+    // Same leaf rule as the outbound walker. Inbound payloads are JSON-parsed and
+    // therefore already plain, but keeping the two symmetric means neither can
+    // drift into the rebuild bug the other just had.
+    if (isValueObject(node)) return node;
 
     const out = {};
     for (const [key, value] of Object.entries(node)) {

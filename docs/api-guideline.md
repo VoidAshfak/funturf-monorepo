@@ -178,6 +178,44 @@ Path rewriting targets `req.url` rather than `req.params`, because at app level 
 is still empty — it is only populated once a route pattern matches. That is why all ~40
 routes were covered without any route file changing.
 
+### Objects the walkers must not rebuild
+
+Both walkers rebuild every object they descend into, and that rebuild **strips the
+prototype** — so anything that serializes through `toJSON` loses it and `JSON.stringify`
+dumps its internals instead. Prisma returns money and coordinates as `Decimal`:
+
+```
+final_amount: "3000"   ->   { "s": 1, "e": 3, "d": [3000] }   ->   Number(...) = NaN
+```
+
+That surfaced as **NaN on every booking amount**, and would equally have hit `hourly_rate`,
+`entry_fee` and venue `rating`. The rule is `typeof value.toJSON === "function"` → leaf.
+
+Do **not** "fix" this with a plain-object check instead: `ApiResponse` and the serializer
+DTOs are class instances too, so that rule skips entire payloads and masks nothing. `toJSON`
+is the precise property — an object that defines it renders as something other than its own
+keys and must be preserved; an object without it renders exactly as the rebuild would.
+
+### Prisma errors never reach the client raw
+
+`utils/errorHandler.js` maps Prisma error codes to the standard envelope. Previously an
+unguarded id produced a 500 carrying Prisma's raw text — the failing model, the method and
+part of the query — to any unauthenticated caller:
+
+| Prisma | becomes |
+| --- | --- |
+| `P2023` malformed uuid | `400 VALIDATION_ERROR` — "One or more ids are invalid" |
+| `P2003` FK violation | `400 VALIDATION_ERROR` |
+| `P2000` value too long | `400 VALIDATION_ERROR` |
+| `P2002` unique violation | `409 CONFLICT` |
+| `P2025` record not found | `404 NOT_FOUND` |
+| any other `P####` | `500 INTERNAL_ERROR`, generic message (real error stays in the server log) |
+
+This is the safety net under `validateUuidParams` / `validateUuidQuery`, not a replacement:
+~33 dynamic id routes exist and only the team routes are individually guarded, so a missed
+guard now costs a correct 400 instead of a leak. Add the per-route guard anyway — it saves a
+pointless database round-trip.
+
 > **Constraint when adding routes.** A token is any 22-character `[A-Za-z0-9_-]` string, and
 > there is no integrity check to distinguish one from a literal (see below). A **static** route
 > segment of exactly 22 URL-safe characters would be rewritten into a UUID and stop matching.
