@@ -50,6 +50,43 @@ export const BD_DIVISIONS = [
     'Mymensingh',
 ];
 
+// --- Player profile options -----------------------------------------------
+// These MUST match the Prisma enums of the same name in
+// `backend-engine/backend/prisma/postgresql/schema.prisma` — the profile API
+// (`PATCH /users/me`) validates every value against them and rejects anything
+// else, so adding an option here without adding it there just produces a 400.
+
+/** users.gender -> gender_type */
+export const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'];
+
+/** player_profiles.skill_level -> skill_level_type */
+export const SKILL_LEVELS = ['beginner', 'intermediate', 'advanced', 'professional', 'any'];
+
+/** player_profiles.preferred_foot -> preferred_foot_type */
+export const PREFERRED_FEET = ['left', 'right', 'both'];
+
+/** player_profiles.preferred_play_time -> play_time_type */
+export const PLAY_TIMES = ['morning', 'afternoon', 'evening', 'night', 'flexible'];
+
+// Positions a player can pick (stored as a free JSON array, so this list is a
+// convenience, not a constraint). Football-first because that's what most
+// FunTurf matches are, with generic entries for the other sports.
+export const PLAYER_POSITIONS = [
+    'goalkeeper',
+    'defender',
+    'midfielder',
+    'winger',
+    'forward',
+    'striker',
+    'batter',
+    'bowler',
+    'all_rounder',
+    'wicket_keeper',
+    'setter',
+    'libero',
+    'any',
+];
+
 // Ground booking-availability options, framed around whether the ground accepts
 // bookings. Maps to the grounds.status DB column.
 export const GROUND_BOOKING_STATUS = [

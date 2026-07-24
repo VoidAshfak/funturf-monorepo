@@ -77,7 +77,7 @@ export default function EventFeedCard({ event }) {
     return (
         <Card
             className={cn(
-                "group flex flex-col gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 will-change-transform hover:-translate-y-1 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] md:flex-row",
+                "group flex flex-col gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)] md:flex-row",
                 // Highlight matches a turfmate is involved in.
                 hasTurfmates && "ring-1 ring-primary/40",
                 // Stronger highlight for matches the caller organises or admins —
@@ -86,7 +86,7 @@ export default function EventFeedCard({ event }) {
             )}
         >
             {/* left poster panel — sport + big ticket date (frosted green) */}
-            <div className="relative flex shrink-0 flex-row items-center gap-4 overflow-hidden border-b border-primary/15 bg-primary/10 p-5 backdrop-blur-xl dark:bg-[rgba(29,185,84,0.1)] md:w-52 md:flex-col md:items-start md:justify-between md:border-b-0 md:border-r">
+            <div className="relative flex shrink-0 flex-row items-center gap-4 overflow-hidden border-b border-primary/15 bg-primary/10 p-5 dark:bg-[rgba(29,185,84,0.1)] md:w-52 md:flex-col md:items-start md:justify-between md:border-b-0 md:border-r">
                 {/* ambient glow */}
                 <div className="pointer-events-none absolute -left-10 -top-12 h-40 w-40 rounded-full bg-primary/25 blur-3xl" />
                 <div className="pointer-events-none absolute -bottom-14 right-0 h-40 w-40 rounded-full bg-teal/20 blur-3xl" />

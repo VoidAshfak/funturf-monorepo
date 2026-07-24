@@ -35,6 +35,75 @@ const eventPriorityByDate = (eventDate) => {
     return "medium";
 };
 
+// ---------------------------------------------------------------------------
+// Match-edit change reporting
+// ---------------------------------------------------------------------------
+// EVERY edit to a match is announced to the people attached to it — a player who
+// blocked out their evening deserves to know the moment anything moves. What
+// varies is how loudly:
+//
+//   HIGH-IMPACT  time / place / money / squad size / eligibility / whether the
+//                slot is even booked. Forces a re-plan, so it goes out at the
+//                date-scaled priority AND reaches pending join-requesters, whose
+//                decision to join may hinge on exactly these fields.
+//   COSMETIC     copy edits (title, description, rules, what to bring). Still
+//                notified — but at "low" priority so they can never drown out an
+//                urgent "the match moved" alert in the notification bell.
+
+// Column name -> human wording used in the notification message. Anything not
+// listed falls back to its column name with underscores stripped.
+const EVENT_FIELD_LABELS = {
+    event_date: "date",
+    start_time: "start time",
+    end_time: "end time",
+    venue_id: "venue",
+    ground_id: "ground",
+    booking: "booking",
+    sport_type: "sport",
+    event_type: "match type",
+    entry_fee: "entry fee",
+    total_cost: "total cost",
+    cost_split_type: "cost split",
+    min_players: "minimum players",
+    max_players: "maximum players",
+    skill_level_required: "skill level",
+    age_group: "age group",
+    gender_preference: "gender preference",
+    visibility: "visibility",
+    join_approval_required: "join approval",
+    title: "title",
+    description: "description",
+    rules: "rules",
+    what_to_bring: "what to bring",
+};
+
+// Changes that make a player re-decide whether they can (or want to) play.
+const HIGH_IMPACT_EVENT_FIELDS = new Set([
+    "event_date", "start_time", "end_time",
+    "venue_id", "ground_id", "booking",
+    "sport_type", "event_type",
+    "entry_fee", "total_cost", "cost_split_type",
+    "min_players", "max_players",
+    "skill_level_required", "age_group", "gender_preference",
+    "visibility", "join_approval_required",
+]);
+
+// Value equality for change detection. Numeric-aware so a Prisma Decimal(500)
+// compared against the body's "500.00" isn't reported as a change; falls back to
+// string compare for enums/booleans/text. Null and "" are treated as the same
+// "unset" so clearing an already-empty field stays silent.
+const sameEventValue = (a, b) => {
+    const aEmpty = a === null || a === undefined || a === "";
+    const bEmpty = b === null || b === undefined || b === "";
+    if (aEmpty || bEmpty) return aEmpty && bEmpty;
+
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+
+    return String(a) === String(b);
+};
+
 
 const createEvent = asyncHandler(async (req, res) => {
 
@@ -935,17 +1004,44 @@ const editEvent = asyncHandler(async (req, res) => {
     }
 
     // ---- build the schedule raw-SQL SET list (typed casts) ----
+    // `scheduleChanged` mirrors the SET list for the change notification below. A
+    // supplied schedule value counts as a change without a before/after compare:
+    // the stored columns are @db.Time / @db.Date objects and the body sends
+    // "HH:MM" / "yyyy-MM-dd" strings, so a reliable diff would need timezone-aware
+    // parsing. Re-submitting an unchanged time is rare, and over-reporting the
+    // match's *time* is the safe direction to err.
     const scheduleSets = [];
-    if (schedule.date) scheduleSets.push(Prisma.sql`event_date = ${schedule.date}::date`);
-    if (schedule.start) scheduleSets.push(Prisma.sql`start_time = ${schedule.start}::time`);
-    if (schedule.end) scheduleSets.push(Prisma.sql`end_time = ${schedule.end}::time`);
+    const scheduleChanged = [];
+    if (schedule.date) {
+        scheduleSets.push(Prisma.sql`event_date = ${schedule.date}::date`);
+        scheduleChanged.push("event_date");
+    }
+    if (schedule.start) {
+        scheduleSets.push(Prisma.sql`start_time = ${schedule.start}::time`);
+        scheduleChanged.push("start_time");
+    }
+    if (schedule.end) {
+        scheduleSets.push(Prisma.sql`end_time = ${schedule.end}::time`);
+        scheduleChanged.push("end_time");
+    }
 
-    // ---- material-change detection (drives participant notification) ----
-    // Schedule touched, or a core detail (venue/ground/sport) changed.
-    const coreFields = ["ground_id", "venue_id", "sport_type"];
-    const isMaterialChange =
-        scheduleSets.length > 0 ||
-        coreFields.some((f) => data[f] !== undefined && String(data[f]) !== String(event[f]));
+    // ---- change detection (drives the participant notification) ----
+    // Attaching or detaching a booking is reported as one "booking" change: it's
+    // the difference between a confirmed slot and a merely probable one, which
+    // matters even when the clock itself doesn't move.
+    const bookingChanged =
+        hasBookingField && (newBookingId ?? null) !== (event.booking_id ?? null);
+
+    const changedFields = [
+        // Scalar edits that genuinely differ from what's stored.
+        ...Object.keys(data).filter(
+            (f) => f !== "booking_id" && !sameEventValue(data[f], event[f])
+        ),
+        ...scheduleChanged,
+        ...(bookingChanged ? ["booking"] : []),
+    ];
+    const changed = [...new Set(changedFields)];
+    const isHighImpact = changed.some((f) => HIGH_IMPACT_EVENT_FIELDS.has(f));
 
     // ---- persist atomically: scalar update + booking links + schedule ----
     const ops = [pgClient.events.update({ where: { id: event.id }, data }), ...txOps];
@@ -958,23 +1054,41 @@ const editEvent = asyncHandler(async (req, res) => {
 
     const updatedEvent = await pgClient.events.findUnique({ where: { id: event.id } });
 
-    // Tell the confirmed squad when the match's core details changed — that's what
-    // they actually need to re-plan around. (Cosmetic edits stay silent.)
-    if (isMaterialChange) {
-        await notifyEventParticipants(event.id, {
-            type: "event_reminder",
-            title: "Match details updated",
-            message: `"${updatedEvent.title}" was updated by the organizer — check the new details`,
-            data: { event_id: event.id },
-            priority: eventPriorityByDate(updatedEvent.event_date),
-            action_url: `/events/${event.id}`,
-        }, [req.user.id]);
+    // Announce the edit to everyone attached to the match, naming exactly what
+    // moved so a player can decide at a glance whether it affects them. See the
+    // HIGH_IMPACT_EVENT_FIELDS notes at the top of this file for the tiering:
+    // high-impact edits go out at the date-scaled priority and also reach pending
+    // join-requesters; cosmetic ones notify the squad quietly at "low".
+    if (changed.length > 0) {
+        const summary = changed
+            .map((f) => EVENT_FIELD_LABELS[f] ?? f.replace(/_/g, " "))
+            .join(", ");
+
+        await notifyEventParticipants(
+            event.id,
+            {
+                type: "event_reminder",
+                title: isHighImpact ? "Match details updated" : "Match info edited",
+                message: `"${updatedEvent.title}" — the organizer updated the ${summary}`,
+                data: { event_id: event.id, changed, high_impact: isHighImpact },
+                priority: isHighImpact ? eventPriorityByDate(updatedEvent.event_date) : "low",
+                action_url: `/events/${event.id}`,
+            },
+            [req.user.id],
+            { includePending: isHighImpact }
+        );
     }
 
-    // Nudge any open match page to refetch the fresh details/roster live.
+    // Nudge any open match page to refetch the fresh details live. The toast side
+    // is already handled: the notification above rides the `notification:new`
+    // socket, and the client toasts it automatically at high/urgent priority
+    // (see frontend `lib/notify.js`) — so no second channel is needed here.
     broadcastRoster(event.id);
 
-    logger.info(`event ${event.id} edited by organizer ${req.user.id} (material=${isMaterialChange})`);
+    logger.info(
+        `event ${event.id} edited by organizer ${req.user.id} ` +
+        `(changed=[${changed.join(",")}] highImpact=${isHighImpact})`
+    );
 
     return res.status(200).json(
         new ApiResponse(200, "Event updated successfully", updatedEvent)

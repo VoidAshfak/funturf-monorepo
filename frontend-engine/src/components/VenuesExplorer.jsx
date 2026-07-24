@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Link from "next/link";
 import SportIcon from "./icons/SportIcon";
@@ -21,7 +21,7 @@ import {
     ChevronRight,
 } from "lucide-react";
 import { gsap } from "@/lib/animations";
-import { getLocationString } from "@/utils/utility-functions";
+import { venueMatchesQuery, venueSports } from "@/utils/venueSearch";
 import { VenueCard } from "./VenueCard";
 import EmptyState from "./EmptyState";
 
@@ -33,27 +33,8 @@ const SORTS = [
 
 const PAGE_SIZE = 9;
 
-function venueSports(venue) {
-    // A ground's sport_type is a MULTISELECT — it's an array like
-    // ["Football","Cricket"], and sports_available can be nested the same way.
-    // Flatten one level, coerce to strings, and dedupe so callers always get a
-    // flat list of unique sport names (an array leaking through here would become
-    // a comma-joined React key and break both the chips and the sport filter).
-    const raw =
-        Array.isArray(venue.sports_available) && venue.sports_available.length
-            ? venue.sports_available
-            : (venue.grounds || []).map((g) => g.sport_type);
-
-    return [...new Set(raw.flat().filter(Boolean).map(String))];
-}
-
-function locationText(venue) {
-    try {
-        return getLocationString(venue.address_line_1 || {});
-    } catch {
-        return "";
-    }
-}
+// venueSports / locationText / venueMatchesQuery live in utils/venueSearch so the
+// hero quick-search and this explorer share one matching definition.
 
 // Compact page list with ellipses: 1 … 4 5 [6] 7 8 … 12
 function getPageList(current, total) {
@@ -70,9 +51,22 @@ function getPageList(current, total) {
     return out;
 }
 
-export default function VenuesExplorer({ venues = [] }) {
+export default function VenuesExplorer({ venues = [], initialQuery = "" }) {
     const dispatch = useDispatch();
     const { query, sport, sort, topRated, page } = useSelector(selectVenueFilters);
+
+    // Seed the search box from `?q=` (e.g. arriving from the homepage hero
+    // search) exactly once on mount, so a deep link lands pre-filtered without
+    // clobbering the user's own edits afterwards.
+    const seededRef = useRef(false);
+    useEffect(() => {
+        if (seededRef.current) return;
+        seededRef.current = true;
+        if (initialQuery && initialQuery !== query) {
+            dispatch(setVenueFilter({ key: "query", value: initialQuery }));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialQuery]);
 
     const setQuery = (value) => dispatch(setVenueFilter({ key: "query", value }));
     const setSport = (value) => dispatch(setVenueFilter({ key: "sport", value }));
@@ -101,17 +95,10 @@ export default function VenuesExplorer({ venues = [] }) {
     }, [venues]);
 
     const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
         let list = venues.filter((v) => {
             if (sport !== "all" && !venueSports(v).includes(sport)) return false;
             if (topRated && (v.rating ?? 0) < 4) return false;
-            if (q) {
-                const haystack = [v.name, locationText(v), ...venueSports(v)]
-                    .filter(Boolean)
-                    .join(" ")
-                    .toLowerCase();
-                if (!haystack.includes(q)) return false;
-            }
+            if (!venueMatchesQuery(v, query)) return false;
             return true;
         });
 

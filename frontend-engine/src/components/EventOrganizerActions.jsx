@@ -218,16 +218,22 @@ function EditMatchDialog({ event }) {
                     <Pencil className="h-4 w-4" /> Edit match
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+            {/* `overflow-x-hidden` + `min-w-0` on the body below: DialogContent is a
+                grid, and grid items default to `min-width: auto` — a long, nowrap
+                child (the booking label) would otherwise force the track wider than
+                `max-w-lg` and spill the modal sideways. */}
+            <DialogContent className="max-h-[85vh] overflow-y-auto overflow-x-hidden sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Edit match</DialogTitle>
                     <DialogDescription>
                         Change the details, squad size, cost, or re-attach a booking.
-                        Players are notified when the date, time, or venue changes.
+                        Everyone in the squad is notified of whatever you change —
+                        time, venue, cost and squad-size edits also reach players
+                        still waiting on a join request.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 py-2">
+                <div className="min-w-0 space-y-4 py-2">
                     <Field label="Title">
                         <Input value={form.title} onChange={(e) => set("title", e.target.value)} />
                     </Field>
@@ -342,10 +348,15 @@ function EditMatchDialog({ event }) {
                                 value={form.booking_id || "none"}
                                 onValueChange={(v) => set("booking_id", v === "none" ? "" : v)}
                             >
-                                <SelectTrigger className="w-full">
+                                {/* Booking labels are long ("Turf · Ground · 12 Mar · 6–7:30 PM").
+                                    `min-w-0` lets the trigger shrink, and the value span is
+                                    forced to truncate instead of pushing the modal wider. */}
+                                <SelectTrigger className="w-full min-w-0 *:data-[slot=select-value]:min-w-0">
                                     <SelectValue placeholder="No booking" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                {/* Cap the popup at the trigger width so a long label scrolls/
+                                    truncates in the list instead of overflowing the viewport. */}
+                                <SelectContent className="max-w-(--radix-select-trigger-width)">
                                     <SelectItem value="none">
                                         <span className="inline-flex items-center gap-2 text-muted-foreground">
                                             <X className="h-3.5 w-3.5" /> No booking (detach)
@@ -353,9 +364,9 @@ function EditMatchDialog({ event }) {
                                     </SelectItem>
                                     {bookingOptions.map((b) => (
                                         <SelectItem key={b.id} value={b.id}>
-                                            <span className="inline-flex items-center gap-2">
+                                            <span className="inline-flex min-w-0 items-center gap-2">
                                                 <Ticket className="h-3.5 w-3.5 text-primary" />
-                                                {bookingLabel(b)}
+                                                <span className="truncate">{bookingLabel(b)}</span>
                                             </span>
                                         </SelectItem>
                                     ))}
@@ -560,7 +571,9 @@ function CancelMatchDialog({ event }) {
 
 function Field({ label, children }) {
     return (
-        <div className="space-y-1.5">
+        // `min-w-0` so a wide child (long select value, long input) can never force
+        // a grid/flex parent past the dialog width.
+        <div className="min-w-0 space-y-1.5">
             <Label className="text-xs text-muted-foreground">{label}</Label>
             {children}
         </div>

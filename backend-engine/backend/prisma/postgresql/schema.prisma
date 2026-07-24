@@ -34,6 +34,7 @@ model users {
   division                                           String?              @db.VarChar(100)
   latitude                                           Decimal?             @db.Decimal(10, 7)
   longitude                                          Decimal?             @db.Decimal(10, 7)
+  cover_photo_url                                    String?
   bookings_bookings_cancelled_byTousers              bookings[]           @relation("bookings_cancelled_byTousers")
   bookings_bookings_user_idTousers                   bookings[]           @relation("bookings_user_idTousers")
   comment_likes                                      comment_likes[]
@@ -86,8 +87,8 @@ model activity_logs {
 
 /// DB-managed PARTIAL unique index (Prisma cannot express partial indexes, so it
 /// is NOT declared below and won't survive `prisma db pull`):
-///   unique_ground_slot_date ON bookings (ground_id, booking_date, slot)
-///     WHERE booking_status IN ('confirmed','pending')
+/// unique_ground_slot_date ON bookings (ground_id, booking_date, slot)
+/// WHERE booking_status IN ('confirmed','pending')
 /// Stops double-booking the same ground+date+slot for ACTIVE bookings, while
 /// allowing the same slot on different dates. Do NOT add an @@unique for this —
 /// that would build a full (non-partial) index and drift from the database.

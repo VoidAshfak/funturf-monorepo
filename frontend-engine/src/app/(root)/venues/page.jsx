@@ -2,8 +2,13 @@ import Image from "next/image";
 import { getAllVenues } from "@/utils/getData";
 import VenuesExplorer from "@/components/VenuesExplorer";
 
-export default async function AllVenues() {
+export default async function AllVenues({ searchParams }) {
     const { data: venues = [] } = await getAllVenues();
+
+    // `?q=` deep link (e.g. from the homepage hero search) pre-seeds the filter.
+    // searchParams is async in Next 15.
+    const sp = await searchParams;
+    const initialQuery = typeof sp?.q === "string" ? sp.q : "";
 
     return (
         <div className="relative pb-16">
@@ -38,7 +43,7 @@ export default async function AllVenues() {
                         </p>
                     </div>
                 ) : (
-                    <VenuesExplorer venues={venues} />
+                    <VenuesExplorer venues={venues} initialQuery={initialQuery} />
                 )}
             </div>
         </div>

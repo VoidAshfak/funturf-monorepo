@@ -10,6 +10,10 @@ import {
     getUserActivityAreas,
     computeMutualCounts,
 } from "../../utils/turfmateService.js";
+import {
+    PUBLIC_PLAYER_PROFILE_SELECT,
+    completionBoost,
+} from "../../utils/profileService.js";
 
 /**
  * "Turfmates" = accepted user-to-user connections. Backed by the PostgreSQL
@@ -447,13 +451,29 @@ const getRecommendations = asyncHandler(async (req, res) => {
     const [profiles, mutualCounts] = await Promise.all([
         pgClient.users.findMany({
             where: { id: { in: candidateIds }, status: "active" },
-            select: PROFILE_SELECT,
+            select: {
+                ...PROFILE_SELECT,
+                // Extra columns feed the completeness score only — they are
+                // stripped before the payload goes out (see the map below), so the
+                // recommendation DTO keeps the same public shape it always had.
+                cover_photo_url: true,
+                date_of_birth: true,
+                gender: true,
+                phone: true,
+                player_profiles: { select: PUBLIC_PLAYER_PROFILE_SELECT, take: 1 },
+            },
         }),
         computeMutualCounts(candidateIds, myTurfmateSet),
     ]);
 
     const recommendations = profiles
-        .map((p) => {
+        .map((row) => {
+            // Split the scoring-only columns off the public DTO. `phone` in
+            // particular must never reach a recommendation card — it's read here
+            // solely because it's one of the scored checklist fields.
+            const { player_profiles, phone, date_of_birth, gender, ...p } = row;
+            const playerProfile = player_profiles?.[0] ?? null;
+
             const mutual = mutualCounts.get(p.id) || 0;
             const sameDistrict = me?.district && p.district === me.district;
             const sameDivision = me?.division && p.division === me.division;
@@ -461,8 +481,18 @@ const getRecommendations = asyncHandler(async (req, res) => {
 
             // Area score: precise district match > shared activity city > same division.
             const areaScore = sameDistrict ? 3 : activeNearby ? 2 : sameDivision ? 1 : 0;
+            // A complete profile ranks higher: someone you can actually size up
+            // before reaching out is a better suggestion than a blank one. Capped
+            // at 3 here (not the default 10) so it TIE-BREAKS rather than
+            // overrides — mutual turfmates remain the strongest signal for a
+            // social recommendation. See completionBoost in profileService.js.
+            const completeness = completionBoost(
+                { ...p, phone, date_of_birth, gender },
+                playerProfile,
+                3
+            );
             // Mutual turfmates dominate ranking (strong social signal).
-            const score = mutual * 10 + areaScore;
+            const score = mutual * 10 + areaScore + completeness;
 
             const reason = sameDistrict
                 ? `Plays in ${p.district}`

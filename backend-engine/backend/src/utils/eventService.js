@@ -101,12 +101,31 @@ export async function notifyEventAdmins(eventId, payload, excludeUserIds = []) {
  * Notify every APPROVED participant of an event (the confirmed squad), optionally
  * excluding some ids (e.g. the organizer who triggered the change). Best-effort.
  *
- * @returns {Promise<number>} how many participants were notified
+ * Set `includePending` to also reach people whose join request is still in the
+ * queue (`requested`). They aren't in the squad yet, but a change to the money,
+ * the time or the eligibility rules decides whether they still want in — so
+ * high-impact match edits fan out to them too. Routine squad churn should leave
+ * it off so the request queue doesn't get spammed.
+ *
+ * @param {string}   eventId
+ * @param {Object}   payload                    { type, title, message, data?, priority?, action_url? }
+ * @param {string[]} [excludeUserIds]           ids to skip (e.g. the acting organizer)
+ * @param {Object}   [options]
+ * @param {boolean}  [options.includePending]   also notify `requested` (pending) users
+ * @returns {Promise<number>} how many users were notified
  */
-export async function notifyEventParticipants(eventId, payload, excludeUserIds = []) {
+export async function notifyEventParticipants(
+    eventId,
+    payload,
+    excludeUserIds = [],
+    { includePending = false } = {}
+) {
     try {
+        // `requested` is this schema's "pending join request" status — see
+        // participant_status_type in the Prisma schema.
+        const statuses = includePending ? ["approved", "requested"] : ["approved"];
         const rows = await pgClient.event_participants.findMany({
-            where: { event_id: eventId, status: "approved" },
+            where: { event_id: eventId, status: { in: statuses } },
             select: { user_id: true },
         });
         const targets = [...new Set(rows.map((r) => r.user_id))].filter(
@@ -117,7 +136,9 @@ export async function notifyEventParticipants(eventId, payload, excludeUserIds =
         await Promise.all(
             targets.map((uid) => createNotification({ ...payload, user_id: uid }))
         );
-        logger.info(`event-participant notify: event=${eventId} -> ${targets.length}`);
+        logger.info(
+            `event-participant notify: event=${eventId} -> ${targets.length} (${statuses.join("+")})`
+        );
         return targets.length;
     } catch (err) {
         logger.error(`notifyEventParticipants failed: ${err.message}`);

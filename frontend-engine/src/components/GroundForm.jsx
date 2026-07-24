@@ -139,8 +139,9 @@ export default function GroundForm({ initial = null, onSubmit, submitLabel, pend
                     <NumberField label="Weekend rate" value={form.weekend_hourly_rate} onChange={(v) => set("weekend_hourly_rate", v)} />
                     <NumberField label="Peak-hour rate" value={form.peak_hour_rate} onChange={(v) => set("peak_hour_rate", v)} />
                     <NumberField label="Off-peak rate" value={form.off_peak_hour_rate} onChange={(v) => set("off_peak_hour_rate", v)} />
-                    <NumberField label="Min booking (hrs)" value={form.minimum_booking_hours} onChange={(v) => set("minimum_booking_hours", v)} />
-                    <NumberField label="Max booking (hrs)" value={form.maximum_booking_hours} onChange={(v) => set("maximum_booking_hours", v)} />
+                    {/* Booking length is billed in 30-min blocks — step 0.5 so 1.5h, 2.5h, etc. are valid. */}
+                    <NumberField label="Min booking (hrs)" value={form.minimum_booking_hours} onChange={(v) => set("minimum_booking_hours", v)} step="0.5" />
+                    <NumberField label="Max booking (hrs)" value={form.maximum_booking_hours} onChange={(v) => set("maximum_booking_hours", v)} step="0.5" />
                 </div>
             </div>
 
@@ -211,11 +212,11 @@ function SelectField({ label, value, onChange, options, placeholder }) {
     );
 }
 
-function NumberField({ label, value, onChange }) {
+function NumberField({ label, value, onChange, step }) {
     return (
         <div className="flex flex-col gap-1.5">
             <Label>{label}</Label>
-            <Input type="number" min="0" value={value} onChange={(e) => onChange(e.target.value)} />
+            <Input type="number" min="0" step={step} value={value} onChange={(e) => onChange(e.target.value)} />
         </div>
     );
 }

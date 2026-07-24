@@ -482,6 +482,272 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /users/me:
+    patch:
+      tags: [Auth & Users]
+      summary: Edit your own profile
+      operationId: updateMyProfile
+      description: |
+        Partial update of the signed-in user's profile, spanning both the account
+        row (`users`) and the sporting profile (`player_profiles`, created on
+        first save). Both writes run in one transaction, so a profile can never
+        end up half-saved.
+
+        **The target user is taken from the JWT**, never from the path or body —
+        `me` is a literal. There is no id to tamper with, so one user cannot edit
+        another.
+
+        Fields are **allowlisted**. Anything not listed below is ignored rather
+        than written. Not editable here, by design:
+
+        | Blocked | Why |
+        |---|---|
+        | `email`, `user_type`, `status` | identity / trust boundary — each needs its own verified flow |
+        | `email_verified`, `phone_verified` | set by verification, not by the user claiming it |
+        | `password_hash`, `refresh_token` | credentials, never a profile field |
+        | `rating`, `total_games_played`, `total_games_organized`, `reliability_score` | server-derived reputation; self-editing would make it meaningless |
+
+        **Semantics:** an absent key leaves the field alone; an explicit `null`
+        (or `""`) clears it. `first_name`/`last_name` cannot be cleared.
+
+        **Image URLs** are client-supplied (the client uploads first, then PATCHes
+        the resulting URL), so they are validated as `https` on an allowlisted
+        image host — otherwise a profile could point at arbitrary third-party
+        content. Extend the allowlist via the `PROFILE_IMAGE_HOSTS` env var.
+
+        **Validation:** enums must match the Prisma enum exactly; integers are
+        range-clamped (`years_of_experience` 0–60, `jersey_number` 0–99,
+        `height_cm` 50–260, `weight_kg` 20–250, `max_travel_distance_km` 0–200);
+        `date_of_birth` must imply an age of 10–120; text fields are length-capped;
+        `preferred_positions` accepts ≤6 entries and `sports_played` ≤12.
+
+        Rate limited to 20 writes/minute per user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              description: Any subset of the editable fields. All are nullable unless noted.
+              properties:
+                first_name: { type: string, maxLength: 100 }
+                last_name: { type: string, maxLength: 100 }
+                phone: { type: string, maxLength: 20, nullable: true }
+                date_of_birth: { type: string, format: date, nullable: true }
+                gender:
+                  type: string
+                  nullable: true
+                  enum: [male, female, other, prefer_not_to_say]
+                bio: { type: string, maxLength: 1000, nullable: true }
+                division: { type: string, maxLength: 100, nullable: true }
+                district: { type: string, maxLength: 100, nullable: true }
+                profile_picture_url:
+                  type: string
+                  format: uri
+                  nullable: true
+                  description: https URL on an allowlisted image host.
+                cover_photo_url:
+                  type: string
+                  format: uri
+                  nullable: true
+                  description: https URL on an allowlisted image host; already cropped to the banner aspect.
+                preferred_positions:
+                  type: array
+                  nullable: true
+                  maxItems: 6
+                  items: { type: string }
+                sports_played:
+                  type: array
+                  nullable: true
+                  maxItems: 12
+                  items: { type: string }
+                skill_level:
+                  type: string
+                  nullable: true
+                  enum: [beginner, intermediate, advanced, professional, any]
+                preferred_foot:
+                  type: string
+                  nullable: true
+                  enum: [left, right, both]
+                preferred_play_time:
+                  type: string
+                  nullable: true
+                  enum: [morning, afternoon, evening, night, flexible]
+                years_of_experience: { type: integer, minimum: 0, maximum: 60, nullable: true }
+                jersey_number: { type: integer, minimum: 0, maximum: 99, nullable: true }
+                height_cm: { type: integer, minimum: 50, maximum: 260, nullable: true }
+                weight_kg: { type: integer, minimum: 20, maximum: 250, nullable: true }
+                max_travel_distance_km: { type: integer, minimum: 0, maximum: 200, nullable: true }
+                achievements: { type: string, maxLength: 1000, nullable: true }
+            example:
+              bio: Left winger. Free most evenings after 8.
+              district: Gazipur
+              skill_level: intermediate
+              preferred_positions: [winger, forward]
+              sports_played: [Football, Cricket]
+              cover_photo_url: https://i.ibb.co/abc123/cover.jpg
+      responses:
+        '200':
+          description: |
+            Profile updated. Returns the refreshed profile including a recomputed
+            `profile_completion`, so the client can drop it straight into its cache.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: |
+            `VALIDATION_ERROR` — no editable fields supplied, an enum/range/length
+            violation, or an image URL that isn't https on an allowlisted host.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '409':
+          description: '`CONFLICT` — that phone number belongs to another account.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '429':
+          description: Rate limit exceeded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
+  /users/scout:
+    get:
+      tags: [Auth & Users]
+      summary: Scout players to recruit
+      operationId: scoutPlayers
+      description: |
+        The search a captain runs to fill a squad: "who near me plays football, as
+        a winger, at roughly this level?". Every filter is optional and they AND
+        together. The caller is always excluded from their own results.
+
+        **Ranking — profile completeness is the dominant term.** Every result
+        already satisfies the filters, so relevance is binary; what's left to rank
+        on is who the captain can actually evaluate. A profile with no sport, no
+        position and no skill level is unrankable noise however nearby the person
+        lives. Score:
+
+        | Term | Range | Note |
+        |---|---|---|
+        | profile completeness | 0–10 | the same weighted percent shown on the profile page |
+        | same district / division | 3 / 1 | proximity |
+        | player rating | 0–5 | form |
+        | reliability score | 0–2 | `reliability_score / 100 × 2` |
+
+        Filtering by `sport` or `position` implicitly excludes players with no
+        sporting profile at all — they cannot match. The internal score is never
+        returned; `profile_completion_percent` is, so the UI can badge a full
+        profile.
+
+        **Auth is required** — this lists other users, so a public version would be
+        an anonymous directory of everyone on the platform. Results carry **no
+        email or phone**: a people-search returning contact details would be a
+        harvesting endpoint, and neither is needed to decide whether to invite
+        someone.
+
+        The candidate pool is capped at 200 rows before ranking, so an unfiltered
+        search can't become a full table scan plus sort.
+      parameters:
+        - name: q
+          in: query
+          description: Name fragment, case-insensitive, matched against first OR last name.
+          schema: { type: string }
+        - name: sport
+          in: query
+          description: Exact sport, matched inside the `sports_played` JSON array.
+          schema: { type: string, example: Football }
+        - name: position
+          in: query
+          description: Exact position, matched inside the `preferred_positions` JSON array.
+          schema: { type: string, example: winger }
+        - name: skill
+          in: query
+          schema:
+            type: string
+            enum: [beginner, intermediate, advanced, professional, any]
+        - name: division
+          in: query
+          schema: { type: string }
+        - name: district
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          description: 1–50, default 20.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Ranked players, most complete first.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count: { type: integer, example: 12 }
+                          players:
+                            type: array
+                            items:
+                              type: object
+                              description: Public-safe player card. No email, no phone.
+                              properties:
+                                id: { $ref: '#/components/schemas/Uuid' }
+                                first_name: { type: string }
+                                last_name: { type: string }
+                                profile_picture_url: { type: string, format: uri, nullable: true }
+                                cover_photo_url: { type: string, format: uri, nullable: true }
+                                division: { type: string, nullable: true }
+                                district: { type: string, nullable: true }
+                                bio: { type: string, nullable: true }
+                                profile_completion_percent:
+                                  type: integer
+                                  description: Same figure the player sees on their own profile.
+                                  example: 78
+                                profile:
+                                  type: object
+                                  nullable: true
+                                  description: Sporting profile, or null if they have none.
+                                  properties:
+                                    skill_level: { type: string, nullable: true }
+                                    preferred_positions:
+                                      type: array
+                                      items: { type: string }
+                                      nullable: true
+                                    sports_played:
+                                      type: array
+                                      items: { type: string }
+                                      nullable: true
+                                    preferred_foot: { type: string, nullable: true }
+                                    preferred_play_time: { type: string, nullable: true }
+                                    years_of_experience: { type: integer, nullable: true }
+                                    jersey_number: { type: integer, nullable: true }
+                                    max_travel_distance_km: { type: integer, nullable: true }
+                                    rating: { type: number, nullable: true }
+                                    reliability_score: { type: integer, nullable: true }
+                                    total_games_played: { type: integer, nullable: true }
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+
   /users/{user_id}:
     get:
       tags: [Auth & Users]
@@ -1743,8 +2009,19 @@ paths:
         have a booking (and isn't attaching a new one) is rejected with
         `EVENT_SCHEDULE_LOCKED`.
 
-        Material changes (schedule, ground, venue, sport) notify the confirmed
-        squad; cosmetic edits stay silent.
+        **Change notifications** — every edit that actually changes a value is
+        announced (`event_reminder`), naming the changed fields in the message and
+        listing their column names in `data.changed`. The tier controls priority
+        and audience:
+
+        | Tier | Fields | Priority | Audience |
+        |---|---|---|---|
+        | High impact | schedule, venue/ground, booking attach/detach, sport, match type, entry fee, total cost, cost split, min/max players, skill level, age group, gender preference, visibility, join approval | scales with how soon the match is (`urgent` today → `medium`) | approved squad **+ pending join-requesters** |
+        | Cosmetic | title, description, rules, what to bring | `low` | approved squad |
+
+        The acting organizer is never notified of their own edit. High-impact
+        changes reach pending requesters because a fee, time or eligibility change
+        decides whether they still want in. `data.high_impact` carries the tier.
       parameters:
         - name: event_id
           in: path
@@ -8232,6 +8509,61 @@ components:
           nullable: true
           example: 92.5
 
+    ProfileCompletion:
+      type: object
+      description: |
+        How complete a profile is, scored **server-side** against the weighted
+        checklist in `utils/profileService.js` so the client never duplicates the
+        rules. Weights reflect how much a field helps other people find and pick
+        you — a photo and a skill level count for more than a jersey number.
+        `missing` carries the label and hint the UI renders, so the checklist is
+        generated entirely from this payload.
+      properties:
+        percent:
+          type: integer
+          description: Weighted completion, 0–100.
+          example: 65
+        earned:
+          type: integer
+          description: Weight earned so far.
+          example: 19
+        total:
+          type: integer
+          description: Total weight available.
+          example: 29
+        filled_count:
+          type: integer
+          example: 11
+        total_count:
+          type: integer
+          description: Number of checklist fields.
+          example: 19
+        completed:
+          type: array
+          items: { type: string }
+          example: [profile_picture_url, bio, district]
+        missing:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                example: skill_level
+              label:
+                type: string
+                example: Skill level
+              hint:
+                type: string
+                example: Gets you matched to the right games
+              weight:
+                type: integer
+                example: 3
+              source:
+                type: string
+                enum: [user, player]
+                description: Which table the field lives on.
+
     UserProfile:
       type: object
       description: |
@@ -8279,6 +8611,17 @@ components:
           format: uri
           nullable: true
           example: https://res.cloudinary.com/funturf/image/upload/v1718000000/images/rafi.jpg
+        cover_photo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            Wide profile banner. Stored **already cropped** to the banner aspect by
+            the client, so it renders with a plain `object-cover` and no
+            focal-point maths.
+          example: https://i.ibb.co/abc123/cover.jpg
+        profile_completion:
+          $ref: '#/components/schemas/ProfileCompletion'
         bio:
           type: string
           nullable: true

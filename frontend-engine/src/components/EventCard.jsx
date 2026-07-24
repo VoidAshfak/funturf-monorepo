@@ -25,9 +25,9 @@ export default function EventCard({ event }) {
         : 0;
 
     return (
-        <Card className="group gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 will-change-transform hover:-translate-y-2 hover:z-10 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.4)] cursor-pointer">
+        <Card className="group gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 hover:-translate-y-2 hover:z-10 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.4)] cursor-pointer">
             {/* frosted green poster hero */}
-            <div className="relative h-36 overflow-hidden border-b border-primary/15 bg-primary/10 backdrop-blur-xl dark:bg-[rgba(29,185,84,0.1)]">
+            <div className="relative h-36 overflow-hidden border-b border-primary/15 bg-primary/10 dark:bg-[rgba(29,185,84,0.1)]">
                 {/* ambient green glows */}
                 <div className="pointer-events-none absolute -left-10 -top-12 h-40 w-40 rounded-full bg-primary/25 blur-3xl" />
                 <div className="pointer-events-none absolute -bottom-14 right-0 h-40 w-40 rounded-full bg-teal/20 blur-3xl" />

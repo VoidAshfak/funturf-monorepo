@@ -7,6 +7,16 @@ import jwt from "jsonwebtoken"
 import { mongoClient, pgClient } from "../../prisma.js"
 import bcrypt from "bcrypt"
 import userCache from "../../utils/cache.js";
+import { logger } from "../../../logs/logger.js";
+import {
+    USER_EDITABLE_FIELDS,
+    PLAYER_PROFILE_EDITABLE_FIELDS,
+    PUBLIC_PLAYER_SELECT,
+    PUBLIC_PLAYER_PROFILE_SELECT,
+    coerceProfileField,
+    computeProfileCompletion,
+    completionBoost,
+} from "../../utils/profileService.js";
 
 
 const generateAccessToken = (user) => {
@@ -399,6 +409,7 @@ const getUserById = asyncHandler(async (req, res) => {
             date_of_birth: true,
             gender: true,
             profile_picture_url: true,
+            cover_photo_url: true,
             bio: true,
             division: true,
             district: true,
@@ -473,12 +484,276 @@ const getUserById = asyncHandler(async (req, res) => {
         // Player reputation rating lives on the sporting profile; surface it flat too.
         rating: profile?.rating != null ? Number(profile.rating) : null,
         username: user.email.split("@")[0],
+        // How complete this profile is, scored server-side so the client never
+        // has to duplicate the checklist. Returned for every profile (not just
+        // your own) because it's derived from already-public fields; the UI only
+        // renders the nudge card on your own page.
+        profile_completion: computeProfileCompletion(user, profile),
     };
 
     return res
         .status(200)
         .json(new ApiResponse(200, "User found", userResponse));
 })
+
+
+/**
+ * GET /users/scout — find players to recruit.
+ *
+ * The search a captain actually runs: "who near me plays football, as a winger,
+ * at roughly this level?". Filters are all optional and AND together; the caller
+ * is always excluded from their own results.
+ *
+ * Query params:
+ *   q         name fragment (case-insensitive, matches first OR last name)
+ *   sport     exact value from the sports list, matched inside `sports_played`
+ *   position  exact value, matched inside `preferred_positions`
+ *   skill     skill_level_type
+ *   division  exact division
+ *   district  exact district
+ *   limit     1..50 (default 20)
+ *
+ * RANKING — profile completeness is the dominant term. Every result already
+ * satisfies the filters, so relevance is binary and what's left is "who can this
+ * captain actually evaluate and reach". A profile with no sport, position or
+ * skill is unrankable noise however close by they live. Form (rating,
+ * reliability) and proximity break the remaining ties. See `completionBoost`.
+ *
+ * PRIVACY — results use PUBLIC_PLAYER_SELECT, which carries no email or phone:
+ * an authenticated people-search that returned contact details would be a
+ * harvesting endpoint. Auth is required for the same reason — this must not be
+ * an anonymous directory of every user.
+ */
+const scoutPlayers = asyncHandler(async (req, res) => {
+    const myId = req.user.id;
+    const { q, sport, position, skill, division, district } = req.query;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+
+    // --- account-level filters -------------------------------------------
+    const where = {
+        status: "active",
+        id: { not: myId }, // you can't scout yourself
+    };
+
+    if (division) where.division = String(division);
+    if (district) where.district = String(district);
+
+    const term = typeof q === "string" ? q.trim() : "";
+    if (term) {
+        where.OR = [
+            { first_name: { contains: term, mode: "insensitive" } },
+            { last_name: { contains: term, mode: "insensitive" } },
+        ];
+    }
+
+    // --- sporting filters (live on player_profiles) ----------------------
+    // `sports_played` / `preferred_positions` are JSON arrays, so they're matched
+    // with `array_contains` rather than an equality test.
+    const profileWhere = {};
+    if (skill) profileWhere.skill_level = String(skill);
+    if (sport) profileWhere.sports_played = { array_contains: [String(sport)] };
+    if (position) profileWhere.preferred_positions = { array_contains: [String(position)] };
+
+    if (Object.keys(profileWhere).length > 0) {
+        // `some` because player_profiles is modelled to-many (a user has at most
+        // one row in practice). This also implicitly drops players with no
+        // sporting profile at all — correct, since they can't match a sport filter.
+        where.player_profiles = { some: profileWhere };
+    }
+
+    // Pull a bounded candidate pool, then rank in memory. The pool is capped so a
+    // broad search (no filters at all) can't turn into a full table scan + sort.
+    const POOL = 200;
+    const [me, candidates] = await Promise.all([
+        pgClient.users.findUnique({
+            where: { id: myId },
+            select: { division: true, district: true },
+        }),
+        pgClient.users.findMany({
+            where,
+            select: {
+                ...PUBLIC_PLAYER_SELECT,
+                // Needed by the completeness scorer even though they aren't all
+                // rendered — the score must match what the player sees on their
+                // own profile page.
+                date_of_birth: true,
+                gender: true,
+                phone: true,
+                player_profiles: { select: PUBLIC_PLAYER_PROFILE_SELECT, take: 1 },
+            },
+            orderBy: { created_at: "desc" },
+            take: POOL,
+        }),
+    ]);
+
+    const players = candidates
+        .map((row) => {
+            const { player_profiles, phone, ...user } = row;
+            const profile = player_profiles?.[0] ?? null;
+
+            const completion = computeProfileCompletion(
+                // `phone` is scored but never returned — see PRIVACY above.
+                { ...user, phone },
+                profile
+            );
+
+            // Completeness dominates; form and proximity break ties.
+            const boost = completionBoost({ ...user, phone }, profile);
+            const areaScore =
+                me?.district && user.district === me.district
+                    ? 3
+                    : me?.division && user.division === me.division
+                      ? 1
+                      : 0;
+            const ratingScore = profile?.rating != null ? Number(profile.rating) : 0;
+            const reliabilityScore =
+                profile?.reliability_score != null ? (profile.reliability_score / 100) * 2 : 0;
+
+            return {
+                ...user,
+                profile,
+                profile_completion_percent: completion.percent,
+                _score: boost + areaScore + ratingScore + reliabilityScore,
+            };
+        })
+        .sort((a, b) => b._score - a._score)
+        .slice(0, limit)
+        .map(({ _score, ...rest }) => rest); // internal score never leaves the server
+
+    logger.info(
+        `scout: user=${myId} filters=[${[
+            term && "q", sport && "sport", position && "position",
+            skill && "skill", division && "division", district && "district",
+        ].filter(Boolean).join(",")}] -> ${players.length}`
+    );
+
+    return res.status(200).json(
+        new ApiResponse(200, "Players found", { players, count: players.length })
+    );
+});
+
+
+/**
+ * PATCH /users/me — edit your OWN profile.
+ *
+ * Partial update spanning two tables: the account row (`users`) and the sporting
+ * profile (`player_profiles`, upserted so a player who never had one gets it on
+ * first save). Both writes run in a single transaction, so a profile can never
+ * end up half-saved.
+ *
+ * SECURITY — the target is always `req.user.id`, taken from the verified JWT.
+ * There is deliberately no user id in the path or body: with one, a caller could
+ * edit somebody else's profile simply by changing a uuid. Fields are ALLOWLISTED
+ * in profileService.js (identity, verification flags and server-derived
+ * reputation are not editable) and every value is validated/coerced there,
+ * including a host check on the image URLs.
+ */
+const updateMyProfile = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+
+    // Split the body across the two tables, ignoring anything not allowlisted.
+    // `hasOwnProperty` (not a truthiness check) so an explicit null — "clear this
+    // field" — is honoured rather than silently dropped.
+    const userData = {};
+    const profileData = {};
+
+    for (const field of USER_EDITABLE_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+            userData[field] = coerceProfileField(field, req.body[field]);
+        }
+    }
+    for (const field of PLAYER_PROFILE_EDITABLE_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+            profileData[field] = coerceProfileField(field, req.body[field]);
+        }
+    }
+
+    const touchesUser = Object.keys(userData).length > 0;
+    const touchesProfile = Object.keys(profileData).length > 0;
+
+    if (!touchesUser && !touchesProfile) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "No editable fields were provided",
+        });
+    }
+
+    const ops = [];
+
+    if (touchesUser) {
+        userData.updated_at = new Date();
+        ops.push(pgClient.users.update({ where: { id: userId }, data: userData }));
+    }
+
+    if (touchesProfile) {
+        // Create-or-update by hand rather than `upsert`: upsert needs a UNIQUE
+        // column to match on, and `player_profiles.user_id` is only indexed (the
+        // relation is modelled to-many even though a user has at most one row).
+        // Most players have no row until their first edit, so an update-only
+        // write would fail the very first time.
+        const existing = await pgClient.player_profiles.findFirst({
+            where: { user_id: userId },
+            select: { id: true },
+        });
+
+        ops.push(
+            existing
+                ? pgClient.player_profiles.update({
+                      where: { id: existing.id },
+                      data: { ...profileData, updated_at: new Date() },
+                  })
+                : pgClient.player_profiles.create({
+                      data: { user_id: userId, ...profileData },
+                  })
+        );
+    }
+
+    try {
+        await pgClient.$transaction(ops);
+    } catch (err) {
+        // P2002 = unique constraint. The only user-settable unique column here is
+        // `phone`, so translate it into a clear 409 instead of a raw 500.
+        if (err?.code === "P2002") {
+            throw ApiError.fromCode(ERROR_CODES.CONFLICT, {
+                message: "That phone number is already used by another account",
+            });
+        }
+        throw err;
+    }
+
+    // Cached auth lookups key on the user — drop the stale copy so the next
+    // request sees the edit (see utils/cache.js).
+    userCache.del(userId);
+
+    // Re-read through the same shape the profile page consumes, so the client can
+    // drop the response straight into its cache (fresh completion score included).
+    const [user, profileRow] = await Promise.all([
+        pgClient.users.findUnique({
+            where: { id: userId },
+            select: {
+                id: true, email: true, phone: true, first_name: true, last_name: true,
+                date_of_birth: true, gender: true, profile_picture_url: true,
+                cover_photo_url: true, bio: true, division: true, district: true,
+                user_type: true, email_verified: true, phone_verified: true,
+                created_at: true, updated_at: true,
+            },
+        }),
+        pgClient.player_profiles.findFirst({ where: { user_id: userId } }),
+    ]);
+
+    logger.info(
+        `profile updated: user=${userId} ` +
+        `fields=[${[...Object.keys(userData), ...Object.keys(profileData)].join(",")}]`
+    );
+
+    return res.status(200).json(
+        new ApiResponse(200, "Profile updated", {
+            ...user,
+            player_profile: profileRow,
+            sports: Array.isArray(profileRow?.sports_played) ? profileRow.sports_played : [],
+            profile_completion: computeProfileCompletion(user, profileRow),
+        })
+    );
+});
 
 
 // Using node-cache | (Use redis in future)
@@ -548,5 +823,7 @@ export {
     logoutUser,
     tokenRefresh,
     varifyLogin,
-    getUserById
+    getUserById,
+    updateMyProfile,
+    scoutPlayers
 }

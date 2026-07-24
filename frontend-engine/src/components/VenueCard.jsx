@@ -8,7 +8,7 @@ export function VenueCard({ className, venue }) {
 
     return (
         <Card
-            className={`group gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 will-change-transform hover:-translate-y-2 hover:z-10 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.4)] cursor-pointer ${className}`}
+            className={`group gap-0 overflow-hidden rounded-3xl p-0 transition-all duration-300 hover:-translate-y-2 hover:z-10 hover:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.4)] cursor-pointer ${className}`}
         >
             {/* Media */}
             <div className="relative h-52 w-full overflow-hidden">

@@ -4,9 +4,10 @@ import { useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useGSAP } from "@gsap/react";
-import { CalendarPlus, MapPin, Search } from "lucide-react";
+import { CalendarPlus, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import HeroSearch from "@/components/HeroSearch";
 import { gsap, heroReveal } from "@/lib/animations";
 
 // Heavy embla carousel — lazy-loaded so it doesn't block hero paint.
@@ -82,18 +83,9 @@ export default function Hero() {
                         players, made by players.
                     </p>
 
-                    {/* Search */}
-                    <div className="hero-item mt-8 flex w-full max-w-md items-center gap-2 rounded-full border border-border bg-card/60 p-1.5 pl-5 backdrop-blur-md mx-auto lg:mx-0">
-                        <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
-                        <input
-                            type="text"
-                            placeholder="Search turf grounds near you"
-                            className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-                        />
-                        <Button asChild className="shrink-0 rounded-full px-5 green-glow">
-                            <Link href="/venues">Search</Link>
-                        </Button>
-                    </div>
+                    {/* Search — live quick-search with a top-2 results dropdown that
+                        hands off to the full turfs page (see HeroSearch). */}
+                    <HeroSearch className="hero-item mt-8 mx-auto lg:mx-0" />
 
                     {/* CTAs */}
                     <div className="hero-item mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center lg:justify-start">

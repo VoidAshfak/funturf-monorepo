@@ -149,11 +149,106 @@ local `.env` keeps `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1`.
 | POST | `/login` | public | `{ email, password }` | `200` — `{ user: { ...profile, username, accessToken, refreshToken, tokenExpiresIn } }` |
 | POST | `/refresh` | public | `{ refresh_token }` | `200` — `{ accessToken, refreshToken, tokenExpiresIn }` |
 | GET | `/:user_id` | public | path `user_id` | `200` — full public profile: account fields (`gender`, `division`, `district`, `latitude`, `longitude`, verification, `created_at`, …) + `player_profile` (skill, positions, experience, foot, jersey, height/weight, play time, travel, reliability, games) + **live** `eventsJoined`, `gamesOrganized`, `friends`, flat `rating`, `sports`, `username` |
+| PATCH | `/me` | ✅ | any subset of the editable fields (below) | `200` — refreshed profile + recomputed `profile_completion` |
+| GET | `/scout` | ✅ | query `q?`, `sport?`, `position?`, `skill?`, `division?`, `district?`, `limit?` | `200` — `{ players: [...], count }`, ranked most-complete-first |
 | POST | `/media/signature` | ✅ | — | `200` — `{ signature, timestamp, cloudname, apikey }` (Cloudinary direct-upload signature) |
 
 **Errors:** `VALIDATION_ERROR` (missing fields), `USER_ALREADY_EXISTS` (register, email/phone clash),
 `INVALID_CREDENTIALS` (login — same code for unknown email and wrong password, by design),
-`USER_NOT_FOUND` (GET by id), `INVALID_TOKEN` / `MISSING_TOKEN` (protected routes).
+`USER_NOT_FOUND` (GET by id), `CONFLICT` (`PATCH /me`, phone belongs to another account),
+`INVALID_TOKEN` / `MISSING_TOKEN` (protected routes).
+
+#### Edit your own profile (`PATCH /users/me`)
+
+Partial update across **two tables** in one transaction: the account row (`users`) and the sporting
+profile (`player_profiles`, created on first save — it's `findFirst` + create/update rather than
+`upsert`, because `player_profiles.user_id` is indexed but not unique). Rate limited to 20/min.
+
+**The target is `req.user.id` from the verified JWT — `me` is a literal.** There is deliberately no
+id in the path or body: with one, a caller could edit anyone's profile by swapping a uuid.
+
+Editable, allowlisted in `backend/src/utils/profileService.js`:
+
+| Table | Fields |
+| --- | --- |
+| `users` | `first_name`, `last_name`, `phone`, `date_of_birth`, `gender`, `bio`, `division`, `district`, `profile_picture_url`, `cover_photo_url` |
+| `player_profiles` | `preferred_positions`, `sports_played`, `skill_level`, `years_of_experience`, `preferred_foot`, `jersey_number`, `height_cm`, `weight_kg`, `preferred_play_time`, `max_travel_distance_km`, `achievements` |
+
+**Never editable here:** `email`, `user_type`, `status`, `email_verified`, `phone_verified`,
+`password_hash`, `refresh_token` (identity/trust boundary — each needs its own verified flow), and
+`rating` / `total_games_played` / `total_games_organized` / `reliability_score` (server-derived
+reputation; self-editing would make it meaningless). Unlisted keys are **ignored**, not rejected —
+it's an allowlist, so adding a schema column never silently makes it user-writable.
+
+**Semantics:** an absent key leaves the field alone; explicit `null` or `""` clears it.
+`first_name`/`last_name` cannot be cleared (NOT NULL). Validation: enums matched against the Prisma
+enums exactly; integers range-clamped (`years_of_experience` 0–60, `jersey_number` 0–99, `height_cm`
+50–260, `weight_kg` 20–250, `max_travel_distance_km` 0–200); `date_of_birth` must imply an age of
+10–120; text length-capped; `preferred_positions` ≤6 and `sports_played` ≤12 entries.
+
+**Image URLs are untrusted input.** The client uploads to the image host first and PATCHes the
+resulting URL back, so a bare "any string" field would let a user point their avatar or banner at
+arbitrary third-party content — a hotlink/tracking surface on our own pages. Both image fields must
+be `https` on an allowlisted host (`i.ibb.co`, `ibb.co`, `image.ibb.co`, `res.cloudinary.com`);
+extend with the comma-separated `PROFILE_IMAGE_HOSTS` env var.
+
+Saving busts the `userCache` entry for that user, so the next authenticated request sees the edit.
+
+#### Profile completion (`profile_completion`)
+
+`GET /users/:user_id` returns a `profile_completion` object scored server-side against the weighted
+checklist in `profileService.js` — the client never recomputes it, so the checklist a player sees can
+never drift from what the API counts.
+
+```jsonc
+{
+  "percent": 65, "earned": 19, "total": 29,
+  "filled_count": 11, "total_count": 19,
+  "completed": ["profile_picture_url", "bio", "district"],
+  "missing": [{ "key": "skill_level", "label": "Skill level",
+                "hint": "Gets you matched to the right games",
+                "weight": 3, "source": "player" }]
+}
+```
+
+Weights reflect how much a field helps other people **find and pick you** — a profile photo, sports,
+skill level and positions are weight 3; a jersey number or weight is 1. `missing` carries the label
+and hint the UI renders, so the checklist is generated entirely from this payload. `source` tells the
+client which tab of the edit form holds the field. Returned for every profile (it's derived from
+already-public fields); the frontend only renders the nudge card on your own page, and hides it at
+100%.
+
+**Completeness is not cosmetic — it ranks you.** `completionBoost()` in `profileService.js` turns the
+same weighted percent into a discovery-ranking term, used by two surfaces:
+
+| Surface | Cap | Role in the score |
+| --- | --- | --- |
+| `GET /users/scout` | 10 | **Dominant.** Every result already matches the filters, so relevance is binary; completeness decides who a captain sees first. |
+| `GET /turfmates/recommendations` | 3 | **Tie-break only** — `mutual * 10` still dominates, because mutual turfmates are the stronger signal for a *social* suggestion. |
+
+This is the mechanism behind the "finish your profile" nudge: the percent a player sees on their own
+page is literally the number that moves them up these lists. Change the checklist weights and you
+change discovery ranking — they are the same numbers, deliberately.
+
+#### Scout players (`GET /users/scout`)
+
+Player search for team recruitment. All filters optional, ANDed; the caller is excluded from their
+own results. `sport` and `position` match inside the `sports_played` / `preferred_positions` JSON
+arrays via `array_contains`, so filtering on either **implicitly excludes players with no sporting
+profile** — they cannot match. Score: completeness (0–10) + district 3 / division 1 + rating (0–5) +
+`reliability_score / 100 × 2`. The internal `_score` never leaves the server;
+`profile_completion_percent` does, so the UI can badge a full profile.
+
+**Auth required, and no contact details in the response.** This endpoint lists other users: public,
+it would be an anonymous directory of the whole platform, and returning `email`/`phone` would make it
+a harvesting endpoint. `PUBLIC_PLAYER_SELECT` carries neither — a captain gets contact details only
+after a connection or an accepted invite. `phone` *is* read internally (it's a scored checklist
+field) and stripped before the response. The candidate pool is capped at 200 rows before ranking so
+an unfiltered search can't become a full scan plus sort.
+
+Consumed by the frontend's `TeamInviteDialog` "Scout players" tab, alongside the existing turfmates
+pool. The tab only queries once at least one filter is set — an unfiltered "everyone" list isn't a
+useful starting point.
 
 Notes:
 - **`GET /:user_id` is the full player profile.** It joins `player_profiles` (1:1 sporting profile)
@@ -161,6 +256,10 @@ Notes:
   `gamesOrganized` = `events` where `organizer_id` = user, `friends` = `accepted` `connections` in
   either direction. `sports` comes from `player_profile.sports_played`; the flat `rating` mirrors the
   profile's reputation rating. `player_profile` is `null` for a user who hasn't filled one in yet.
+- **`cover_photo_url`** is the wide profile banner. It's stored **already cropped** to the banner
+  aspect (4:1) by the client, so the page renders it with a plain `object-cover` — no focal-point
+  column, no positioning maths. Re-framing means re-uploading, which is the trade for the simpler
+  model. The frontend cropper is `components/ImageCropDialog.jsx` + `utils/cropImage.js`.
 - `password_hash` in the register body is the **plaintext** password; the `encryptPassword`
   middleware hashes it before the controller runs (field name is historical).
 - **No auth response ever returns credential material.** `register` does not select
@@ -333,8 +432,25 @@ address_line_1: {
 `max` (`INVALID_PLAYER_LIMITS`); money can't be negative.
 **Re-attach a booking:** send `booking_id` — a uuid attaches that booking (must be the caller's, not
 tied to another match; the match's ground/venue/date/slot are then **synced from the booking**);
-`null`/`""` detaches the current one. When the match's date/time/venue/sport changes, all approved
-participants are notified (`event_reminder`) and a live `event:roster` refresh fires.
+`null`/`""` detaches the current one. Every edit fires a live `event:roster` refresh.
+
+**Edit notifications — every change is announced.** Any field whose value actually changes produces an
+`event_reminder` notification that *names what moved* ("the organizer updated the date, start time,
+entry fee") and carries the raw column names in `data.changed` plus the tier in `data.high_impact`.
+The tier decides priority and audience:
+
+| Tier | Fields | Priority | Audience |
+|---|---|---|---|
+| **High impact** | schedule (`event_date`/`start_time`/`end_time`), `venue_id`, `ground_id`, booking attach/detach, `sport_type`, `event_type`, `entry_fee`, `total_cost`, `cost_split_type`, `min_players`, `max_players`, `skill_level_required`, `age_group`, `gender_preference`, `visibility`, `join_approval_required` | `eventPriorityByDate` — `urgent` today, `high` ≤3 days, else `medium` | approved squad **+ pending requesters** (`status: requested`) |
+| **Cosmetic** | `title`, `description`, `rules`, `what_to_bring` | `low` | approved squad |
+
+The acting organizer is excluded from their own edit. Pending requesters are included on high-impact
+changes only — a fee/time/eligibility change is exactly what decides whether they still want in, but
+copy edits shouldn't spam the request queue. Booking attach/detach reports as a single `booking`
+change: confirmed slot vs. probable time matters even when the clock doesn't move. Schedule fields
+count as changed whenever supplied (a `@db.Time` column vs. an `"HH:MM"` body string has no reliable
+diff, and over-reporting the *time* is the safe direction). Per the bell/toast policy below, high and
+urgent ones also toast; `low`/`medium` land in the bell only.
 
 **Schedule rule (booking = source of truth for time):** a match's time is **either** driven by its
 attached booking **or** a **probable** range the organizer set by hand when there's no booking.
@@ -824,6 +940,13 @@ the match is (today=`urgent`, ≤3d=`high`, else `medium`), via `broadcastToTurf
 `users.division` / `district` / `latitude` / `longitude` columns) **and** an activity fallback
 (cities of turfs from events they organized/joined). Each result carries `mutual_turfmates` +
 `has_mutual` so the UI can highlight when a turfmate is involved.
+
+Score is `mutual * 10 + areaScore + completionBoost(candidate, profile, 3)`. The completeness term is
+capped at **3**, not the default 10 used by scouting: for a *social* suggestion a mutual turfmate is
+the far stronger signal, so completeness only breaks ties between otherwise-equal candidates. The
+scoring query reads `phone`, `date_of_birth`, `gender` and the player profile purely to compute that
+term — all four are **stripped before the response**, so the recommendation DTO keeps the exact
+public shape it always had.
 
 **Errors:** `VALIDATION_ERROR`, `CANNOT_CONNECT_SELF`, `USER_NOT_FOUND`,
 `CONNECTION_ALREADY_EXISTS`, `CONNECTION_NOT_FOUND`, `UNAUTHORIZED`/`INVALID_TOKEN`.

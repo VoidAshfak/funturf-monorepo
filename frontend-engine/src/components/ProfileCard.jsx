@@ -23,6 +23,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import ConnectButton from "./ConnectButton";
 import MessageButton from "./MessageButton";
 import EmptyState from "./EmptyState";
+import EditProfileDialog from "./EditProfileDialog";
+import ProfileAvatarEditor from "./ProfileAvatarEditor";
+import ProfileCompletionCard from "./ProfileCompletionCard";
 
 function age(dob) {
     if (!dob) return null;
@@ -32,7 +35,10 @@ function age(dob) {
     return Math.floor(diff / (365.25 * 24 * 3600 * 1000));
 }
 
-export default async function ProfileCard({ userId }) {
+// `isOwner` is decided by the page from the server session. It only controls
+// which affordances render — the API independently enforces that a user can
+// only ever edit themselves (PATCH /users/me takes its target from the JWT).
+export default async function ProfileCard({ userId, isOwner = false }) {
     const result = await getUserByUserId(userId);
 
     if (!result.ok) {
@@ -131,15 +137,20 @@ export default async function ProfileCard({ userId }) {
         : [];
 
     return (
+        <>
         <div className="glass-card rounded-3xl p-6 md:p-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-start">
-                {/* avatar (overlaps banner) */}
-                <Avatar className="-mt-24 h-32 w-32 shrink-0 self-center ring-4 ring-card shadow-xl md:-mt-28 md:self-start md:h-36 md:w-36">
-                    <AvatarImage src={profile_picture_url} alt={fullName} />
-                    <AvatarFallback className="bg-gradient-to-br from-brand to-teal text-2xl font-extrabold text-primary-foreground">
-                        {initials}
-                    </AvatarFallback>
-                </Avatar>
+                {/* avatar (overlaps banner) — `relative` so the owner's camera
+                    badge can anchor to it */}
+                <div className="relative -mt-24 shrink-0 self-center md:-mt-28 md:self-start">
+                    <Avatar className="h-32 w-32 ring-4 ring-card shadow-xl md:h-36 md:w-36">
+                        <AvatarImage src={profile_picture_url} alt={fullName} />
+                        <AvatarFallback className="bg-gradient-to-br from-brand to-teal text-2xl font-extrabold text-primary-foreground">
+                            {initials}
+                        </AvatarFallback>
+                    </Avatar>
+                    {isOwner && <ProfileAvatarEditor />}
+                </div>
 
                 {/* identity */}
                 <div className="min-w-0 flex-1">
@@ -189,10 +200,21 @@ export default async function ProfileCard({ userId }) {
                             </div>
                         </div>
 
-                        {/* actions */}
+                        {/* actions — you edit your own profile; you connect to and
+                            message everyone else's */}
                         <div className="flex shrink-0 items-center justify-center gap-2">
-                            <ConnectButton userId={userId} />
-                            <MessageButton userId={userId} name={fullName} avatar={profile_picture_url} />
+                            {isOwner ? (
+                                <EditProfileDialog user={u} />
+                            ) : (
+                                <>
+                                    <ConnectButton userId={userId} />
+                                    <MessageButton
+                                        userId={userId}
+                                        name={fullName}
+                                        avatar={profile_picture_url}
+                                    />
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -297,5 +319,10 @@ export default async function ProfileCard({ userId }) {
                 )}
             </div>
         </div>
+
+        {/* "Finish your profile" nudge — own profile only, and it hides itself
+            once the profile is complete. */}
+        {isOwner && <ProfileCompletionCard user={u} />}
+        </>
     );
 }

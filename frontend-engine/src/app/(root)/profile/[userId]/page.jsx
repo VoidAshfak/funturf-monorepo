@@ -1,33 +1,36 @@
 import { Suspense } from "react";
-import Image from "next/image";
+import { getServerSession } from "next-auth";
 import { Sparkles } from "lucide-react";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getUserByUserId } from "@/utils/getData";
 import ProfileCard from "@/components/ProfileCard";
 import ProfileCardSkeleton from "@/components/ProfileCardSkeleton";
+import ProfileCover from "@/components/ProfileCover";
 import EventListWrapper from "@/components/EventListWrapper";
 
 const UserProfile = async ({ params }) => {
     const { userId } = await params;
 
+    // Is the viewer looking at their OWN profile? Decided server-side from the
+    // session, never from a query param — it's what gates every edit affordance.
+    // (The API enforces ownership independently; this only controls the UI.)
+    const session = await getServerSession(authOptions);
+    const isOwner = Boolean(session?.user?.id) && session.user.id === userId;
+
+    // The cover lives outside the Suspense boundary (the banner shouldn't pop in
+    // after the card), so it needs its own read. `getUserByUserId` is a plain
+    // fetch and Next dedupes it with the one inside ProfileCard.
+    const { data: user = {} } = await getUserByUserId(userId);
+
     return (
         <div className="pb-16">
-            {/* banner */}
-            <div className="relative h-64 w-full overflow-hidden md:h-80">
-                <Image
-                    src="/assets/images/bg3.jpg"
-                    alt="Profile banner"
-                    fill
-                    priority
-                    className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-                {/* brand tint */}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-primary/20 to-transparent mix-blend-overlay" />
-            </div>
+            {/* banner — editable in place when it's your own profile */}
+            <ProfileCover coverUrl={user?.cover_photo_url} isOwner={isOwner} />
 
             {/* profile card overlapping the banner (flow-based, robust) */}
             <div className="relative z-10 mx-auto -mt-16 max-w-5xl px-4 md:-mt-20 md:px-8">
                 <Suspense fallback={<ProfileCardSkeleton />}>
-                    <ProfileCard userId={userId} />
+                    <ProfileCard userId={userId} isOwner={isOwner} />
                 </Suspense>
             </div>
 

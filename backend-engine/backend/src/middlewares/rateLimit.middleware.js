@@ -84,6 +84,17 @@ export const teamWriteLimiter = rateLimit({
 });
 
 /**
+ * Profile self-edits. A person adjusts their own bio/photos a handful of times
+ * in a sitting, never dozens a minute — and each save re-reads the profile and
+ * busts the auth cache, so an unbounded loop is a cheap way to make us do work.
+ */
+export const profileWriteLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 60 * 1000,
+    limit: 20,
+});
+
+/**
  * Swagger UI + raw spec (`utils/swagger.js`). Anonymous by definition, so this
  * keys on IP. One page load pulls the HTML plus a handful of static assets, so
  * the limit is generous — it exists to stop the ~9k-line spec being scraped in

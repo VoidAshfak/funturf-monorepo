@@ -436,6 +436,30 @@ export const apiSlice = createApi({
                 body,
             }),
         }),
+        // Player search for team recruitment. Auth-only. Every filter is optional
+        // and they AND together; results are ranked with profile completeness as
+        // the dominant term (see `completionBoost` on the backend), so squads see
+        // players they can actually size up first.
+        // Params: { q?, sport?, position?, skill?, division?, district?, limit? }
+        scoutPlayers: builder.query({
+            query: (params) => ({ url: "users/scout", params }),
+            transformResponse: (res) => res?.data ?? { players: [], count: 0 },
+        }),
+        // Edit your OWN profile — the server takes the target user from the JWT,
+        // so there is no id to send. Accepts any subset of the editable account
+        // + player-profile fields; returns the whole refreshed profile including
+        // a recomputed `profile_completion`.
+        updateMyProfile: builder.mutation({
+            query: (body) => ({
+                url: "users/me",
+                method: "PATCH",
+                body,
+            }),
+            transformResponse: (res) => res?.data ?? {},
+            // Refresh the profile page's cached copy of this user.
+            invalidatesTags: (result) =>
+                result?.id ? [{ type: "User", id: result.id }] : [],
+        }),
 
         // ---- Turfmates (all auth-required) ----
         // Accepted turfmates as profiles: { turfmates:[...], pagination }.
@@ -1272,6 +1296,8 @@ export const {
     useGetAvailableCouponsQuery,
     useGetUserByIdQuery,
     useRegisterUserMutation,
+    useUpdateMyProfileMutation,
+    useScoutPlayersQuery,
     useGetTurfmatesQuery,
     useGetTurfmateRequestsQuery,
     useGetOutgoingRequestsQuery,
