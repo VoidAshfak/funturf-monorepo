@@ -48,7 +48,7 @@ export default function BookingVerifyCard({ booking }) {
             {/* Reference + status */}
             <div className="flex items-center justify-between">
                 <p className="text-lg font-extrabold tracking-tight text-foreground">
-                    {bookingRef(booking.id)}
+                    {bookingRef(booking)}
                 </p>
                 <div className="flex flex-col items-end gap-1">
                     <BookingStatusBadge status={booking.booking_status} />

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { isAllowedOrigin } from "./utils/corsOrigins.js";
+import { publicIdTranslation } from "./middlewares/publicId.middleware.js";
 import { logger } from "../logs/logger.js";
 
 
@@ -44,6 +45,13 @@ app.use(express.urlencoded({
 }));
 app.use(express.static("public")); // assets setup
 app.use(cookieParser()); // cookie parser setup
+
+// Public-id translation. Internal UUID primary keys are never exposed: they are
+// swapped for opaque tokens on the way out and swapped back on the way in, so
+// controllers keep working with real UUIDs. Must sit AFTER express.json (it
+// rewrites the parsed body) and BEFORE the routes (it rewrites the path that the
+// router is about to match). See middlewares/publicId.middleware.js.
+app.use(publicIdTranslation);
 
 
 // routes import

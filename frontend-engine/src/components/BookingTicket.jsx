@@ -20,7 +20,7 @@ export default function BookingTicket({ booking }) {
     const ownerName =
         [owner?.first_name, owner?.last_name].filter(Boolean).join(" ") || "Player";
     const turf = booking.grounds?.turfs;
-    const reference = bookingRef(booking.id);
+    const reference = bookingRef(booking);
     const qrData = ticketQrData(booking);
     const checkedIn = Boolean(booking.check_in_time);
 

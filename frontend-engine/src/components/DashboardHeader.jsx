@@ -23,7 +23,13 @@ const LABELS = {
     edit: "Edit",
 };
 
-const isId = (seg) => /^[0-9a-f]{8}-/.test(seg) || /^\d+$/.test(seg);
+// Identify segments that are a record id rather than a page name, so the
+// breadcrumb can skip them. Three forms: the 22-char masked public id that URLs
+// now carry, a bare UUID (older links, and anything not yet masked), and a
+// numeric id. Without the first case a deep link would render its raw token as a
+// breadcrumb label.
+const isId = (seg) =>
+    /^[A-Za-z0-9_-]{22}$/.test(seg) || /^[0-9a-f]{8}-/.test(seg) || /^\d+$/.test(seg);
 const prettify = (seg) =>
     seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const labelFor = (seg) => LABELS[seg] ?? prettify(seg);

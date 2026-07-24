@@ -24,6 +24,7 @@ import {
     slotEndTime,
     takeOverSlotClaim,
     unlockSlot,
+    withBookingRef,
 } from "../../utils/bookingService.js";
 
 // Route-level `authorizeRoles` gates who may *reach* the admin endpoints;
@@ -508,7 +509,7 @@ export const getMyBookings = asyncHandler(async (req, res) => {
             b.booking_status === "pending" && b.payment_status === "pending" ? expiryOf(b) : null,
     }));
 
-    return res.status(200).json(new ApiResponse(200, `${withHold.length} bookings`, { bookings: withHold }));
+    return res.status(200).json(new ApiResponse(200, `${withHold.length} bookings`, { bookings: withBookingRef(withHold) }));
 });
 
 // A single booking — visible to the owner or a turf admin. When an event is
@@ -532,7 +533,7 @@ export const getBookingById = asyncHandler(async (req, res) => {
 
     const event_trust = booking.event_id ? await getEventTrust(booking.event_id) : null;
 
-    return res.status(200).json(new ApiResponse(200, "Booking found", { ...booking, event_trust }));
+    return res.status(200).json(new ApiResponse(200, "Booking found", { ...withBookingRef(booking), event_trust }));
 });
 
 // Resolve a printed ticket REFERENCE (the "FT-XXXXXXXX" short code = first 8 hex
@@ -586,7 +587,7 @@ export const lookupBookingByRef = asyncHandler(async (req, res) => {
     const event_trust = booking.event_id ? await getEventTrust(booking.event_id) : null;
     logger.info(`ticket ref ${hex} resolved to booking ${booking.id} by admin=${userId}`);
 
-    return res.status(200).json(new ApiResponse(200, "Booking found", { ...booking, event_trust }));
+    return res.status(200).json(new ApiResponse(200, "Booking found", { ...withBookingRef(booking), event_trust }));
 });
 
 // Bookings a turf admin manages. super_admin sees all; a turf_admin sees bookings
@@ -625,7 +626,7 @@ export const getManageBookings = asyncHandler(async (req, res) => {
         }))
     );
 
-    return res.status(200).json(new ApiResponse(200, `${withTrust.length} bookings`, { bookings: withTrust }));
+    return res.status(200).json(new ApiResponse(200, `${withTrust.length} bookings`, { bookings: withBookingRef(withTrust) }));
 });
 
 // Turf admin verifies a paid booking -> confirmed/completed. Payment is now
@@ -664,7 +665,7 @@ export const confirmPayment = asyncHandler(async (req, res) => {
         action_url: "/bookings",
     });
 
-    return res.status(200).json(new ApiResponse(200, "Payment confirmed", updated));
+    return res.status(200).json(new ApiResponse(200, "Payment confirmed", withBookingRef(updated)));
 });
 
 // Turf admin rejects a paid claim -> reverts to an UNPAID hold (clears proof,
@@ -721,7 +722,7 @@ export const rejectPayment = asyncHandler(async (req, res) => {
         action_url: "/dashboard/bookings",
     });
 
-    return res.status(200).json(new ApiResponse(200, "Payment rejected", updated));
+    return res.status(200).json(new ApiResponse(200, "Payment rejected", withBookingRef(updated)));
 });
 
 // Finalise a cancellation: mark cancelled, clear any pending cancel request, and
@@ -932,7 +933,7 @@ export const checkInBooking = asyncHandler(async (req, res) => {
         action_url: "/bookings",
     });
 
-    return res.status(200).json(new ApiResponse(200, "Checked in", updated));
+    return res.status(200).json(new ApiResponse(200, "Checked in", withBookingRef(updated)));
 });
 
 // ---------------------------------------------------------------------------
@@ -1113,7 +1114,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
             series: [...series.values()],
             status_breakdown: statusBreakdown,
             top_grounds: topGrounds,
-            recent_bookings: recentBookings,
+            recent_bookings: withBookingRef(recentBookings),
             upcoming_bookings: upcomingBookings,
             pending_verifications_list: pendingVerifications,
         })

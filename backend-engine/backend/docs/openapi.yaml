@@ -31,6 +31,35 @@ info:
     Every JSON endpoint under `/api/v1` uses these two envelopes without
     exception. (`GET /health` sits outside `/api/v1` and returns plain text.)
 
+    ## Object ids
+
+    Every id in this API — in a path, a query string, a request body or a
+    response — is an **opaque 22-character public id**, not the database key:
+
+    ```
+    GET /api/v1/venues/ROxl8HkZND7yrL1B59ZocA
+    ```
+
+    Internally records are keyed by UUID. Those keys are masked at the API
+    boundary (`middlewares/publicId.middleware.js`) so they never reach a browser
+    URL, a `Referer` header sent to a third party, a bookmark, or an analytics
+    payload. The mapping is deterministic, so a given record always has the same
+    public id and links stay stable forever.
+
+    Rules for clients:
+
+    - **Treat ids as opaque.** Do not parse, slice, sort or derive anything from
+      them. Anything you used to compute from a UUID is now sent explicitly —
+      e.g. a booking's printable reference arrives as `Booking.ref`.
+    - **Send back exactly what you received.** No encoding or decoding is needed
+      or possible on the client.
+    - A raw UUID is still **accepted** on input for backwards compatibility, but
+      is never returned. It grants nothing extra: ownership is re-checked after
+      the id is resolved, on every endpoint.
+
+    Socket.IO payloads are masked the same way, so ids are interchangeable
+    between the REST and real-time layers.
+
     ## Authentication
 
     A `Bearer` access token in the `Authorization` header (`verifyJWT`). Tokens
@@ -708,7 +737,7 @@ paths:
                               type: object
                               description: Public-safe player card. No email, no phone.
                               properties:
-                                id: { $ref: '#/components/schemas/Uuid' }
+                                id: { $ref: '#/components/schemas/PublicId' }
                                 first_name: { type: string }
                                 last_name: { type: string }
                                 profile_picture_url: { type: string, format: uri, nullable: true }
@@ -762,7 +791,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Profile found.
@@ -858,7 +887,7 @@ paths:
               properties:
                 receiverId:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: The user to connect with.
                 message:
                   type: string
@@ -954,7 +983,7 @@ paths:
                               required: [connectionId, user]
                               properties:
                                 connectionId:
-                                  $ref: '#/components/schemas/Uuid'
+                                  $ref: '#/components/schemas/PublicId'
                                 message:
                                   type: string
                                   nullable: true
@@ -1021,7 +1050,7 @@ paths:
                               type: object
                               properties:
                                 connectionId:
-                                  $ref: '#/components/schemas/Uuid'
+                                  $ref: '#/components/schemas/PublicId'
                                 created_at:
                                   type: string
                                   format: date-time
@@ -1050,7 +1079,7 @@ paths:
               properties:
                 requestId:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: The connection id (from the pending list).
       responses:
         '200':
@@ -1104,7 +1133,7 @@ paths:
               required: [requestId]
               properties:
                 requestId:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Declined.
@@ -1140,7 +1169,7 @@ paths:
               required: [requestId]
               properties:
                 requestId:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Withdrawn.
@@ -1155,7 +1184,7 @@ paths:
                         type: object
                         properties:
                           connectionId:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -1183,7 +1212,7 @@ paths:
               properties:
                 userId:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: The turfmate to remove.
       responses:
         '200':
@@ -1199,7 +1228,7 @@ paths:
                         type: object
                         properties:
                           userId:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -1272,7 +1301,7 @@ paths:
           required: true
           description: The other user to intersect against.
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Mutual turfmates.
@@ -1375,7 +1404,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: The relationship.
@@ -1402,7 +1431,7 @@ paths:
                             enum: [outgoing, incoming]
                             example: incoming
                           connectionId:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
               example:
                 success: true
                 message: Connection status
@@ -1617,7 +1646,7 @@ paths:
                               type: object
                               properties:
                                 id:
-                                  $ref: '#/components/schemas/Uuid'
+                                  $ref: '#/components/schemas/PublicId'
                                 title:
                                   type: string
                                   example: Friday Night 7s
@@ -1831,7 +1860,7 @@ paths:
                     properties:
                       value:
                         allOf:
-                          - $ref: '#/components/schemas/Uuid'
+                          - $ref: '#/components/schemas/PublicId'
                         description: The player's user id.
                       label:
                         type: string
@@ -1852,14 +1881,14 @@ paths:
                   example: equal
                 booking_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: |
                     An existing booking of yours to run this match on. When set,
                     the schedule and venue below are ignored and derived from it.
                 team_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: |
                     Optional — organize this match under one of your teams. You must
@@ -1882,11 +1911,11 @@ paths:
                   example: '19:30'
                 venue_id:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: Required when no `booking_id`.
                 ground_id:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: Required when no `booking_id`.
             examples:
               probableTime:
@@ -2027,7 +2056,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -2049,9 +2078,9 @@ paths:
                   type: string
                   example: friendly
                 ground_id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 venue_id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 max_players:
                   type: integer
                   description: Cannot drop below the current approved squad.
@@ -2100,7 +2129,7 @@ paths:
                   example: Dark and light shirt, turf shoes.
                 booking_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: See the table above — presence signals attach/detach intent.
                 event_date:
@@ -2210,7 +2239,7 @@ paths:
               required: [event_id]
               properties:
                 event_id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Match cancelled. Returns the updated event row.
@@ -2274,7 +2303,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Match found.
@@ -2391,7 +2420,7 @@ paths:
           required: true
           description: The source match to clone.
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -2483,7 +2512,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '201':
           description: Request sent.
@@ -2549,7 +2578,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Withdrawn.
@@ -2564,7 +2593,7 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '400':
           description: Missing event id (`BAD_REQUEST`).
           content:
@@ -2594,7 +2623,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Left the match.
@@ -2609,7 +2638,7 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '400':
           description: You are not a participant (`NOT_EVENT_PARTICIPANT`).
           content:
@@ -2633,7 +2662,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: You're in.
@@ -2648,7 +2677,7 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
               example:
                 success: true
                 message: Invitation accepted — you're in!
@@ -2687,7 +2716,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Declined.
@@ -2702,7 +2731,7 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2725,7 +2754,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: The request queue, oldest first.
@@ -2746,9 +2775,9 @@ paths:
                               type: object
                               properties:
                                 id:
-                                  $ref: '#/components/schemas/Uuid'
+                                  $ref: '#/components/schemas/PublicId'
                                 user_id:
-                                  $ref: '#/components/schemas/Uuid'
+                                  $ref: '#/components/schemas/PublicId'
                                 joined_at:
                                   type: string
                                   format: date-time
@@ -2799,13 +2828,13 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: user_id
           in: path
           required: true
           description: The requester to approve.
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Approved.
@@ -2820,9 +2849,9 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           user_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2857,12 +2886,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: user_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Declined.
@@ -2877,9 +2906,9 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           user_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2909,7 +2938,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -2920,7 +2949,7 @@ paths:
               properties:
                 user_id:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: An approved participant to promote.
       responses:
         '200':
@@ -2936,9 +2965,9 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           user_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '400':
           description: |
             `user_id` missing, or it is your own id — you are already the organizer
@@ -2980,12 +3009,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: user_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Demoted.
@@ -3000,9 +3029,9 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           user_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3044,7 +3073,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: The thread.
@@ -3125,7 +3154,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -3141,7 +3170,7 @@ paths:
                   example: I'm in. Bringing two more.
                 parent_comment_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: Reply target. Must belong to this same match.
       responses:
@@ -3199,12 +3228,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: comment_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -3265,12 +3294,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: comment_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Deleted.
@@ -3285,7 +3314,7 @@ paths:
                         type: object
                         properties:
                           comment_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3314,12 +3343,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: comment_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Toggled.
@@ -3335,7 +3364,7 @@ paths:
                         required: [comment_id, liked, likes_count]
                         properties:
                           comment_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           liked:
                             type: boolean
                             description: The caller's state *after* the toggle.
@@ -3385,7 +3414,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Chat history.
@@ -3466,7 +3495,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -3487,7 +3516,7 @@ paths:
                   example: https://i.ibb.co/abc123/lineup.jpg
                 reply_to_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: Must point at a message in this same chat.
                 message_type:
@@ -3546,7 +3575,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Marked read.
@@ -3561,7 +3590,7 @@ paths:
                         type: object
                         properties:
                           event_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3582,12 +3611,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: message_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -3649,12 +3678,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: message_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Deleted.
@@ -3669,7 +3698,7 @@ paths:
                         type: object
                         properties:
                           id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -3699,12 +3728,12 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: message_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -3732,7 +3761,7 @@ paths:
                         required: [message_id, reactions]
                         properties:
                           message_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           reactions:
                             type: array
                             items:
@@ -3856,7 +3885,7 @@ paths:
                   example: Gulshan United
                 sport_id:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: From `GET /teams/sports`.
                 home_area:
                   type: string
@@ -3943,7 +3972,7 @@ paths:
         in: path
         required: true
         schema:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
     get:
       tags: [Teams]
       summary: Team detail with roster
@@ -4018,7 +4047,7 @@ paths:
                   type: string
                   nullable: true
                 sport_id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Team updated.
@@ -4077,7 +4106,7 @@ paths:
                         type: object
                         properties:
                           teamId:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4108,7 +4137,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
       responses:
@@ -4146,12 +4175,12 @@ paths:
         in: path
         required: true
         schema:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
       - name: userId
         in: path
         required: true
         schema:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
     patch:
       tags: [Teams]
       summary: Change a member's role or position
@@ -4173,7 +4202,7 @@ paths:
                   enum: [co_captain, member]
                 position_id:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   nullable: true
                   description: '`null` clears the position.'
       responses:
@@ -4285,7 +4314,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -4295,7 +4324,7 @@ paths:
               required: [newCaptainId]
               properties:
                 newCaptainId:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Captaincy transferred.
@@ -4310,9 +4339,9 @@ paths:
                         type: object
                         properties:
                           teamId:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           captain_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -4343,7 +4372,7 @@ paths:
         in: path
         required: true
         schema:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
     post:
       tags: [Team Invites]
       summary: Invite a player to the team
@@ -4365,7 +4394,7 @@ paths:
               required: [invitedUserId]
               properties:
                 invitedUserId:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 message:
                   type: string
                   nullable: true
@@ -4454,7 +4483,7 @@ paths:
                               required: [inviteId, user]
                               properties:
                                 inviteId:
-                                  $ref: '#/components/schemas/Uuid'
+                                  $ref: '#/components/schemas/PublicId'
                                 message:
                                   type: string
                                   nullable: true
@@ -4516,7 +4545,7 @@ paths:
                               required: [inviteId, team]
                               properties:
                                 inviteId:
-                                  $ref: '#/components/schemas/Uuid'
+                                  $ref: '#/components/schemas/PublicId'
                                 message:
                                   type: string
                                   nullable: true
@@ -4548,7 +4577,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: You joined the team.
@@ -4563,7 +4592,7 @@ paths:
                         type: object
                         properties:
                           team_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           role:
                             $ref: '#/components/schemas/TeamMemberRole'
                           status:
@@ -4600,7 +4629,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Invite declined.
@@ -4638,7 +4667,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Invite cancelled.
@@ -4772,7 +4801,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Their turfs.
@@ -4808,7 +4837,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Turf found.
@@ -4925,7 +4954,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -5034,7 +5063,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -5072,7 +5101,7 @@ paths:
                         required: [venue_id, my_rating, rating, rating_count]
                         properties:
                           venue_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           my_rating:
                             type: integer
                             description: What you just gave.
@@ -5363,7 +5392,7 @@ paths:
                   properties:
                     turf_id:
                       allOf:
-                        - $ref: '#/components/schemas/Uuid'
+                        - $ref: '#/components/schemas/PublicId'
                       description: '`super_admin` only — target a specific turf. Ignored for `turf_admin`.'
             example:
               name: Ground B (5-a-side)
@@ -5435,7 +5464,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -5516,7 +5545,7 @@ paths:
           required: true
           description: Ground id.
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: date
           in: query
           required: true
@@ -5594,7 +5623,7 @@ paths:
           in: query
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: slot
           in: query
           required: true
@@ -5708,7 +5737,7 @@ paths:
               required: [ground_id, booking_date, slot]
               properties:
                 ground_id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 booking_date:
                   type: string
                   format: date
@@ -5749,7 +5778,7 @@ paths:
                   example: EID10
                 event_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: Attach this reservation to a match **you organized**.
                 notes:
@@ -6135,7 +6164,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Booking found.
@@ -6181,7 +6210,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: false
         content:
@@ -6248,7 +6277,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: false
         content:
@@ -6319,7 +6348,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: false
         content:
@@ -6347,7 +6376,7 @@ paths:
                         type: object
                         properties:
                           booking_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
               examples:
                 cancelled:
                   summary: Cancelled outright
@@ -6412,7 +6441,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -6438,7 +6467,7 @@ paths:
                         type: object
                         properties:
                           booking_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
               examples:
                 accepted:
                   summary: Accepted
@@ -6507,7 +6536,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Checked in. `check_in_time` is now set.
@@ -6586,7 +6615,7 @@ paths:
           required: false
           description: '`super_admin` only — target a specific turf. Ignored for `turf_admin`.'
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Your promotions.
@@ -6663,7 +6692,7 @@ paths:
           required: false
           description: '`super_admin` only. Also accepted in the body.'
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -6720,7 +6749,7 @@ paths:
                   example: 100
                 ground_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: Must belong to your turf (`PROMO_SCOPE_FORBIDDEN` otherwise).
                 applicable_users:
@@ -6728,7 +6757,7 @@ paths:
                   nullable: true
                   description: Makes the coupon private to these users. `null`/`[]` clears the targeting.
                   items:
-                    $ref: '#/components/schemas/Uuid'
+                    $ref: '#/components/schemas/PublicId'
                 applicable_days:
                   type: array
                   nullable: true
@@ -6744,7 +6773,7 @@ paths:
                   example: active
                 turf_id:
                   allOf:
-                    - $ref: '#/components/schemas/Uuid'
+                    - $ref: '#/components/schemas/PublicId'
                   description: '`super_admin` only.'
             example:
               code: EID10
@@ -6828,7 +6857,7 @@ paths:
           required: false
           description: '`super_admin` only.'
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Analytics.
@@ -6967,7 +6996,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Promotion found.
@@ -7003,7 +7032,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -7045,13 +7074,13 @@ paths:
                   nullable: true
                 ground_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                 applicable_users:
                   type: array
                   nullable: true
                   items:
-                    $ref: '#/components/schemas/Uuid'
+                    $ref: '#/components/schemas/PublicId'
                 applicable_days:
                   type: array
                   nullable: true
@@ -7117,7 +7146,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Deleted, or deactivated if it had redemptions.
@@ -7136,7 +7165,7 @@ paths:
                           - type: object
                             properties:
                               id:
-                                $ref: '#/components/schemas/Uuid'
+                                $ref: '#/components/schemas/PublicId'
               examples:
                 deleted:
                   summary: Never redeemed — hard-deleted
@@ -7193,7 +7222,7 @@ paths:
           in: query
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: date
           in: query
           required: false
@@ -7391,7 +7420,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Marked read.
@@ -7424,7 +7453,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Deleted.
@@ -7439,7 +7468,7 @@ paths:
                         type: object
                         properties:
                           id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -7530,7 +7559,7 @@ paths:
           required: true
           description: The other participant.
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: The thread.
@@ -7605,7 +7634,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -7626,7 +7655,7 @@ paths:
                   example: null
                 reply_to_id:
                   type: string
-                  format: uuid
+                  pattern: '^[A-Za-z0-9_-]{22}$'
                   nullable: true
                   description: Must point at a message in **this same thread**.
       responses:
@@ -7675,7 +7704,7 @@ paths:
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       responses:
         '200':
           description: Marked read.
@@ -7692,7 +7721,7 @@ paths:
                         properties:
                           user_id:
                             allOf:
-                              - $ref: '#/components/schemas/Uuid'
+                              - $ref: '#/components/schemas/PublicId'
                             description: The other participant.
                           count:
                             type: integer
@@ -7722,12 +7751,12 @@ paths:
           required: true
           description: The other participant in the thread.
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
         - name: message_id
           in: path
           required: true
           schema:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
       requestBody:
         required: true
         content:
@@ -7755,7 +7784,7 @@ paths:
                         required: [message_id, reactions]
                         properties:
                           message_id:
-                            $ref: '#/components/schemas/Uuid'
+                            $ref: '#/components/schemas/PublicId'
                           reactions:
                             type: array
                             items:
@@ -8130,10 +8159,28 @@ components:
           example: true
 
     # ---- primitives ---------------------------------------------------------
-    Uuid:
+    PublicId:
       type: string
-      format: uuid
-      example: 3f1c2b7e-5a44-4d0e-9c8b-1e2a3b4c5d6e
+      pattern: '^[A-Za-z0-9_-]{22}$'
+      minLength: 22
+      maxLength: 22
+      example: ROxl8HkZND7yrL1B59ZocA
+      description: |
+        Opaque public identifier for a record — 22 URL-safe characters.
+
+        This is NOT the database primary key. Internal keys are UUIDs; the API
+        masks them at the boundary (`middlewares/publicId.middleware.js`) so that
+        they never appear in a URL, a `Referer` header, a bookmark or an
+        analytics payload. The mapping is stable: one record always yields the
+        same public id, so links and caches stay valid.
+
+        Treat it as an opaque string — do not parse it, slice it or derive
+        anything from it. Send it back exactly as received wherever the docs
+        below say an id is expected.
+
+        For backwards compatibility a raw UUID is still accepted on input, but
+        is never returned. It carries no extra privilege: every endpoint
+        re-checks ownership after resolving the id.
 
     SlotCode:
       type: string
@@ -8205,14 +8252,14 @@ components:
       required: [id, requester_id, recipient_id, status]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         requester_id:
           allOf:
-            - $ref: '#/components/schemas/Uuid'
+            - $ref: '#/components/schemas/PublicId'
           description: Who sent the request.
         recipient_id:
           allOf:
-            - $ref: '#/components/schemas/Uuid'
+            - $ref: '#/components/schemas/PublicId'
           description: Who must accept or decline it.
         status:
           $ref: '#/components/schemas/ConnectionStatus'
@@ -8242,7 +8289,7 @@ components:
       required: [id]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         first_name:
           type: string
           nullable: true
@@ -8265,7 +8312,7 @@ components:
       required: [id]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         first_name:
           type: string
           nullable: true
@@ -8337,7 +8384,7 @@ components:
       required: [id, name]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         name:
           type: string
           example: Football
@@ -8356,7 +8403,7 @@ components:
       required: [id, position_name]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         position_name:
           type: string
           example: Centre Back
@@ -8374,15 +8421,15 @@ components:
       required: [id, name, sport_id, captain_id]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         name:
           type: string
           maxLength: 100
           example: Gulshan United
         sport_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         captain_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         home_area:
           type: string
           nullable: true
@@ -8428,7 +8475,7 @@ components:
       required: [membershipId, role, status, user]
       properties:
         membershipId:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         role:
           $ref: '#/components/schemas/TeamMemberRole'
         status:
@@ -8482,13 +8529,13 @@ components:
       required: [id, team_id, invited_user_id, invited_by, status]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         team_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         invited_user_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         invited_by:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         status:
           $ref: '#/components/schemas/TeamInviteStatus'
         message:
@@ -8707,7 +8754,7 @@ components:
         - username
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         email:
           type: string
           format: email
@@ -8852,7 +8899,7 @@ components:
         - refreshToken
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         email:
           type: string
           format: email
@@ -8922,9 +8969,9 @@ components:
       required: [id, turf_id, name, hourly_rate]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         turf_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         name:
           type: string
           example: Ground A (7-a-side)
@@ -9127,10 +9174,10 @@ components:
       required: [id, name, address_line_1, grounds]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         admin_user_id:
           allOf:
-            - $ref: '#/components/schemas/Uuid'
+            - $ref: '#/components/schemas/PublicId'
           description: The owning `turf_admin`.
         name:
           type: string
@@ -9274,7 +9321,7 @@ components:
       required: [id, name]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         name:
           type: string
           example: Gulshan Sports Arena
@@ -9318,7 +9365,7 @@ components:
             type: object
             properties:
               id:
-                $ref: '#/components/schemas/Uuid'
+                $ref: '#/components/schemas/PublicId'
               name:
                 type: string
                 example: Ground A (7-a-side)
@@ -9334,7 +9381,7 @@ components:
       required: [id, name, grounds]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         name:
           type: string
           example: Gulshan Sports Arena
@@ -9344,7 +9391,7 @@ components:
             type: object
             properties:
               id:
-                $ref: '#/components/schemas/Uuid'
+                $ref: '#/components/schemas/PublicId'
               name:
                 type: string
                 example: Ground A (7-a-side)
@@ -9385,7 +9432,7 @@ components:
       required: [ground_id, date, held_slots, my_slots]
       properties:
         ground_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         date:
           type: string
           format: date-time
@@ -9458,7 +9505,7 @@ components:
               code:
                 $ref: '#/components/schemas/SlotCode'
               booking_id:
-                $ref: '#/components/schemas/Uuid'
+                $ref: '#/components/schemas/PublicId'
               booking_status:
                 $ref: '#/components/schemas/BookingStatus'
               payment_status:
@@ -9534,7 +9581,7 @@ components:
           description: The coupon that produced `discount`, if any.
           properties:
             id:
-              $ref: '#/components/schemas/Uuid'
+              $ref: '#/components/schemas/PublicId'
             code:
               type: string
               example: EID10
@@ -9547,6 +9594,7 @@ components:
       description: A slot reservation.
       required:
         - id
+        - ref
         - ground_id
         - user_id
         - booking_date
@@ -9555,16 +9603,25 @@ components:
         - payment_status
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
+        ref:
+          type: string
+          description: |
+            Short printable ticket reference, e.g. `FT-7K3QX9A1` — shown on the
+            receipt and typed into the admin's manual verification box
+            (`GET /bookings/verify-lookup?code=`). Server-computed: it is a
+            prefix of the INTERNAL booking key, which the client no longer has,
+            so never try to derive it from `id`.
+          example: FT-7K3QX9A1
         ground_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         user_id:
           allOf:
-            - $ref: '#/components/schemas/Uuid'
+            - $ref: '#/components/schemas/PublicId'
           description: The booker.
         event_id:
           type: string
-          format: uuid
+          pattern: '^[A-Za-z0-9_-]{22}$'
           nullable: true
           description: The match this reservation backs, if attached.
         booking_date:
@@ -9622,8 +9679,7 @@ components:
           description: Set once at the gate. A second check-in fails (`ALREADY_CHECKED_IN`).
           example: null
         cancelled_by:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/PublicId'
           nullable: true
         cancelled_at:
           type: string
@@ -9634,8 +9690,7 @@ components:
           nullable: true
           example: superseded_by_paid_booking
         cancellation_requested_by:
-          type: string
-          format: uuid
+          $ref: '#/components/schemas/PublicId'
           nullable: true
           description: |
             Set while a mutual cancellation is open on a confirmed booking. The
@@ -9668,7 +9723,7 @@ components:
               description: The ground and its owning turf.
               properties:
                 id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 name:
                   type: string
                   example: Ground A (7-a-side)
@@ -9676,7 +9731,7 @@ components:
                   type: object
                   properties:
                     id:
-                      $ref: '#/components/schemas/Uuid'
+                      $ref: '#/components/schemas/PublicId'
                     name:
                       type: string
                       example: Gulshan Sports Arena
@@ -9685,7 +9740,7 @@ components:
                       nullable: true
                       example: Gulshan
                     admin_user_id:
-                      $ref: '#/components/schemas/Uuid'
+                      $ref: '#/components/schemas/PublicId'
             users_bookings_user_idTousers:
               allOf:
                 - $ref: '#/components/schemas/UserSummary'
@@ -9714,7 +9769,7 @@ components:
                 before confirming payment. `null` when no event is attached.
               properties:
                 id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 title:
                   type: string
                   example: Friday Night 7s
@@ -9836,7 +9891,7 @@ components:
             type: object
             properties:
               ground_id:
-                $ref: '#/components/schemas/Uuid'
+                $ref: '#/components/schemas/PublicId'
               name:
                 type: string
                 example: Ground A (7-a-side)
@@ -9879,11 +9934,11 @@ components:
       required: [user_id, status]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         event_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         user_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         payment_status:
           type: string
           nullable: true
@@ -9935,10 +9990,10 @@ components:
         - participants
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         team_id:
           allOf:
-            - $ref: '#/components/schemas/Uuid'
+            - $ref: '#/components/schemas/PublicId'
           nullable: true
           description: |
             The organizing team, or `null` for an ordinary teamless match (still
@@ -10003,9 +10058,9 @@ components:
           enum: [public, private, turfmates_only]
           example: public
         ground_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         venue_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         status:
           $ref: '#/components/schemas/EventStatus'
         schedule_confirmed:
@@ -10019,7 +10074,7 @@ components:
           nullable: true
           properties:
             id:
-              $ref: '#/components/schemas/Uuid'
+              $ref: '#/components/schemas/PublicId'
             name:
               type: string
               example: Ground A (7-a-side)
@@ -10028,7 +10083,7 @@ components:
               nullable: true
               properties:
                 id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 name:
                   type: string
                   example: Gulshan Sports Arena
@@ -10040,7 +10095,7 @@ components:
           description: The attached reservation. `null` when the match has no booking.
           properties:
             id:
-              $ref: '#/components/schemas/Uuid'
+              $ref: '#/components/schemas/PublicId'
             booking_date:
               type: string
               format: date-time
@@ -10085,7 +10140,7 @@ components:
       required: [id, title, sport_type, min_players, max_players, current_players]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         title:
           type: string
           example: Friday Night 7s
@@ -10094,7 +10149,7 @@ components:
           nullable: true
           example: Casual 7-a-side. Bring a dark and a light shirt.
         organizer_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         users:
           allOf:
             - $ref: '#/components/schemas/UserSummary'
@@ -10126,14 +10181,14 @@ components:
           example: 11
         booking_id:
           type: string
-          format: uuid
+          pattern: '^[A-Za-z0-9_-]{22}$'
           nullable: true
           description: '`null` -> the card labels the time "Probable".'
         grounds:
           type: object
           properties:
             id:
-              $ref: '#/components/schemas/Uuid'
+              $ref: '#/components/schemas/PublicId'
             name:
               type: string
               example: Ground A (7-a-side)
@@ -10141,7 +10196,7 @@ components:
               type: object
               properties:
                 id:
-                  $ref: '#/components/schemas/Uuid'
+                  $ref: '#/components/schemas/PublicId'
                 name:
                   type: string
                   example: Gulshan Sports Arena
@@ -10155,7 +10210,7 @@ components:
             type: object
             properties:
               user_id:
-                $ref: '#/components/schemas/Uuid'
+                $ref: '#/components/schemas/PublicId'
               status:
                 $ref: '#/components/schemas/ParticipantStatus'
               users:
@@ -10187,7 +10242,7 @@ components:
       required: [id, title, distance_km]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         title:
           type: string
           example: Friday Night 7s
@@ -10214,7 +10269,7 @@ components:
           type: integer
           example: 11
         turf_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         turf_name:
           type: string
           example: Gulshan Sports Arena
@@ -10243,12 +10298,12 @@ components:
       required: [id, event_id, is_deleted, is_edited, likes_count, liked_by_me]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         event_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         parent_comment_id:
           type: string
-          format: uuid
+          pattern: '^[A-Za-z0-9_-]{22}$'
           nullable: true
           description: '`null` for a top-level comment.'
         content:
@@ -10290,7 +10345,7 @@ components:
             - $ref: '#/components/schemas/UserSummary'
         user_id:
           type: string
-          format: uuid
+          pattern: '^[A-Za-z0-9_-]{22}$'
           nullable: true
           description: '`null` when `is_deleted`.'
 
@@ -10308,7 +10363,7 @@ components:
         user_ids:
           type: array
           items:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
 
     ReplyPreview:
       type: object
@@ -10316,7 +10371,7 @@ components:
       description: Short preview of the message being replied to.
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         sender_name:
           type: string
           example: Rafi Ahmed
@@ -10334,15 +10389,15 @@ components:
       required: [id, message_type, is_edited, is_deleted, created_at, sender]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         event_id:
           type: string
-          format: uuid
+          pattern: '^[A-Za-z0-9_-]{22}$'
           nullable: true
           description: Set for a match chat message; `null` for a DM.
         recipient_id:
           type: string
-          format: uuid
+          pattern: '^[A-Za-z0-9_-]{22}$'
           nullable: true
           description: Set for a DM; absent on match chat messages.
         content:
@@ -10397,7 +10452,7 @@ components:
           example: dm
         id:
           allOf:
-            - $ref: '#/components/schemas/Uuid'
+            - $ref: '#/components/schemas/PublicId'
           description: The other user's id for a `dm`; the event id for a `match`.
         title:
           type: string
@@ -10451,9 +10506,9 @@ components:
       required: [id, user_id, type, title, message, is_read, priority, created_at]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         user_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         type:
           type: string
           enum:
@@ -10515,12 +10570,12 @@ components:
       required: [id, turf_id, code, title, discount_type, discount_value, valid_from, valid_until, status]
       properties:
         id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         turf_id:
-          $ref: '#/components/schemas/Uuid'
+          $ref: '#/components/schemas/PublicId'
         ground_id:
           type: string
-          format: uuid
+          pattern: '^[A-Za-z0-9_-]{22}$'
           nullable: true
           description: Narrows the coupon to one ground. Must belong to the caller's turf.
         code:
@@ -10582,7 +10637,7 @@ components:
             Restricts the coupon to these users. A targeted coupon is invisible to
             everyone else — private coupons never leak through `/coupons/available`.
           items:
-            $ref: '#/components/schemas/Uuid'
+            $ref: '#/components/schemas/PublicId'
           example: null
         applicable_days:
           type: array
@@ -10603,7 +10658,7 @@ components:
           description: The scoped ground, when one is set (list/detail reads only).
           properties:
             id:
-              $ref: '#/components/schemas/Uuid'
+              $ref: '#/components/schemas/PublicId'
             name:
               type: string
               example: Ground A (7-a-side)

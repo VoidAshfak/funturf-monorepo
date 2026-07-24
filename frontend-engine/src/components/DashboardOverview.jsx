@@ -434,7 +434,7 @@ function BookingList({ title, href, rows = [], empty, variant }) {
                                     </div>
                                     <div className="text-right">
                                         <p className="font-mono text-[11px] text-muted-foreground">
-                                            {bookingRef(b.id)}
+                                            {bookingRef(b)}
                                         </p>
                                         <p className="text-xs font-semibold text-foreground">
                                             {b.booking_date ? format(new Date(b.booking_date), "d MMM") : ""}

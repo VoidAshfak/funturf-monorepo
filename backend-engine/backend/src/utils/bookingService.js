@@ -423,3 +423,29 @@ export async function getEventTrust(eventId) {
     const { users, ...rest } = event;
     return { ...rest, organizer: users, approved_count };
 }
+
+/**
+ * Short, human-typable ticket handle — "FT-7K3QX9A1", the first 8 hex of the
+ * booking id.
+ *
+ * WHY THE SERVER OWNS THIS: the ref is a projection of the *internal* booking
+ * UUID, and `lookupBookingByRef` resolves it with a SQL prefix match against
+ * that same UUID. Since public ids are masked at the API boundary, the client no
+ * longer has the value this is derived from and cannot compute the ref itself —
+ * so it has to be sent. That is the right split regardless: a lookup key whose
+ * shape is dictated by a database column belongs to the server, not to a
+ * frontend helper that has to be kept in sync by hand.
+ */
+export const bookingRef = (id) =>
+    id ? `FT-${String(id).replace(/-/g, "").slice(0, 8).toUpperCase()}` : null;
+
+/**
+ * Stamp `ref` onto a booking row, or onto every row of a list. Call this on any
+ * booking that is about to be returned, so the printable ticket, the verify
+ * screen and the dashboard all get the same handle from one place.
+ */
+export const withBookingRef = (booking) => {
+    if (Array.isArray(booking)) return booking.map(withBookingRef);
+    if (!booking || typeof booking !== "object") return booking;
+    return { ...booking, ref: bookingRef(booking.id) };
+};

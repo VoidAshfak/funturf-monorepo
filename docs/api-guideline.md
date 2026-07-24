@@ -97,6 +97,103 @@ Protected routes require `Authorization: Bearer <accessToken>`. The token is iss
 `POST /users/login` and carried by the frontend NextAuth session
 (`session.user.access_token`) → RTK Query `prepareHeaders`.
 
+## Object ids (URL masking)
+
+Every id the API accepts or returns — path, query, body, response, Socket.IO payload —
+is an **opaque 22-character public id**, never the database key:
+
+```
+/venues/ROxl8HkZND7yrL1B59ZocA          not  /venues/f47ac10b-58cc-4372-a567-0e02b2c3d479
+```
+
+### Why
+
+Primary keys are `uuid_generate_v4()`, so they were never *guessable* — 122 random bits
+is not enumerable, and every route enforces ownership server-side regardless. The problem
+masking solves is exposure, not guessing: internal keys were landing in browser history,
+`Referer` headers sent to third parties, bookmarks, analytics payloads and support
+screenshots. Handing out a value that isn't the database key makes all of that harmless.
+
+**This is not an access control.** It hides the key; it does not authorize anything.
+Ownership checks (`isBookingAdmin`, the `admin_user_id` comparison in `updateVenue`, …)
+still run after the id is resolved and are what actually guard a row.
+
+### How
+
+`src/utils/publicId.js` — AES-128 over the UUID's 16 raw bytes. Exactly one block, so the
+output is 16 bytes → 22 base64url chars, *shorter* than the UUID it replaces. ECB mode is
+used deliberately: its usual weakness is that repeated plaintext blocks produce repeated
+ciphertext blocks, which needs more than one block to matter, and determinism is required
+here — one record must always map to one URL or links and caches break.
+
+Applied globally by `src/middlewares/publicId.middleware.js`, mounted in `app.js`:
+
+```
+express.json  →  publicIdTranslation  →  routes  →  errorHandler
+```
+
+| direction | what it does | how it decides |
+| --- | --- | --- |
+| **inbound** | token → UUID in the path, query and body | **key**-driven: `id`, `*_id(s)`, `*Id(s)`, `*_by` |
+| **outbound** | UUID → token in every `res.json` body | **value**-driven: anything UUID-shaped, except free-text keys (`message`, `notes`, `description`, …) |
+
+The asymmetry is intentional. Outbound is value-driven so it **fails closed** — a new
+id-bearing column is masked the day it is added, with no code change; a key-driven rule
+would have leaked the six `*_by` audit columns, which are `@db.Uuid` with no `_id` suffix.
+Inbound is key-driven because a 22-char base64url string is not rare (a password, a nonce),
+and blindly "decoding" one would corrupt the field.
+
+Path rewriting targets `req.url` rather than `req.params`, because at app level `req.params`
+is still empty — it is only populated once a route pattern matches. That is why all ~40
+routes were covered without any route file changing.
+
+> **Constraint when adding routes.** A token is any 22-character `[A-Za-z0-9_-]` string, and
+> there is no integrity check to distinguish one from a literal (see below). A **static** route
+> segment of exactly 22 URL-safe characters would be rewritten into a UUID and stop matching.
+> None exists today — the longest are the 23-char `accept|reject|cancel-turfmate-request`
+> routes, so the margin is one character. Keep static segments off that length.
+
+There is deliberately no MAC on a token. Any 16 bytes decrypt to 16 bytes, and every 16 bytes
+is a syntactically valid UUID, so a forged token resolves to an id that matches no row and the
+caller gets a clean `404` — verified. Nothing is lost by that: the id is not a capability, so a
+forgery has nothing to gain.
+
+Note the codec is **not** version-locked to UUIDv4. The schema default is `uuid_generate_v4()`,
+but most seeded rows are v5; an earlier v4-only check rejected 95 of 108 live rows.
+
+Socket.IO is masked separately (`emitToUser` / `emitToEvent` in `src/socket.js`), since
+real-time payloads never pass through `res.json`. Room keys stay internal UUIDs;
+`event:subscribe` translates the client's token before deriving the room name.
+
+### Rules for clients
+
+- **Ids are opaque.** Do not parse, slice or derive from them. Anything previously computed
+  from a UUID is now sent explicitly — a booking's printable reference arrives as
+  `Booking.ref` (`FT-7K3QX9A1`), computed server-side by `withBookingRef`, because it is a
+  prefix of the *internal* key the client no longer has.
+- **Send back exactly what you received.** No client-side encode/decode exists or is needed.
+- A raw UUID is still **accepted** on input (back-compat with printed tickets and older
+  clients) but is never returned. It grants nothing — the ownership check is unchanged.
+
+### Key management
+
+| var | notes |
+| --- | --- |
+| `PUBLIC_ID_SECRET` | Key for the codec. **Permanent** — changing it changes every public URL on the site at once. Must be byte-identical across `app1/2/3`, or a link issued by one replica is unreadable by another. |
+
+If unset it falls back to `ACCESS_TOKEN_SECRET`, which is already identical across replicas
+(JWT requires it), so an existing deploy keeps working with no action. Set `PUBLIC_ID_SECRET`
+explicitly anyway: otherwise rotating the JWT secret would silently invalidate every link
+ever issued.
+
+### Known boundary
+
+The JWT access-token payload still carries the caller's raw UUID (`{ id, email, user_type }`),
+because `verifyJWT` and the Socket.IO handshake both read it. A signed-in user can therefore
+decode their *own* internal id from their own token. That is deliberate and out of scope for
+URL masking — it is not a browser link, is not shared with third parties, and reveals only
+the holder's own id.
+
 ## CORS & environment
 
 CORS is **whitelisted**, not open. Both the REST layer (`app.js`) and Socket.IO
@@ -111,6 +208,7 @@ server-side login POST, curl, mobile) are allowed — the boundary is browser-on
 | var | example | notes |
 | --- | --- | --- |
 | `CORS_ORIGINS` | `http://localhost:3000,https://funturf-frontend.vercel.app` | Comma-separated allowed origins. Trailing slashes ignored. If unset, falls back to `localhost:3000` + the Vercel frontend. |
+| `PUBLIC_ID_SECRET` | *(32 random bytes, base64url)* | Key for the public-id codec — see [Object ids](#object-ids-url-masking). Identical on all three replicas; permanent. Falls back to `ACCESS_TOKEN_SECRET` if unset. |
 | `APP_TZ_OFFSET_MINUTES` | `360` | Minutes offset of the app's local wall-clock from UTC. Used by the event sweeper to decide when a game's naive `event_date`+`end_time` has passed. Default `360` (Bangladesh, UTC+6). |
 
 ### Background jobs
