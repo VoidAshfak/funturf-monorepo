@@ -111,6 +111,15 @@ export default function BookingDialog({ venue }) {
     // but only with payment, which supersedes the holder (backend: SLOT_HELD_UNPAID).
     const heldSlots = slotRow?.held_slots ?? [];
 
+    // Slots outside the turf's opening hours. The server derives these from the
+    // turf's hours (a slot may overrun closing by under 45 min and still count),
+    // so the rule lives in ONE place — the client only renders the verdict. Their
+    // grid boolean is already false; this is what lets us say "closed" instead of
+    // the misleading "already booked".
+    const closedSlots = slotRow?.closed_slots ?? [];
+    const hours = slotRow?.operating_hours ?? null;
+    const hoursLabel = hours?.open && hours?.close ? `${hours.open} – ${hours.close}` : null;
+
     // The caller's OWN active bookings on this ground/date, keyed by slot code.
     // Without this a user's own slot is indistinguishable from a stranger's —
     // their paid booking just looks "booked", their unpaid one just looks "held".
@@ -303,7 +312,15 @@ export default function BookingDialog({ venue }) {
                     {/* Slots */}
                     {dateStr && (
                         <div className="space-y-1.5">
-                            <Label>Slot (90 min)</Label>
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                                <Label>Slot (90 min)</Label>
+                                {/* Explains the greyed-out slots without a hover. */}
+                                {hoursLabel && (
+                                    <span className="text-xs text-muted-foreground">
+                                        Open {hoursLabel}
+                                    </span>
+                                )}
+                            </div>
                             {slotsLoading ? (
                                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Loader2 className="h-4 w-4 animate-spin" /> Loading slots…
@@ -321,6 +338,9 @@ export default function BookingDialog({ venue }) {
                                         // HELD by someone's unpaid booking stays `true` — it's still
                                         // takeable, but only with payment.
                                         const available = Boolean(slotRow[code]);
+                                        // Outside opening hours — never bookable on any date, which
+                                        // reads differently from a slot someone else took.
+                                        const closed = closedSlots.includes(code);
                                         const mine = mySlots.get(code);
                                         const held = !mine && heldSlots.includes(code);
                                         const active = slot === code;
@@ -338,13 +358,15 @@ export default function BookingDialog({ venue }) {
                                                 disabled={disabled}
                                                 onClick={() => setSlot(code)}
                                                 title={
-                                                    mine
-                                                        ? mineIsPaid
-                                                            ? "You already booked this slot (paid)"
-                                                            : "You're holding this slot with an unpaid booking"
-                                                        : held
-                                                            ? "Held by an unpaid booking — pay to take it"
-                                                            : undefined
+                                                    closed
+                                                        ? `Outside opening hours${hoursLabel ? ` (${hoursLabel})` : ""}`
+                                                        : mine
+                                                            ? mineIsPaid
+                                                                ? "You already booked this slot (paid)"
+                                                                : "You're holding this slot with an unpaid booking"
+                                                            : held
+                                                                ? "Held by an unpaid booking — pay to take it"
+                                                                : undefined
                                                 }
                                                 className={cn(
                                                     "rounded-lg border px-2 py-2 text-xs font-semibold transition-colors",
@@ -352,11 +374,14 @@ export default function BookingDialog({ venue }) {
                                                         ? "border-primary bg-primary text-primary-foreground"
                                                         : mine
                                                             ? "cursor-default border-primary/60 bg-primary/10 text-primary"
-                                                            : !available
-                                                                ? "cursor-not-allowed border-border/50 bg-muted/40 text-muted-foreground/50 line-through"
-                                                                : held
-                                                                    ? "border-amber-500/50 bg-amber-500/10 text-amber-600 hover:border-amber-500 dark:text-amber-400"
-                                                                    : "border-border bg-card text-foreground hover:border-primary/60"
+                                                            : closed
+                                                                // Closed isn't "taken" — no strike-through, just faded out.
+                                                                ? "cursor-not-allowed border-dashed border-border/50 bg-transparent text-muted-foreground/45"
+                                                                : !available
+                                                                    ? "cursor-not-allowed border-border/50 bg-muted/40 text-muted-foreground/50 line-through"
+                                                                    : held
+                                                                        ? "border-amber-500/50 bg-amber-500/10 text-amber-600 hover:border-amber-500 dark:text-amber-400"
+                                                                        : "border-border bg-card text-foreground hover:border-primary/60"
                                                 )}
                                             >
                                                 {slotRangeLabel(code)}
@@ -364,6 +389,10 @@ export default function BookingDialog({ venue }) {
                                                     <span className="mt-0.5 flex items-center justify-center gap-1 text-[10px] font-medium">
                                                         <Check className="h-3 w-3" />
                                                         {mineIsPaid ? "your booking" : "your hold"}
+                                                    </span>
+                                                ) : closed ? (
+                                                    <span className="mt-0.5 block text-[10px] font-medium opacity-80">
+                                                        closed
                                                     </span>
                                                 ) : (
                                                     held &&

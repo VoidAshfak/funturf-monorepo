@@ -37,9 +37,12 @@ export default function TurfRating({ venueId, initialRating = 0, initialCount = 
     const submit = async (value) => {
         try {
             const res = await rate({ venueId, rating: value }).unwrap();
+            // The server echoes the saved score back; fall back to the star that
+            // was clicked (the same number) so the toast can never read "undefined".
+            const saved = res?.my_rating ?? value;
             notifySuccess(
                 myRating ? "Rating updated" : "Thanks for rating!",
-                `You rated this turf ${res.my_rating}/5.`
+                `You rated this turf ${saved}/5.`
             );
         } catch (err) {
             notifyError(getApiErrorMessage(err, "Couldn't save your rating."));

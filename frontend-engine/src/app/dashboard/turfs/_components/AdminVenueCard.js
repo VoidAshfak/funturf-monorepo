@@ -113,7 +113,12 @@ export default function AdminVenueCard({ venue }) {
 
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Clock className="w-4 h-4" />
-                        <span>{operating_hours.opening_time} - {operating_hours.closing_time}</span>
+                        {/* No hours set = trades 24h; clearing them is a supported edit. */}
+                        <span>
+                            {operating_hours?.opening_time && operating_hours?.closing_time
+                                ? `${operating_hours.opening_time} - ${operating_hours.closing_time}`
+                                : "Open 24 hours"}
+                        </span>
                     </div>
                 </div>
             </div>

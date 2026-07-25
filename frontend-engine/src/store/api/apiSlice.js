@@ -103,16 +103,20 @@ export const apiSlice = createApi({
             invalidatesTags: [{ type: "Venues", id: "LIST" }],
         }),
         // Edit the turf's own identity — name / description / logo / photos /
-        // panel accent. Server-scoped to the turf's owning admin.
+        // panel accent / opening hours. Server-scoped to the turf's owning admin.
         updateVenue: builder.mutation({
             query: ({ venueId, ...body }) => ({
                 url: `venues/${venueId}`,
                 method: "PATCH",
                 body,
             }),
+            // Opening hours decide which slots are bookable, so an hours edit makes
+            // every cached availability grid wrong — drop it too, and the booking
+            // dialog refetches the new grid immediately rather than on next mount.
             invalidatesTags: (r, e, { venueId }) => [
                 { type: "Venue", id: venueId },
                 { type: "Venues", id: "LIST" },
+                { type: "Bookings", id: "SLOTS" },
             ],
         }),
         // ---- Promotions / coupons (turf manager) ----
@@ -157,6 +161,10 @@ export const apiSlice = createApi({
                 method: "POST",
                 body: { rating, ...(comment ? { comment } : {}) },
             }),
+            // Unwrap the API envelope like every read does. Without this the
+            // caller gets `{success, message, data}` and reading `my_rating` off it
+            // is `undefined` — which is what the confirmation toast printed.
+            transformResponse: (res) => res?.data ?? null,
             invalidatesTags: (r, e, { venueId }) => [
                 { type: "Venue", id: venueId },
                 { type: "Venues", id: "LIST" },

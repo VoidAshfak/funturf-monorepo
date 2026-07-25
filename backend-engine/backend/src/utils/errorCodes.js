@@ -81,6 +81,8 @@ export const ERROR_CODES = Object.freeze({
     TURF_NOT_FOUND:   { code: "TURF_NOT_FOUND",   statusCode: 404, message: "Turf not found" },
     NO_TURF_FOR_ADMIN: { code: "NO_TURF_FOR_ADMIN", statusCode: 404, message: "Create your turf first, then add grounds to it" },
     INVALID_SLOT_CODE: { code: "INVALID_SLOT_CODE", statusCode: 400, message: "Invalid slot code" },
+    SLOT_OUTSIDE_OPERATING_HOURS: { code: "SLOT_OUTSIDE_OPERATING_HOURS", statusCode: 409, message: "This slot falls outside the turf's opening hours" },
+    OPERATING_HOURS_CONFLICT: { code: "OPERATING_HOURS_CONFLICT", statusCode: 409, message: "Existing bookings fall outside the new opening hours — cancel or move them first" },
     BOOKING_NOT_FOUND: { code: "BOOKING_NOT_FOUND", statusCode: 404, message: "Booking not found" },
     NOT_BOOKING_OWNER: { code: "NOT_BOOKING_OWNER", statusCode: 403, message: "You are not the owner of this booking" },
     NOT_TURF_ADMIN:    { code: "NOT_TURF_ADMIN",    statusCode: 403, message: "Only a turf admin can perform this action" },

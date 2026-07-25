@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ImageIcon, Loader2, Palette, Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Clock, ImageIcon, Loader2, Palette, Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -36,9 +36,9 @@ const NONE = null;
 /**
  * "Edit turf" dialog for the turf's own admin.
  *
- * Covers the identity fields that used to be frozen after the create-turf
- * wizard: name, description, logo, cover photo, and the accent colour the admin
- * panel themes itself with.
+ * Covers the fields that used to be frozen after the create-turf wizard: name,
+ * description, logo, cover photo, the accent colour the admin panel themes itself
+ * with, and the opening hours that gate the bookable slot grid.
  *
  * Only CHANGED fields are sent. The API treats an absent key as "leave it alone"
  * and an explicit null as "clear it", so diffing here stops a save from quietly
@@ -58,6 +58,11 @@ export default function EditTurfDialog({ venue }) {
     const [logoUrl, setLogoUrl] = useState(null);
     const [coverUrl, setCoverUrl] = useState(null);
     const [themeColor, setThemeColor] = useState("");
+    // Opening hours drive slot availability: a 90-min slot is offered only if it
+    // starts during trading hours and overruns closing by under 45 min. Leaving
+    // both empty means the turf trades 24 hours (the whole grid stays bookable).
+    const [openingTime, setOpeningTime] = useState("");
+    const [closingTime, setClosingTime] = useState("");
 
     // ---- image picking ----------------------------------------------------
     const [target, setTarget] = useState(NONE); // "logo" | "cover"
@@ -75,6 +80,8 @@ export default function EditTurfDialog({ venue }) {
         setLogoUrl(venue?.logo_url ?? null);
         setCoverUrl(venue?.images?.[0] ?? null);
         setThemeColor(venue?.theme_color ?? "");
+        setOpeningTime(venue?.operating_hours?.opening_time ?? "");
+        setClosingTime(venue?.operating_hours?.closing_time ?? "");
     }, [open, venue]);
 
     // Object URLs leak unless handed back to the browser.
@@ -144,6 +151,17 @@ export default function EditTurfDialog({ venue }) {
             payload.theme_color = normalized;
         }
 
+        // Send hours only when they actually moved — an unchanged schedule must not
+        // trigger the server's booking-conflict scan on every unrelated save.
+        const currentOpen = venue?.operating_hours?.opening_time ?? "";
+        const currentClose = venue?.operating_hours?.closing_time ?? "";
+        if (openingTime !== currentOpen || closingTime !== currentClose) {
+            payload.operating_hours =
+                openingTime && closingTime
+                    ? { opening_time: openingTime, closing_time: closingTime }
+                    : null; // both cleared -> trades 24 hours
+        }
+
         return payload;
     };
 
@@ -159,6 +177,13 @@ export default function EditTurfDialog({ venue }) {
         // that's the explicit "back to default" case.
         if (themeColor && !normalizeAccent(themeColor)) {
             notifyError("That colour isn't valid. Use a hex value like #1db954.");
+            return;
+        }
+
+        // Half a schedule isn't a schedule — the API rejects it, so say why here
+        // rather than sending a save that can only fail.
+        if (Boolean(openingTime) !== Boolean(closingTime)) {
+            notifyError("Set both an opening and a closing time, or clear both to stay open 24 hours.");
             return;
         }
 
@@ -195,7 +220,7 @@ export default function EditTurfDialog({ venue }) {
                     <DialogTitle>Edit turf</DialogTitle>
                     <DialogDescription>
                         Your name, logo and colour show across the admin panel and on your
-                        public turf page.
+                        public turf page. Opening hours decide which slots players can book.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -330,6 +355,49 @@ export default function EditTurfDialog({ venue }) {
                             className="hidden"
                             aria-label="Upload a turf cover photo"
                         />
+                    </div>
+
+                    {/* ---- opening hours ---- */}
+                    <div className="space-y-2">
+                        <Label className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5 text-primary" /> Opening hours
+                        </Label>
+                        <div className="flex items-center gap-2">
+                            <Input
+                                type="time"
+                                value={openingTime}
+                                onChange={(e) => setOpeningTime(e.target.value)}
+                                aria-label="Opening time"
+                            />
+                            <span className="shrink-0 text-sm text-muted-foreground">to</span>
+                            <Input
+                                type="time"
+                                value={closingTime}
+                                onChange={(e) => setClosingTime(e.target.value)}
+                                aria-label="Closing time"
+                            />
+                            {(openingTime || closingTime) && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="shrink-0 gap-1.5"
+                                    onClick={() => {
+                                        setOpeningTime("");
+                                        setClosingTime("");
+                                    }}
+                                >
+                                    <RotateCcw className="h-3.5 w-3.5" /> 24h
+                                </Button>
+                            )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Slots outside these hours stop being bookable straight away. A
+                            90-minute slot is still offered if it runs less than 45 minutes past
+                            closing — so closing at 23:30 keeps the 22:30 slot, closing at 23:00
+                            drops it. Set a closing time earlier than the opening time for
+                            overnight hours. Leave both empty to stay open 24 hours.
+                        </p>
                     </div>
 
                     {/* ---- panel accent ---- */}

@@ -521,14 +521,15 @@ Notes:
 | POST | `/create-venue` | **turf_admin / super_admin** | venue payload incl. `grounds[]` (see `frontend-engine/src/utils/constants.js`) | `201` — created venue DTO |
 | POST | `/create-ground` | **turf_admin / super_admin** | single ground payload (name + ≥1 `sport_type` + `hourly_rate` required) | `201` — created ground |
 | PATCH | `/grounds/:ground_id` | **turf_admin / super_admin** | partial ground fields (incl. `status`) | `200` — updated ground (scoped to the ground's owning turf admin) |
-| PATCH | `/:venue_id` | **turf_admin / super_admin** | partial turf identity — `name`, `description`, `logo_url`, `images[]`, `theme_color` | `200` — updated venue DTO (scoped to the turf's own admin) |
+| PATCH | `/:venue_id` | **turf_admin / super_admin** | partial turf identity — `name`, `description`, `logo_url`, `images[]`, `theme_color`, `operating_hours` | `200` — updated venue DTO (scoped to the turf's own admin) |
 
-#### Turf branding (`PATCH /venues/:venue_id`)
+#### Turf branding & hours (`PATCH /venues/:venue_id`)
 
-Lets a turf owner rename their turf and change its imagery after onboarding — before this,
-everything set in the create-turf wizard was frozen.
+Lets a turf owner rename their turf, change its imagery, and adjust its opening hours after
+onboarding — before this, everything set in the create-turf wizard was frozen.
 
-**Allowlist.** Only `name`, `description`, `logo_url`, `images`, `theme_color` are writable.
+**Allowlist.** Only `name`, `description`, `logo_url`, `images`, `theme_color`, `operating_hours`
+are writable.
 Adding a column to `turfs` never makes it client-writable by accident. Explicitly **not** editable:
 
 | field | why |
@@ -551,6 +552,14 @@ allowlisted host (`backend/src/utils/imageUrl.js`, extensible via `PROFILE_IMAGE
 validator the profile write path uses. Without it a turf could point the panel logo at any address on
 the internet, making our pages a hotlink/tracking surface for content we never vetted.
 Upload via `POST /api/upload` first, PATCH the returned URL.
+
+**`operating_hours`** takes `{opening_time, closing_time}` (the DTO shape) or `{open, close}`, both
+`"HH:MM"`; `null` / both-empty means the turf trades 24 hours. Half a schedule is a
+`VALIDATION_ERROR`. This is the single input that decides which 90-minute slots are bookable — see
+[Opening hours gate the grid](#opening-hours-gate-the-grid). The save is **refused** with
+`OPERATING_HOURS_CONFLICT` (409) if an active upcoming booking would fall outside the new hours; the
+`errors` array names them (`{date, slot, ref}`). On success every affected ground's cached hours are
+dropped, so availability reflects the change on the very next read.
 
 **`theme_color`** must be a literal `#RRGGBB` triple. It is written into a CSS custom property in the
 admin panel, so anything looser (named colours, `rgb()`, shorthand) is a style-injection vector and is
@@ -1035,6 +1044,50 @@ seeding step. Rows are created lazily, only to *close* a slot (paid-lock). `GET 
 returns a virtual all-open grid when no row exists; it never 404s. (`getSlotGrid` / `lockSlot` /
 `unlockSlot` in `utils/bookingService.js` are the only way slot state is read or written.)
 
+#### Opening hours gate the grid
+
+The 16 codes are the *maximum* grid. Which of them a turf actually sells is derived from
+`turfs.operating_hours` (`{open, close}`, `"HH:MM"`) — **never stored**, so editing the hours changes
+every future date's availability on the next read, with no backfill. `utils/operatingHours.js` owns
+the rule; `getSlotGrid` applies it.
+
+A slot is sold when **both** hold, measured in minutes from opening:
+1. it **starts** during trading hours;
+2. it overruns closing by **less than 45 minutes** (`CLOSING_GRACE_MINUTES`) — half a slot. A ground
+   closing at 23:30 still sells its 22:30 slot; closing at 23:00 does not.
+
+Rule (2) subsumes "don't sell a slot that starts 10 minutes before we shut" — that slot overruns by
+80 minutes and fails the same test.
+
+| `operating_hours` | bookable codes |
+| --- | --- |
+| `null` / `open == close` | all 16 (**24h** — the backward-compatible reading for turfs onboarded before hours existed) |
+| `06:00 → 23:00` | `t0600`…`t2100` (`t2230` overruns by 60) |
+| `06:00 → 23:30` | `t0600`…`t2230` (`t2230` overruns by 30) |
+| `18:00 → 02:00` (overnight) | `t1800`, `t1930`, `t2100`, `t2230`, `t0000` |
+
+Overnight hours (`close < open`) need no special case: the window is stored as an offset+length, so
+it simply wraps midnight.
+
+`GET /available-slots` returns **`closed_slots: string[]`** and **`operating_hours`** alongside the
+booleans. Out-of-hours codes are *also* flipped to `false`, so existing `if (!grid[code])` checks keep
+working — `closed_slots` only exists so the UI can say "closed" instead of "already booked".
+
+Enforcement is **not** cosmetic: `POST /create` and `GET /quote` reject an out-of-hours code with
+`SLOT_OUTSIDE_OPERATING_HOURS` (409), since both are directly callable.
+
+Hours are read on every availability call and change roughly never, so they're cached per ground
+(`ophrs:<ground_id>`, 10 min, on the shared `utils/cache.js` node-cache) and the closed-code set is
+memoised per distinct hours pair. `PATCH /venues/:venue_id` busts every affected ground key on save,
+so a change is visible immediately rather than after the TTL. `POST /bookings/create` already loads
+the turf row, so it costs **zero** extra queries there.
+
+**Editing hours (`PATCH /venues/:venue_id`, field `operating_hours`)** is refused with
+`OPERATING_HOURS_CONFLICT` (409) when an **active** booking from today forward uses a code the new
+hours would close — the `errors` array lists `{date, slot, ref}`. A customer must never hold a ticket
+for a time the gate is locked; the owner cancels or moves those bookings, then retries. Send
+`{opening_time, closing_time}` (the DTO shape) or `{open, close}`; `null` / both-empty means 24h.
+
 **Booking states** (reusing existing enums):
 
 | meaning | `booking_status` | `payment_status` | locks slot? |
@@ -1154,6 +1207,7 @@ verification — surfaced as an action item, never counted as earned.
 `npm run prisma:generate:pg` from `backend-engine/backend/`.
 
 **Errors:** `VALIDATION_ERROR`, `INVALID_SLOT_CODE`, `SLOT_UNAVAILABLE`,
+`SLOT_OUTSIDE_OPERATING_HOURS`,
 `SLOT_HELD_UNPAID`, `TURF_NOT_VERIFIED`, `GROUND_NOT_AVAILABLE`, `GROUND_NOT_FOUND`,
 `PAYMENT_PROOF_REQUIRED`, `EVENT_NOT_FOUND`, `BOOKING_NOT_FOUND`, `NOT_BOOKING_OWNER`,
 `NOT_TURF_ADMIN`, `BOOKING_NOT_PAID_CLAIM`, `BOOKING_ALREADY_CANCELLED`,

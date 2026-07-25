@@ -4924,13 +4924,13 @@ paths:
                 data: null
     patch:
       tags: [Venues]
-      summary: Edit a turf's identity
+      summary: Edit a turf's identity and opening hours
       operationId: updateVenue
       security:
         - bearerAuth: []
       description: |
-        Update the turf's own branding — name, description, logo, photos, and the
-        accent colour its admin panel themes itself with.
+        Update the turf's own branding — name, description, logo, photos, the
+        accent colour its admin panel themes itself with — and its opening hours.
 
         **Ownership.** `turf_admin` or `super_admin` only, and a `turf_admin` may
         only edit the turf they own — the role gate alone is not sufficient, since
@@ -4949,6 +4949,20 @@ paths:
         allowed image host** — upload through `POST /api/upload` first and send
         back the resulting URL. `theme_color` must be a literal `#RRGGBB` triple;
         it is written into a CSS custom property, so nothing else is accepted.
+
+        **`operating_hours` decides which slots are bookable.** A 90-minute slot
+        is sold when it starts during trading hours and overruns closing by under
+        45 minutes — closing 23:30 keeps `t2230`, closing 23:00 drops it. Set both
+        times or neither (`null` / both empty = trades 24 hours); half a schedule
+        is a `VALIDATION_ERROR`. `close` earlier than `open` means overnight hours.
+
+        The save is **refused** with `OPERATING_HOURS_CONFLICT` when an active
+        booking from today forward uses a slot the new hours would close — the
+        `errors` array lists them as `{date, slot, ref}`, so the owner can cancel
+        or move those bookings and retry. Nothing is written in that case.
+
+        On success the change is effective **immediately**: availability is derived
+        from these hours on every read, and the per-ground cache is dropped here.
       parameters:
         - name: venue_id
           in: path
@@ -4989,10 +5003,28 @@ paths:
                   pattern: '^#[0-9a-fA-F]{6}$'
                   nullable: true
                   description: Admin-panel accent. `null` restores the default FunTurf green.
+                operating_hours:
+                  type: object
+                  nullable: true
+                  description: |
+                    Trading window. `null` (or both times empty) = open 24 hours.
+                    Accepts the DTO shape below or the stored `{open, close}` form.
+                  properties:
+                    opening_time:
+                      type: string
+                      pattern: '^\d{1,2}:\d{2}$'
+                      example: '06:00'
+                    closing_time:
+                      type: string
+                      pattern: '^\d{1,2}:\d{2}$'
+                      example: '23:30'
             example:
               name: Gulshan Sports Arena
               logo_url: https://i.ibb.co/abc123/gulshan-arena-logo.png
               theme_color: '#1e6fd9'
+              operating_hours:
+                opening_time: '06:00'
+                closing_time: '23:30'
       responses:
         '200':
           description: Turf updated. Returns the full turf DTO.
@@ -5042,6 +5074,27 @@ paths:
                 code: TURF_NOT_FOUND
                 message: Turf not found
                 errors: []
+                data: null
+        '409':
+          description: |
+            The new opening hours would strand bookings that are already sold
+            (`OPERATING_HOURS_CONFLICT`). Nothing was written — cancel or move the
+            listed bookings, then retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: OPERATING_HOURS_CONFLICT
+                message: 2 upcoming bookings fall outside 06:00 – 22:00. Cancel or move them first.
+                errors:
+                  - date: '2026-07-28'
+                    slot: t2230
+                    ref: FT-7K3QX9A1
+                  - date: '2026-08-02'
+                    slot: t2230
+                    ref: FT-B12C4D9E
                 data: null
         '429':
           $ref: '#/components/responses/RateLimited'
@@ -5539,6 +5592,15 @@ paths:
         Sending a token also populates `my_slots`, so a user's own booking isn't
         indistinguishable from a stranger's — and keys the rate limiter on the user
         rather than a shared IP.
+
+        `closed_slots` are the codes outside the turf's `operating_hours`. Their
+        boolean is already `false`, so a plain availability check needs nothing
+        extra — the list exists so the UI can say "closed" instead of the
+        misleading "already booked". A 90-minute slot is offered when it starts
+        during trading hours and overruns closing by **under 45 minutes**: a turf
+        closing 23:30 keeps `t2230`, one closing 23:00 does not. `operating_hours`
+        is `null` for turfs that trade 24 hours. Nothing here is stored — edit the
+        hours (`PATCH /venues/{venue_id}`) and the next read reflects it.
       parameters:
         - name: ground
           in: query
@@ -5572,10 +5634,10 @@ paths:
                 data:
                   ground_id: 2z9lqMnkUULcaQwPtleYKg
                   date: '2026-07-20T00:00:00.000Z'
-                  t0000: true
-                  t0130: true
-                  t0300: true
-                  t0430: true
+                  t0000: false
+                  t0130: false
+                  t0300: false
+                  t0430: false
                   t0600: true
                   t0730: true
                   t0900: true
@@ -5587,7 +5649,11 @@ paths:
                   t1800: false
                   t1930: true
                   t2100: true
-                  t2230: true
+                  t2230: false
+                  closed_slots: [t0000, t0130, t0300, t0430, t2230]
+                  operating_hours:
+                    open: '06:00'
+                    close: '23:00'
                   held_slots: [t1930]
                   my_slots:
                     - code: t1930
@@ -5690,7 +5756,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: The slot is not bookable (`SLOT_UNAVAILABLE`).
+          description: |
+            The slot is not bookable — already taken (`SLOT_UNAVAILABLE`) or
+            outside the turf's opening hours (`SLOT_OUTSIDE_OPERATING_HOURS`).
           content:
             application/json:
               schema:
@@ -5878,7 +5946,8 @@ paths:
           description: |
             The slot is taken or you lost the race (`SLOT_UNAVAILABLE`), it's held
             by another unpaid user (`SLOT_HELD_UNPAID`), you already booked it
-            (`ALREADY_BOOKED_SLOT`), the ground is unavailable
+            (`ALREADY_BOOKED_SLOT`), it falls outside the turf's opening hours
+            (`SLOT_OUTSIDE_OPERATING_HOURS`), the ground is unavailable
             (`GROUND_NOT_AVAILABLE`), or the transaction id is reused
             (`DUPLICATE_TRANSACTION`).
           content:
@@ -8106,6 +8175,8 @@ components:
         - GROUND_NOT_AVAILABLE
         - TURF_ALREADY_EXISTS
         - INVALID_SLOT_CODE
+        - SLOT_OUTSIDE_OPERATING_HOURS
+        - OPERATING_HOURS_CONFLICT
         - BOOKING_NOT_FOUND
         - NOT_BOOKING_OWNER
         - NOT_TURF_ADMIN
@@ -9432,7 +9503,10 @@ components:
         A `true` boolean does **not** mean nothing is there — an unpaid hold does
         not lock a slot. Cross-reference `held_slots` to render
         "held — book with payment to take it".
-      required: [ground_id, date, held_slots, my_slots]
+
+        A `false` boolean has two possible causes: the slot is taken/disabled, or
+        it sits outside the turf's opening hours. `closed_slots` separates them.
+      required: [ground_id, date, held_slots, my_slots, closed_slots]
       properties:
         ground_id:
           $ref: '#/components/schemas/PublicId'
@@ -9497,6 +9571,31 @@ components:
           items:
             $ref: '#/components/schemas/SlotCode'
           example: [t1930]
+        closed_slots:
+          type: array
+          description: |
+            Slots outside the turf's opening hours — never bookable on any date
+            while these hours stand (`SLOT_OUTSIDE_OPERATING_HOURS` on create /
+            quote). Their grid boolean is already `false`; this list is what lets
+            the UI label them "closed" rather than "already booked". Empty when the
+            turf trades 24 hours.
+
+            Derived, never stored: a slot qualifies when it starts during trading
+            hours and overruns closing by under 45 minutes.
+          items:
+            $ref: '#/components/schemas/SlotCode'
+          example: [t0000, t0130, t0300, t0430, t2230]
+        operating_hours:
+          type: object
+          nullable: true
+          description: The turf's trading window. `null` means open 24 hours.
+          properties:
+            open:
+              type: string
+              example: '06:00'
+            close:
+              type: string
+              example: '23:00'
         my_slots:
           type: array
           description: |

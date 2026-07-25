@@ -1,19 +1,17 @@
 import { pgClient } from "../prisma.js";
 import { logger } from "../../logs/logger.js";
 import { parseSlotCodeToTime } from "./timeAndDateFormatting.js";
+import { SLOT_CODES, isValidSlotCode, slotEndTime } from "./slotGrid.js";
+import { closedSlotCodes, getGroundOperatingHours } from "./operatingHours.js";
 
 /**
  * Booking domain helpers — centralised so the controller stays thin and pricing
  * is computed the SAME way for both the quote endpoint and real bookings (DRY).
  */
 
-// The 90-minute discrete slot grid (matches the boolean columns on `slots`).
-export const SLOT_CODES = Object.freeze([
-    "t0000", "t0130", "t0300", "t0430", "t0600", "t0730", "t0900", "t1030",
-    "t1200", "t1330", "t1500", "t1630", "t1800", "t1930", "t2100", "t2230",
-]);
-
-const SLOT_MINUTES = 90;
+// The grid itself lives in slotGrid.js (shared with the operating-hours gate).
+// Re-exported here so booking callers keep one import.
+export { SLOT_CODES, isValidSlotCode, slotEndTime };
 
 // ---------------------------------------------------------------------------
 // Anti-spam policy
@@ -45,31 +43,52 @@ export const PAID_STATES = Object.freeze(["partial", "completed"]);
 /** Booking states that still occupy a slot. */
 export const ACTIVE_STATES = Object.freeze(["pending", "confirmed"]);
 
-/** Is `code` a valid slot key on the grid? */
-export const isValidSlotCode = (code) => SLOT_CODES.includes(code);
-
 /**
- * Read the slot grid for a ground on a date.
+ * Read the slot grid for a ground on a date, already masked by opening hours.
  *
- * A `slots` row is an EXCEPTIONS record, not a precondition for booking: every
- * boolean column defaults to `true`, so "no row" means "the whole day is open".
- * Rows are only ever born when something needs to CLOSE a slot (an admin
- * disabling it, or a paid booking locking it) — see `lockSlot`/`unlockSlot`.
+ * Two independent things close a slot, and they are deliberately layered here so
+ * no caller can forget one:
  *
- * Returning a virtual all-open grid here is what makes a freshly-created ground
- * bookable without any seeding step.
+ *  1. **Occupancy** — the `slots` row. It is an EXCEPTIONS record, not a
+ *     precondition for booking: every boolean column defaults to `true`, so "no
+ *     row" means "the whole day is open". Rows are only ever born when something
+ *     needs to CLOSE a slot (an admin disabling it, or a paid booking locking
+ *     it) — see `lockSlot`/`unlockSlot`. Returning a virtual all-open grid is
+ *     what makes a freshly-created ground bookable with no seeding step.
  *
- * @returns {Promise<Object>} a slots-shaped row (persisted or virtual)
+ *  2. **Trading hours** — the turf's `operating_hours`. Derived, never stored,
+ *     so editing the hours changes every future date's grid on the next read.
+ *
+ * @param {string} groundId
+ * @param {string|Date} date
+ * @param {{open?: string, close?: string}|null} [hours] pre-loaded hours; pass
+ *        them when the caller already has the turf row to skip the lookup.
+ * @returns {Promise<Object>} a slots-shaped row with `closed_slots`/`operating_hours`
  */
-export async function getSlotGrid(groundId, date) {
-    const row = await pgClient.slots.findUnique({
-        where: { ground_id_date: { ground_id: groundId, date: new Date(date) } },
-    });
-    if (row) return row;
+export async function getSlotGrid(groundId, date, hours) {
+    const [row, operating_hours] = await Promise.all([
+        pgClient.slots.findUnique({
+            where: { ground_id_date: { ground_id: groundId, date: new Date(date) } },
+        }),
+        hours !== undefined ? Promise.resolve(hours) : getGroundOperatingHours(groundId),
+    ]);
 
-    // Virtual default — NOT written to the DB.
-    const open = Object.fromEntries(SLOT_CODES.map((code) => [code, true]));
-    return { ground_id: groundId, date: new Date(date), ...open };
+    // Virtual default when there's no exceptions row — NOT written to the DB.
+    const grid = row ?? {
+        ground_id: groundId,
+        date: new Date(date),
+        ...Object.fromEntries(SLOT_CODES.map((code) => [code, true])),
+    };
+
+    // Out-of-hours slots read as unavailable exactly like a booked one, so every
+    // existing `if (!grid[code])` check keeps working unchanged. `closed_slots`
+    // rides along so the UI can say "closed" instead of "already booked".
+    const closed = closedSlotCodes(operating_hours);
+    if (closed.size > 0) {
+        for (const code of closed) grid[code] = false;
+    }
+
+    return { ...grid, closed_slots: [...closed], operating_hours: operating_hours ?? null };
 }
 
 /** Close a slot (paid-lock / admin-disable). Creates the exceptions row on demand. */
@@ -226,16 +245,6 @@ export function countActiveUnpaidHoldsForTurf(userId, turfId) {
             grounds: { turf_id: turfId },
         },
     });
-}
-
-/** "18:00:00" + 90min -> "19:30:00" (end time of a slot, for display/storage). */
-export function slotEndTime(slotCode) {
-    const hh = parseInt(slotCode.slice(1, 3), 10);
-    const mm = parseInt(slotCode.slice(3, 5), 10);
-    const total = hh * 60 + mm + SLOT_MINUTES;
-    const eh = Math.floor(total / 60) % 24;
-    const em = total % 60;
-    return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}:00`;
 }
 
 /**

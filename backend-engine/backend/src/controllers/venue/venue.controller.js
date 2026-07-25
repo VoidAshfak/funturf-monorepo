@@ -6,6 +6,13 @@ import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { VenueSerializer } from "../../utils/dataSerializer.js"
 import { coerceHexColor, coerceImageUrl, coerceImageUrlArray } from "../../utils/imageUrl.js";
 import { logger } from "../../../logs/logger.js";
+import {
+    closedSlotCodes,
+    formatHours,
+    invalidateGroundHoursForTurf,
+    minutesFromHHMM,
+} from "../../utils/operatingHours.js";
+import { ACTIVE_STATES, bookingRef } from "../../utils/bookingService.js";
 
 
 // const getVenues = asyncHandler(async (req, res) => {
@@ -479,13 +486,10 @@ const createVenue = asyncHandler(async (req, res) => {
             verified: false,
             rating: Number.isFinite(Number(rating)) ? Number(rating) : 0,
             total_bookings: 0,
-            // operating_hours is optional now — only build the JSON when provided.
-            operating_hours: operating_hours
-                ? {
-                    open: operating_hours.opening_time,
-                    close: operating_hours.closing_time,
-                }
-                : null,
+            // operating_hours is optional — null means the turf trades 24 hours.
+            // Validated + canonicalised through the SAME helper the edit path uses,
+            // so a turf can never be created with hours the slot gate can't parse.
+            operating_hours: coerceOperatingHours(operating_hours),
             images,
         };
 
@@ -710,7 +714,92 @@ const updateGround = asyncHandler(async (req, res) => {
 // never silently become client-writable. Notably absent — `slug` (see below),
 // `verified`/`status` (platform decisions, not the owner's), `admin_user_id`,
 // `rating`, `total_bookings` (all derived).
-const TURF_EDITABLE_FIELDS = ["name", "description", "logo_url", "images", "theme_color"];
+const TURF_EDITABLE_FIELDS = [
+    "name",
+    "description",
+    "logo_url",
+    "images",
+    "theme_color",
+    "operating_hours",
+];
+
+/**
+ * Normalise an `{opening_time, closing_time}` payload into the stored
+ * `{open, close}` shape, rejecting anything that isn't a real 24h clock time.
+ *
+ * Both times must be present or both absent — half a schedule is not a schedule.
+ * Clearing them (null / "" / both empty) means "open 24 hours", which is also the
+ * reading for turfs onboarded before hours existed.
+ *
+ * @returns {{open: string, close: string}|null} null == 24h open
+ */
+const coerceOperatingHours = (raw) => {
+    if (raw === null || raw === undefined || raw === "") return null;
+    if (typeof raw !== "object") {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "operating_hours must be an object with opening_time and closing_time",
+        });
+    }
+
+    // Accept the API's own DTO shape (opening_time/closing_time) as well as the
+    // stored column shape (open/close), so a round-tripped GET can be PATCHed back.
+    const open = String(raw.opening_time ?? raw.open ?? "").trim();
+    const close = String(raw.closing_time ?? raw.close ?? "").trim();
+    if (!open && !close) return null;
+
+    if (!open || !close) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "Set both an opening and a closing time, or clear both to trade 24 hours",
+        });
+    }
+    if (minutesFromHHMM(open) === null || minutesFromHHMM(close) === null) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "Opening and closing times must look like \"HH:MM\" (e.g. 06:00, 23:30)",
+        });
+    }
+
+    // Store the canonical HH:MM form — the slot gate parses these on every read.
+    const pad = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    return { open: pad(minutesFromHHMM(open)), close: pad(minutesFromHHMM(close)) };
+};
+
+/**
+ * Would these new hours strand bookings that are already sold?
+ *
+ * Shortening the trading day can close a slot somebody has already paid for. We
+ * refuse rather than silently leave a customer holding a ticket for a time the
+ * gate is locked — the owner has to cancel or move those bookings first.
+ *
+ * The scan covers every ACTIVE booking from today forward (not just tomorrow):
+ * bookings run out to `advance_booking_days`, so a nearer horizon would miss them.
+ *
+ * @returns {Promise<Array<{date: string, slot: string, ref: string}>>} conflicts
+ */
+const findHoursConflicts = async (turfId, newHours) => {
+    const closed = closedSlotCodes(newHours);
+    if (closed.size === 0) return []; // 24h — nothing can fall outside
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const upcoming = await pgClient.bookings.findMany({
+        where: {
+            grounds: { turf_id: turfId },
+            booking_date: { gte: today },
+            booking_status: { in: [...ACTIVE_STATES] },
+        },
+        select: { id: true, booking_date: true, slot: true },
+        orderBy: { booking_date: "asc" },
+    });
+
+    return upcoming
+        .filter((b) => closed.has(b.slot?.code))
+        .map((b) => ({
+            date: b.booking_date.toISOString().slice(0, 10),
+            slot: b.slot?.code,
+            ref: bookingRef(b.id),
+        }));
+};
 
 /**
  * Edit a turf's own identity — name, blurb, logo, photos, panel accent colour.
@@ -786,6 +875,10 @@ const updateVenue = asyncHandler(async (req, res) => {
                 // null => the panel falls back to the default FunTurf green.
                 data.theme_color = cleared ? null : coerceHexColor("theme_color", raw);
                 break;
+            case "operating_hours":
+                // null => trades 24 hours (the whole slot grid stays bookable).
+                data.operating_hours = coerceOperatingHours(raw);
+                break;
         }
     }
 
@@ -795,11 +888,38 @@ const updateVenue = asyncHandler(async (req, res) => {
         });
     }
 
+    // Shortening the trading day can close a slot that is already sold. Check
+    // BEFORE writing, and refuse — a customer must never hold a ticket for a time
+    // the gate is locked. The owner cancels or moves those bookings, then retries.
+    const hoursChanged = Object.prototype.hasOwnProperty.call(data, "operating_hours");
+    if (hoursChanged) {
+        const conflicts = await findHoursConflicts(venue_id, data.operating_hours);
+        if (conflicts.length > 0) {
+            logger.warn(
+                `turf ${venue_id} hours change to ${formatHours(data.operating_hours)} refused — ${conflicts.length} booking(s) would fall outside`
+            );
+            throw ApiError.fromCode(ERROR_CODES.OPERATING_HOURS_CONFLICT, {
+                message: `${conflicts.length} upcoming booking${conflicts.length === 1 ? "" : "s"} fall outside ${formatHours(data.operating_hours)}. Cancel or move them first.`,
+                errors: conflicts,
+            });
+        }
+    }
+
     const updated = await pgClient.turfs.update({
         where: { id: venue_id },
         data: { ...data, updated_at: new Date() },
         include: { grounds: true },
     });
+
+    // Availability is derived from these hours and cached per ground, so drop the
+    // cache now: the next `/bookings/available-slots` call rebuilds the grid from
+    // the new hours instead of serving the old one until the TTL lapses.
+    if (hoursChanged) {
+        const affected = await invalidateGroundHoursForTurf(venue_id);
+        logger.info(
+            `turf ${venue_id} hours -> ${formatHours(data.operating_hours)}; refreshed ${affected} ground grid(s)`
+        );
+    }
 
     logger.info(`turf ${venue_id} updated by admin=${req.user.id} fields=[${Object.keys(data)}]`);
     return res

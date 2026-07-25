@@ -1,5 +1,11 @@
 // 90-minute discrete slot grid — mirrors the boolean columns on the backend
-// `slots` table (t0000 … t2230). Keep in sync with backend SLOT_CODES.
+// `slots` table (t0000 … t2230). Keep in sync with the backend's
+// `src/utils/slotGrid.js`.
+//
+// This is the FULL grid, deliberately: which of these a turf actually sells
+// depends on its opening hours, and that verdict is computed server-side and
+// returned as `closed_slots` on /bookings/available-slots. Don't reimplement the
+// hours rule here — render what the API says.
 export const SLOT_CODES = [
     "t0000", "t0130", "t0300", "t0430", "t0600", "t0730", "t0900", "t1030",
     "t1200", "t1330", "t1500", "t1630", "t1800", "t1930", "t2100", "t2230",

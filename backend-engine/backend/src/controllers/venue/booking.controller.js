@@ -26,6 +26,11 @@ import {
     unlockSlot,
     withBookingRef,
 } from "../../utils/bookingService.js";
+import {
+    formatHours,
+    isSlotWithinHours,
+    primeGroundOperatingHours,
+} from "../../utils/operatingHours.js";
 
 // Route-level `authorizeRoles` gates who may *reach* the admin endpoints;
 // `isBookingAdmin` below decides who may act on a SPECIFIC booking. There is
@@ -104,6 +109,10 @@ export const getAvailableSlots = asyncHandler(async (req, res) => {
 
     // No stored row == the whole day is open (see getSlotGrid). A ground is
     // therefore bookable the moment it's created — no slot seeding required.
+    //
+    // The grid comes back already masked by the turf's opening hours, and carries
+    // `closed_slots` + `operating_hours` so the UI can label an out-of-hours slot
+    // "closed" rather than the misleading "already booked".
     const availableSlots = await getSlotGrid(ground, date);
 
     // Which slots are merely HELD by an unpaid booking? The grid boolean stays
@@ -160,6 +169,14 @@ export const calculateBookingPrice = asyncHandler(async (req, res) => {
     }
 
     const slot_row = await getSlotGrid(ground_id, booking_date);
+
+    // Outside trading hours is a different failure from "someone took it" — say so,
+    // and check it FIRST since the hours mask also flips the boolean below.
+    if (slot_row.closed_slots.includes(slot)) {
+        throw ApiError.fromCode(ERROR_CODES.SLOT_OUTSIDE_OPERATING_HOURS, {
+            message: `This slot is outside the turf's opening hours (${formatHours(slot_row.operating_hours)})`,
+        });
+    }
 
     // Boolean grid = admin master enable + paid-lock. false -> not bookable.
     if (!Boolean(slot_row[slot])) throw ApiError.fromCode(ERROR_CODES.SLOT_UNAVAILABLE);
@@ -230,6 +247,9 @@ export const createBooking = asyncHandler(async (req, res) => {
                     status: true,
                     admin_user_id: true,
                     advance_booking_days: true,
+                    // Needed to reject out-of-hours slots — free here, since this
+                    // row is loaded anyway. Also primes the hours cache below.
+                    operating_hours: true,
                 },
             },
         },
@@ -238,6 +258,20 @@ export const createBooking = asyncHandler(async (req, res) => {
     if (ground.status !== "available") throw ApiError.fromCode(ERROR_CODES.GROUND_NOT_AVAILABLE);
     const turf = ground.turfs;
     if (!turf?.verified) throw ApiError.fromCode(ERROR_CODES.TURF_NOT_VERIFIED);
+
+    // The availability grid already hides out-of-hours slots, but that is a UI
+    // convenience — this endpoint is callable directly, so the rule is enforced
+    // here too. Checked early: it costs nothing and fails before any state moves.
+    const hours = turf.operating_hours ?? null;
+    primeGroundOperatingHours(ground_id, hours);
+    if (!isSlotWithinHours(slot, hours)) {
+        logger.warn(
+            `booking refused: slot ${slot} is outside turf ${turf.id} hours (${formatHours(hours)})`
+        );
+        throw ApiError.fromCode(ERROR_CODES.SLOT_OUTSIDE_OPERATING_HOURS, {
+            message: `This slot is outside the turf's opening hours (${formatHours(hours)})`,
+        });
+    }
 
     // Date must be inside the bookable window (not past, not beyond the turf's horizon).
     const windowError = checkBookingWindow(booking_date, turf.advance_booking_days);
@@ -281,7 +315,8 @@ export const createBooking = asyncHandler(async (req, res) => {
 
     // Slot must be admin-enabled (and not already paid-locked) for the date.
     // A missing row means every slot is still open — see getSlotGrid.
-    const slotRow = await getSlotGrid(ground_id, booking_date);
+    // `hours` is already loaded — pass it so the grid doesn't re-read the turf.
+    const slotRow = await getSlotGrid(ground_id, booking_date, hours);
     if (!Boolean(slotRow[slot])) throw ApiError.fromCode(ERROR_CODES.SLOT_UNAVAILABLE);
 
     // Optional event attach — must be the caller's own event.
