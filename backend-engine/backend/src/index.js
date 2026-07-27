@@ -4,13 +4,24 @@ import { app } from "./app.js";
 import { initSocket, getIo } from "./socket.js";
 import { startHoldSweeper } from "./jobs/holdSweeper.js";
 import { startEventSweeper } from "./jobs/eventSweeper.js";
-import { disconnectPrisma } from "./prisma.js";
+import { disconnectPrisma, pgClient } from "./prisma.js";
 import { logger } from "../logs/logger.js";
 
 const PORT = process.env.PORT || 8080;
 
 // Wrap express in a raw HTTP server so Socket.IO can share the same port.
 const server = createServer(app);
+
+// Health endpoint — checks DB connectivity so load balancers / orchestrators
+// see a real failure, not a process that is listening but cannot serve.
+app.get('/health', async (req, res) => {
+  try {
+    await pgClient.$queryRaw`SELECT 1`;
+    res.status(200).send('OK');
+  } catch {
+    res.status(503).send('DB unavailable');
+  }
+});
 
 // Attach the real-time layer (JWT-authed notification sockets).
 initSocket(server);
@@ -21,11 +32,23 @@ startHoldSweeper();
 // Auto-complete games whose slot has ended.
 startEventSweeper();
 
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
+// Bootstrap — verify the database is reachable before accepting traffic.
+// A deploy with a bad connection string, rotated credentials or a still-
+// restarting Postgres will fail here instead of passing health probes and
+// serving 500s to every real request.
+async function main() {
+  try {
+    await pgClient.$connect();
+    logger.info("postgres connected — starting server");
+  } catch (err) {
+    logger.error(`postgres connection failed: ${err.message}`);
+    process.exit(1);
+  }
 
-server.listen(PORT, '0.0.0.0', () => console.log('up on', PORT));
+  server.listen(PORT, '0.0.0.0', () => console.log('up on', PORT));
+}
+
+main();
 
 /**
  * Graceful shutdown.
