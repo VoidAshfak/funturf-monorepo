@@ -5,6 +5,16 @@ import { logger } from "../../logs/logger.js";
 // In-memory cache for legacy imports (auth middleware, etc.) — always available.
 const userCache = new NodeCache({ stdTTL: 1000, checkperiod: 200 });
 
+export const CACHE_TTL = Object.freeze({
+    VENUE_NAMES: Number(process.env.CACHE_TTL_VENUE_NAMES) || 300,
+    VENUE_LIST: Number(process.env.CACHE_TTL_VENUE_LIST) || 300,
+    VENUE_DETAIL: Number(process.env.CACHE_TTL_VENUE_DETAIL) || 300,
+    ADMIN_VENUES: Number(process.env.CACHE_TTL_ADMIN_VENUES) || 120,
+    EVENTS_FEED: Number(process.env.CACHE_TTL_EVENTS_FEED) || 120,
+    EVENT_DETAIL: Number(process.env.CACHE_TTL_EVENT_DETAIL) || 300,
+    USER_PROFILE: Number(process.env.CACHE_TTL_USER_PROFILE) || 300,
+});
+
 // Redis client — created lazily so the app works without Redis running.
 let redis = null;
 let redisAvailable = false;

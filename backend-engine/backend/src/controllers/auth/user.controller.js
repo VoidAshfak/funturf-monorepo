@@ -6,7 +6,7 @@ import { uploadMedia } from "../../utils/mediaUpload.js"
 import jwt from "jsonwebtoken"
 import { mongoClient, pgClient } from "../../prisma.js"
 import bcrypt from "bcrypt"
-import userCache from "../../utils/cache.js";
+import userCache, { get, set, CACHE_TTL } from "../../utils/cache.js";
 import { logger } from "../../../logs/logger.js";
 import {
     USER_EDITABLE_FIELDS,
@@ -395,6 +395,14 @@ const tokenRefresh = asyncHandler(async (req, res) => {
 const getUserById = asyncHandler(async (req, res) => {
     const { user_id } = req.params;
 
+    const cacheKey = `user:profile:${user_id}`;
+    const cached = await get(cacheKey);
+    if (cached) {
+        logger.debug(`cache HIT  key=${cacheKey}`);
+        return res.status(200).json(new ApiResponse(200, "User found", cached));
+    }
+    logger.debug(`cache MISS key=${cacheKey}`);
+
     // Public profile = the user's account fields + their sporting profile
     // (player_profiles, 1:1 in practice) so the page can show EVERY data point:
     // skill, positions, physique, play preferences, reputation, etc.
@@ -490,6 +498,9 @@ const getUserById = asyncHandler(async (req, res) => {
         // renders the nudge card on your own page.
         profile_completion: computeProfileCompletion(user, profile),
     };
+
+    await set(cacheKey, userResponse, CACHE_TTL.USER_PROFILE);
+    logger.debug(`cache SET  key=${cacheKey} ttl=${CACHE_TTL.USER_PROFILE}s`);
 
     return res
         .status(200)
