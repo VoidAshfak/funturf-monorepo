@@ -1353,7 +1353,7 @@ const acceptJoinRequest = asyncHandler(async (req, res) => {
 
     const event = await pgClient.events.findUnique({
         where: { id: event_id },
-        select: { id: true, title: true, event_date: true, max_players: true, current_players: true },
+        select: { id: true, title: true, event_date: true },
     });
     if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
     if (!(await isEventAdmin(event_id, adminId))) throw ApiError.fromCode(ERROR_CODES.NOT_EVENT_ADMIN);
@@ -1364,19 +1364,23 @@ const acceptJoinRequest = asyncHandler(async (req, res) => {
     });
     if (!request) throw ApiError.fromCode(ERROR_CODES.JOIN_REQUEST_NOT_FOUND);
 
-    // Hard capacity enforcement at approval time (current_players tracks the
-    // approved roster incl. organizer).
-    if (event.max_players && (event.current_players ?? 0) >= event.max_players) {
-        throw ApiError.fromCode(ERROR_CODES.EVENT_FULL);
-    }
+    // Atomically claim a slot. The UPDATE only matches when capacity remains,
+    // so PostgreSQL itself enforces the max_players gate — two concurrent
+    // approvals both run the same UPDATE; exactly one will find a row that
+    // satisfies `current_players < max_players` and the other updates 0 rows.
+    await pgClient.$transaction(async (tx) => {
+        const claimed = await tx.$executeRaw`
+            UPDATE events
+            SET current_players = current_players + 1
+            WHERE id = ${event_id}::uuid
+              AND (max_players IS NULL OR current_players < max_players)
+        `;
+        if (claimed === 0) throw ApiError.fromCode(ERROR_CODES.EVENT_FULL);
 
-    await pgClient.event_participants.update({
-        where: { id: request.id },
-        data: { status: "approved", approved_at: new Date() },
-    });
-    await pgClient.events.update({
-        where: { id: event_id },
-        data: { current_players: { increment: 1 } },
+        return tx.event_participants.update({
+            where: { id: request.id },
+            data: { status: "approved", approved_at: new Date() },
+        });
     });
 
     const requester = await pgClient.users.findUnique({
@@ -1666,7 +1670,7 @@ const acceptEventInvitation = asyncHandler(async (req, res) => {
 
     const event = await pgClient.events.findUnique({
         where: { id: event_id },
-        select: { id: true, title: true, event_date: true, max_players: true, current_players: true },
+        select: { id: true, title: true, event_date: true },
     });
     if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
 
@@ -1677,19 +1681,22 @@ const acceptEventInvitation = asyncHandler(async (req, res) => {
     });
     if (!invite) throw ApiError.fromCode(ERROR_CODES.INVITATION_NOT_FOUND);
 
-    // Hard capacity guard at accept time (current_players tracks the approved
-    // roster incl. organizer) — an invite doesn't reserve a slot in advance.
-    if (event.max_players && (event.current_players ?? 0) >= event.max_players) {
-        throw ApiError.fromCode(ERROR_CODES.EVENT_FULL);
-    }
+    // Atomically claim a slot — same pattern as acceptJoinRequest. The UPDATE
+    // only hits a row when capacity remains, so PostgreSQL enforces the max
+    // gate even under concurrent invites.
+    await pgClient.$transaction(async (tx) => {
+        const claimed = await tx.$executeRaw`
+            UPDATE events
+            SET current_players = current_players + 1
+            WHERE id = ${event_id}::uuid
+              AND (max_players IS NULL OR current_players < max_players)
+        `;
+        if (claimed === 0) throw ApiError.fromCode(ERROR_CODES.EVENT_FULL);
 
-    await pgClient.event_participants.update({
-        where: { id: invite.id },
-        data: { status: "approved", approved_at: new Date() },
-    });
-    await pgClient.events.update({
-        where: { id: event_id },
-        data: { current_players: { increment: 1 } },
+        return tx.event_participants.update({
+            where: { id: invite.id },
+            data: { status: "approved", approved_at: new Date() },
+        });
     });
 
     const joiner = await pgClient.users.findUnique({
