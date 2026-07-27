@@ -12,8 +12,10 @@ const logFormat = printf(({ level, message, timestamp }) => {
     return `${timestamp} [${level}]: ${message}`;
 });
 
+const logLevel = process.env.LOG_LEVEL || 'debug';
+
 export const logger = winston.createLogger({
-    level: 'debug',
+    level: logLevel,
     format: combine(
         timestamp({format: 'hh:mm:ss'}),
         logFormat
@@ -21,7 +23,7 @@ export const logger = winston.createLogger({
     transports: [
         new winston.transports.File({
             filename: path.join(__dirname, 'error.log'),
-            level: 'debug',
+            level: logLevel,
         }),
         new winston.transports.Console()
     ]
