@@ -9,7 +9,7 @@ import {
     updateMyProfile,
     scoutPlayers,
 } from "../../controllers/auth/user.controller.js"
-import { profileWriteLimiter } from "../../middlewares/rateLimit.middleware.js";
+import { profileWriteLimiter, loginLimiter, registerLimiter } from "../../middlewares/rateLimit.middleware.js";
 import { signMedia } from "../../controllers/auth/media.controller.js"
 import { upload } from "../../middlewares/file-upload/multer.middleware.js";
 import {
@@ -22,6 +22,7 @@ const router = Router();
 
 
 router.route("/register").post(
+    registerLimiter,
     // upload.fields([
     //     {
     //         name: "profilePicture", 
@@ -31,7 +32,7 @@ router.route("/register").post(
     encryptPassword,
     registerUser
 );
-router.route("/login").post(loginUser);
+router.route("/login").post(loginLimiter, loginUser);
 router.route("/refresh").post(tokenRefresh);
 
 // Cloudinary upload signature — AUTH REQUIRED. This mints a credential that lets

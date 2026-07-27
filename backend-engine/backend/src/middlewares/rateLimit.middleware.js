@@ -105,3 +105,25 @@ export const docsLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 60,
 });
+
+/**
+ * Login — the most attacked endpoint. Keys on IP only (no user yet).
+ * 10 attempts per 15 minutes makes brute-forcing impractical while
+ * tolerating a user retyping a wrong password a few times.
+ */
+export const loginLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+});
+
+/**
+ * Registration — prevents account-creation floods.
+ * 3 per hour per IP. Legitimate users signing up once are never
+ * affected; a script minting dummy accounts hits the wall fast.
+ */
+export const registerLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 60 * 60 * 1000,
+    limit: 3,
+});
