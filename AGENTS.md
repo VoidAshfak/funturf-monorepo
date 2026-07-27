@@ -50,8 +50,6 @@ funturf-monorepo/
 ├── backend-engine/
 │   ├── CLAUDE.md
 │   ├── backend/
-│   │   ├── .dockerignore
-│   │   ├── Dockerfile
 │   │   ├── logs/
 │   │   │   └── logger.js
 │   │   ├── package-lock.json
@@ -85,11 +83,6 @@ funturf-monorepo/
 │   │       │   ├── user/
 │   │       │   └── venue/
 │   │       └── utils/
-│   ├── docker-compose.yml
-│   ├── nginx/
-│   │   ├── Dockerfile
-│   │   └── nginx.conf
-│   └── render.yaml
 └── frontend-engin
     ├── .gitignore
     ├── CLAUDE.md

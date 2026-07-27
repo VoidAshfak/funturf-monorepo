@@ -1,6 +1,6 @@
 ## Project
 
-FunTurf — turf (sports ground) booking and game-organizing platform. This repo currently holds the **backend only**: an Express REST API (`/api/v1`) backed by Prisma, deployed as 3 replicas behind Nginx. All app code lives in `backend/`.
+FunTurf — turf (sports ground) booking and game-organizing platform. An Express REST API (`/api/v1`) backed by Prisma. All app code lives in `backend/`.
 
 ## Commands
 
@@ -19,20 +19,6 @@ npm run prisma:push:mongo    # db push the MongoDB schema
 ```
 
 There is **no test runner, linter, or build step** configured. Formatting is Prettier (`.prettierrc`).
-
-### Docker / local cluster
-
-`docker-compose.yml` (run from repo root) brings up postgres + 3 backend replicas (`app1/2/3`) + nginx. Prisma against the dockerized DB:
-
-```bash
-docker compose run --rm app1 npx prisma generate --schema=prisma/postgresql/schema.prisma
-docker compose run --rm app1 npx prisma db pull --schema=prisma/postgresql/schema.prisma
-docker compose up -d
-```
-
-Postgres is exposed to the host at `127.0.0.1:8000`; nginx serves on port 80.
-
-
 
 ### Prisma datasource
 
@@ -59,24 +45,17 @@ Route mounts (`app.js`): `/api/v1/{users, turfmates, events, venues, bookings}`.
 - **DTO shaping**: `utils/dataSerializer.js` (e.g. `VenueSerializer`) converts Prisma rows to API DTOs before responding.
 - **File uploads**: `multer` middleware (`middlewares/file-upload/`) + Cloudinary (`utils/mediaUpload.js`).
 - **Time/slots**: `utils/timeAndDateFormatting.js` and `middlewares/venue/booking.middleware.js` back slot-availability/pricing logic.
-- **API docs**: Swagger UI at `/api/v1/docs`, raw spec at `/api/v1/docs.json`, mounted by `utils/swagger.js`. The spec is the **hand-written** `backend/docs/openapi.yaml` — nothing generates it, so **edit it in the same change as the route**. It must stay under `backend/` (the Docker build context). Docs are off when `NODE_ENV=production` unless `DOCS_ENABLED=true`; note the local `.env` already sets `NODE_ENV=production`, so use `DOCS_ENABLED=true npm run dev` to see them.
-- 
-
+- **API docs**: Swagger UI at `/api/v1/docs`, raw spec at `/api/v1/docs.json`, mounted by `utils/swagger.js`. The spec is the **hand-written** `backend/docs/openapi.yaml` — nothing generates it, so **edit it in the same change as the route**. Docs are off when `NODE_ENV=production` unless `DOCS_ENABLED=true`; note the local `.env` already sets `NODE_ENV=production`, so use `DOCS_ENABLED=true npm run dev` to see them.
 
 ### Layout
 
 Routes, controllers, and middlewares are grouped by domain folder (`auth/`, `event/`, `venue/`, `user/` ~ `user-connection/`). A new endpoint = add to the matching `routes/<domain>/*.route.js`, implement in `controllers/<domain>/*.controller.js`, mount in `app.js` if it's a new resource.
-
-## Deployment
-
-`render.yaml` deploys to Render: an nginx web service (`rootDir: ./nginx`) fronting three identical backend web services (`app1/2/3`, `rootDir: ./backend`), each built from its Dockerfile. Backend listens on `0.0.0.0:8080` and exposes `/health`.
 
 ## Notes & data model reference
 
 - The authoritative data model lives in `backend/prisma/postgresql/schema.prisma` — consult it before large schema or flow changes.
 - CORS is currently wide open (`origin: '*'`) in `app.js`; the intended whitelist (localhost + Vercel frontend) is commented out.
 - Work lands on `main` via PRs (typically from `test-api`/feature branches); active dev branch is `dev`.
-
 
 # Additional Instructions
 
