@@ -6,6 +6,7 @@ import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { VenueSerializer } from "../../utils/dataSerializer.js"
 import { coerceHexColor, coerceImageUrl, coerceImageUrlArray } from "../../utils/imageUrl.js";
 import { logger } from "../../../logs/logger.js";
+import { get, set, del, delPattern } from "../../utils/cache.js";
 import {
     closedSlotCodes,
     formatHours,
@@ -153,6 +154,9 @@ import { ACTIVE_STATES, bookingRef } from "../../utils/bookingService.js";
 // })
 
 const getVenueList = asyncHandler(async (req, res) => {
+    const cached = await get("venue:names");
+    if (cached) return res.json(new ApiResponse(200, `Found ${cached.length} turfs`, cached));
+
     const venues = await pgClient.turfs.findMany({
         select: {
             id: true,
@@ -169,10 +173,13 @@ const getVenueList = asyncHandler(async (req, res) => {
 
     if (!venues) throw new ApiError(404, "Not found");
 
+    await set("venue:names", venues, 120);
     return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, venues));
 })
 
 const getVenues = asyncHandler(async (req, res) => {
+    const cached = await get("venue:list");
+    if (cached) return res.json(new ApiResponse(200, `Found ${cached.length} turfs`, cached));
 
     const venues = await pgClient.turfs.findMany({
         select: {
@@ -201,6 +208,7 @@ const getVenues = asyncHandler(async (req, res) => {
     if (!venues) throw new ApiError(404, "Not found");
 
     const response = venues.map((venue) => VenueSerializer.toVenueListDto(venue));
+    await set("venue:list", response, 60);
     
     return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, response));
 })
@@ -209,6 +217,20 @@ const getVenues = asyncHandler(async (req, res) => {
 // also carries `my_rating` so the client can pre-fill the caller's own star rating.
 const getVenueById = asyncHandler(async (req, res) => {
     const { venue_id } = req.params;
+
+    const cacheKey = `venue:${venue_id}`;
+    const cached = await get(cacheKey);
+    if (cached) {
+        if (req.user?.id) {
+            const mine = await pgClient.reviews.findFirst({
+                where: { turf_id: venue_id, reviewer_id: req.user.id, review_type: "turf" },
+                select: { rating: true },
+            });
+            cached.my_rating = mine?.rating ?? null;
+        }
+        return res.status(200).json(new ApiResponse(200, "Venue found", cached));
+    }
+
     const venue = await pgClient.turfs.findUnique({
         where: {
             id: venue_id
@@ -245,6 +267,9 @@ const getVenueById = asyncHandler(async (req, res) => {
         : dto.rating;
     dto.rating_count = agg._count._all;
     dto.my_rating = mine?.rating ?? null;
+
+    const cachedDto = { ...dto, my_rating: null };
+    await set(cacheKey, cachedDto, 60);
 
     return res
         .status(200)
@@ -322,6 +347,9 @@ const rateTurf = asyncHandler(async (req, res) => {
     logger.info(
         `turf ${venue_id} rated ${rating} by ${reviewerId} (${existing ? "updated" : "created"}); avg=${avg} n=${agg._count._all}`
     );
+
+    await del(`venue:${venue_id}`);
+    await delPattern("venue:list");
 
     return res.status(200).json(
         new ApiResponse(200, existing ? "Rating updated" : "Thanks for rating!", {
@@ -563,6 +591,7 @@ const createVenue = asyncHandler(async (req, res) => {
 
     });
 
+    await delPattern("venue:");
     return res
         .status(201)
         .json(new ApiResponse(201, "New venue created successfully", venueCreated));
@@ -656,6 +685,8 @@ const createGround = asyncHandler(async (req, res) => {
         return ground;
     });
 
+    await delPattern("venue:");
+
     return res
         .status(201)
         .json(new ApiResponse(201, "New ground created successfully", created));
@@ -670,7 +701,7 @@ const updateGround = asyncHandler(async (req, res) => {
 
     const ground = await pgClient.grounds.findUnique({
         where: { id: ground_id },
-        select: { id: true, turfs: { select: { admin_user_id: true } } },
+        select: { id: true, turf_id: true, turfs: { select: { admin_user_id: true } } },
     });
     if (!ground) throw ApiError.fromCode(ERROR_CODES.GROUND_NOT_FOUND);
     if (!isSuper && ground.turfs?.admin_user_id !== req.user.id) {
@@ -704,6 +735,9 @@ const updateGround = asyncHandler(async (req, res) => {
         where: { id: ground_id },
         data: normalizeGround(raw),
     });
+
+    await del(`venue:${ground.turf_id}`);
+    await delPattern("venue:list");
 
     logger.info(`ground ${ground_id} updated by admin=${req.user.id}`);
     return res.status(200).json(new ApiResponse(200, "Ground updated", updated));
@@ -921,6 +955,11 @@ const updateVenue = asyncHandler(async (req, res) => {
         );
     }
 
+    await del(`venue:${venue_id}`);
+    await delPattern("venue:list");
+    await delPattern("venue:names");
+    await delPattern(`venue:admin:`);
+
     logger.info(`turf ${venue_id} updated by admin=${req.user.id} fields=[${Object.keys(data)}]`);
     return res
         .status(200)
@@ -929,6 +968,10 @@ const updateVenue = asyncHandler(async (req, res) => {
 
 const getVenueByAdminId = asyncHandler(async (req, res) => {
     const { admin_id } = req.params;
+    const cacheKey = `venue:admin:${admin_id}`;
+    const cached = await get(cacheKey);
+    if (cached) return res.status(200).json(new ApiResponse(200, "Venues found successfully", cached));
+
     const venues = await pgClient.turfs.findMany({
         where: {
             admin_user_id: admin_id
@@ -943,6 +986,7 @@ const getVenueByAdminId = asyncHandler(async (req, res) => {
     }
 
     const response = venues.map((venue) => VenueSerializer.toDto(venue));
+    await set(cacheKey, response, 60);
 
     return res.status(200).json(new ApiResponse(200, "Venues found successfully", response));
 });
