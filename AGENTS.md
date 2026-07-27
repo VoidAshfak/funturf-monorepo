@@ -196,7 +196,7 @@ funturf-monorepo/
 
 1. Read the relevant subtree's `CLAUDE.md` first.
 2. If touching an API route, check `docs/api-guideline.md` + `backend/docs/openapi.yaml` and update both.
-3. If changing a payload shape (venue, ground, event, user), update **both** frontend constants and backend schema — they must match.
+3. If changing a payload shape (venue, ground, event, user), update **both** frontend constants and backend schema — they must match. also update that shape for `docs/api-guideline.md` + `backend/docs/openapi.yaml`.
 4. **Suggest before coding** — the repo convention is to discuss the change plan before writing code.
 
 ## repo-specific conventions

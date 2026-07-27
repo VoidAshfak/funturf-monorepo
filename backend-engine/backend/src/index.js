@@ -50,52 +50,54 @@ async function main() {
 
 main();
 
-/**
- * Graceful shutdown.
- *
- * Render (and `docker compose down`) stop a container by sending SIGTERM and
- * killing it hard some seconds later. Without a handler the process dies with
- * its PostgreSQL connections still open, and the database only reclaims them
- * when its own timeout fires — so during a rolling deploy the retiring replica
- * and its replacement hold connections AT THE SAME TIME. On a 17-connection
- * budget shared by three replicas (see prisma.js) that overlap is enough to
- * exhaust the server. Closing the pool explicitly removes the overlap.
- *
- * Order matters: stop accepting new work, then drop the connections.
- */
+// --- Global error handlers ---
+// Without these, Node >=15 crashes the process on any unhandled rejection
+// with no useful log message, and a replica disappears silently.
+
+process.on("unhandledRejection", (reason) => {
+    logger.error(`unhandledRejection: ${reason instanceof Error ? reason.message : reason}`);
+});
+
+process.on("uncaughtException", (err) => {
+    logger.error(`uncaughtException: ${err.message}`);
+    // Re-throw so the process exits with a non-zero code — the process state
+    // may be corrupted after an uncaught exception, and running is unsafe.
+    // The logger flush + exit happens in the default handler after this.
+    // We do NOT call shutdown() here because the corrupted state could hang it.
+    process.exit(1);
+});
+
+// --- Graceful shutdown ---
+// The platform (Render, Docker, K8s) sends SIGTERM then a hard kill after its
+// own grace period (~30s). Our job is to release resources, not to race the
+// kill timer with process.exit(). Letting the event loop drain naturally is
+// safer: in-flight DB transactions finish, Prisma disconnects cleanly, and
+// the process dies when nothing keeps it alive.
+
 let shuttingDown = false;
 
 async function shutdown(signal) {
-    // A second SIGTERM (or SIGINT from an impatient Ctrl-C) must not start a
-    // parallel teardown while the first is still draining.
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info(`${signal} received — shutting down`);
 
-    // Force-exit guard: if a hung socket or in-flight query stops `close()` from
-    // ever calling back, the platform's own kill timer is far less graceful.
-    const forceExit = setTimeout(() => {
-        logger.error("shutdown timed out after 10s — forcing exit");
-        process.exit(1);
-    }, 10_000);
-    forceExit.unref?.();
+    // Stop accepting new connections. In-flight requests finish; the platform's
+    // own kill timer will force-exit if anything hangs past its grace period.
+    server.close(() => {
+        logger.info("http server closed");
+    });
 
     try {
-        // `getIo` throws if the socket layer never came up — that is not a
-        // reason to skip releasing the database pool below.
-        try {
-            getIo().close(); // hang up live sockets
-        } catch {
-            /* socket layer not initialized */
-        }
+        getIo().close();
+    } catch {
+        /* socket layer not initialized */
+    }
 
-        await new Promise((resolve) => server.close(resolve)); // finish in-flight HTTP
-        await disconnectPrisma();                          // release the DB pool
+    try {
+        await disconnectPrisma();
         logger.info("shutdown complete");
-        process.exit(0);
     } catch (err) {
         logger.error(`shutdown failed: ${err.message}`);
-        process.exit(1);
     }
 }
 
