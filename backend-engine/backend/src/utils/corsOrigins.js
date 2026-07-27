@@ -33,6 +33,5 @@ logger.info(`CORS allowed origins: ${allowedOrigins.join(", ")}`);
  */
 export function isAllowedOrigin(origin) {
     if (!origin) return true; // non-browser / same-origin — no Origin header
-    if (origin.endsWith('.trycloudflare.com')) return true;
     return allowedOrigins.includes(origin.replace(/\/+$/, ""));
 }
