@@ -207,3 +207,12 @@ funturf-monorepo/
 - No `.env` files committed with real secrets (frontend `.env` has a placeholder `NEXTAUTH_SECRET`; set a real one).
 - Work lands on `main` via PRs; active dev branch is `dev`.
 - Formatting: Prettier (backend `.prettierrc`: double quotes, trailing commas es5, semicolons).
+- **Cache tracking**: When adding caching to a route, update `docs/route-cache.md` in the same change — add the entry and any new TTL env vars.
+
+
+## Additional Instructions
+
+- **Always use DRY principals**
+- Write code so that managing it can be easy. Can control parameters in future without changing the codebase.
+- Use **industry standard** coding conventions and tools.
+- Add **well explained comments** whenever implement something

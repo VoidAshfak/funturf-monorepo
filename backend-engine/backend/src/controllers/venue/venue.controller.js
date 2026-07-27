@@ -6,7 +6,7 @@ import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { VenueSerializer } from "../../utils/dataSerializer.js"
 import { coerceHexColor, coerceImageUrl, coerceImageUrlArray } from "../../utils/imageUrl.js";
 import { logger } from "../../../logs/logger.js";
-import { get, set, del, delPattern } from "../../utils/cache.js";
+import { get, set, del, delPattern, CACHE_TTL } from "../../utils/cache.js";
 import {
     closedSlotCodes,
     formatHours,
@@ -173,7 +173,7 @@ const getVenueList = asyncHandler(async (req, res) => {
 
     if (!venues) throw new ApiError(404, "Not found");
 
-    await set("venue:names", venues, 120);
+    await set("venue:names", venues, CACHE_TTL.VENUE_NAMES);
     return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, venues));
 })
 
@@ -208,7 +208,7 @@ const getVenues = asyncHandler(async (req, res) => {
     if (!venues) throw new ApiError(404, "Not found");
 
     const response = venues.map((venue) => VenueSerializer.toVenueListDto(venue));
-    await set("venue:list", response, 60);
+    await set("venue:list", response, CACHE_TTL.VENUE_LIST);
     
     return res.json(new ApiResponse(200, `Found ${venues.length} turfs`, response));
 })
@@ -269,7 +269,7 @@ const getVenueById = asyncHandler(async (req, res) => {
     dto.my_rating = mine?.rating ?? null;
 
     const cachedDto = { ...dto, my_rating: null };
-    await set(cacheKey, cachedDto, 60);
+    await set(cacheKey, cachedDto, CACHE_TTL.VENUE_DETAIL);
 
     return res
         .status(200)
@@ -986,7 +986,7 @@ const getVenueByAdminId = asyncHandler(async (req, res) => {
     }
 
     const response = venues.map((venue) => VenueSerializer.toDto(venue));
-    await set(cacheKey, response, 60);
+    await set(cacheKey, response, CACHE_TTL.ADMIN_VENUES);
 
     return res.status(200).json(new ApiResponse(200, "Venues found successfully", response));
 });

@@ -12,6 +12,7 @@ import { requireActiveMembership } from "../../utils/teamService.js";
 import { isUuid } from "../../middlewares/validateUuid.middleware.js";
 import { logger } from "../../../logs/logger.js";
 import { emitToEvent } from "../../socket.js";
+import { get, set, CACHE_TTL } from "../../utils/cache.js";
 
 // Tell everyone viewing a match page that its roster / request queue changed, so
 // their squad list and admin panel refresh live (no manual reload). Non-sensitive
@@ -318,6 +319,14 @@ const getEvents = asyncHandler(async (req, res) => {
 
     const { sport, timeframe, q, openOnly, joinedOnly } = req.query;
 
+    const cacheKey = `events:feed:${page}:${limit}:${sport || ''}:${timeframe || ''}:${(q || '').toLowerCase().trim()}:${openOnly || ''}:${joinedOnly || ''}:${req.user?.id || ''}`;
+    const cached = await get(cacheKey);
+    if (cached) {
+        logger.debug(`cache HIT  key=${cacheKey}`);
+        return res.status(200).json(new ApiResponse(200, `${cached.events.length} events found (cached)`, cached));
+    }
+    logger.debug(`cache MISS key=${cacheKey}`);
+
     // Ranking + filtering + pagination now live in the SQL scorer
     // (utils/eventRanking.js) — it returns the ordered ids for this page. We then
     // hydrate those ids with the rich select below and re-apply the ranked order.
@@ -471,12 +480,16 @@ const getEvents = asyncHandler(async (req, res) => {
         });
     }
 
+    const feedData = {
+        events: eventsOut,
+        pagination: { page, limit, total, hasMore },
+        ...(stats ? { stats } : {}),
+    };
+    await set(cacheKey, feedData, CACHE_TTL.EVENTS_FEED);
+    logger.debug(`cache SET  key=${cacheKey} ttl=${CACHE_TTL.EVENTS_FEED}s`);
+
     return res.status(200).json(
-        new ApiResponse(200, `${eventsOut.length} events found`, {
-            events: eventsOut,
-            pagination: { page, limit, total, hasMore },
-            ...(stats ? { stats } : {}),
-        })
+        new ApiResponse(200, `${eventsOut.length} events found`, feedData)
     );
 });
 
@@ -488,6 +501,14 @@ const getEventById = asyncHandler(async (req, res) => {
             message: "An event id is required",
         });
     }
+
+    const cacheKey = `event:${event_id}`;
+    const cached = await get(cacheKey);
+    if (cached) {
+        logger.debug(`cache HIT  key=${cacheKey}`);
+        return res.status(200).json(new ApiResponse(200, "Event found", cached));
+    }
+    logger.debug(`cache MISS key=${cacheKey}`);
 
     const event = await pgClient.events.findUnique({
         where: {
@@ -654,6 +675,9 @@ const getEventById = asyncHandler(async (req, res) => {
         event_participants: players_joined,
         booking: bookingWithHold,
     })
+
+    await set(cacheKey, response, CACHE_TTL.EVENT_DETAIL);
+    logger.debug(`cache SET  key=${cacheKey} ttl=${CACHE_TTL.EVENT_DETAIL}s`);
 
     return res.status(200).json(new ApiResponse(200, "Event found", response));
 });
