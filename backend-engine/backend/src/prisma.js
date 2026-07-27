@@ -38,7 +38,7 @@ import { logger } from "../logs/logger.js";
  */
 const POOL_SETTINGS = {
     // Max concurrent PostgreSQL connections THIS process may hold.
-    connection_limit: process.env.PG_CONNECTION_LIMIT || "2",
+    connection_limit: process.env.PG_CONNECTION_LIMIT || "9",
     // Seconds a query waits for a free connection from the pool before failing
     // with P2024. Queueing briefly is much better than hammering the server.
     pool_timeout: process.env.PG_POOL_TIMEOUT || "20",
