@@ -28,6 +28,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
+
+  /* ---- loading animations ---- */
+  --animate-logo-breathe: logo-breathe 2.4s ease-in-out infinite;
+  --animate-logo-fade: logo-fade 1.6s ease-out forwards;
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
@@ -349,6 +353,16 @@
     rgba(29, 185, 84, 0.1),
     transparent
   );
+}
+
+@keyframes logo-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes logo-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
