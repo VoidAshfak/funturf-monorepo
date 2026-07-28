@@ -5,7 +5,7 @@ import { ERROR_CODES } from "../../utils/errorCodes.js";
 import { logger } from "../../../logs/logger.js";
 import { pgClient } from "../../prisma.js";
 import { createNotification } from "../../utils/notificationService.js";
-import { canCommentOnEvent, isEventAdmin } from "../../utils/eventService.js";
+import { isEventAdmin } from "../../utils/eventService.js";
 
 /**
  * Event discussion (event_comments + comment_likes).
@@ -13,9 +13,9 @@ import { canCommentOnEvent, isEventAdmin } from "../../utils/eventService.js";
  * Access model:
  *   - READ  is public. The thread is social proof that a match is real, so it's
  *     visible to anyone looking at the event — including signed-out visitors.
- *   - WRITE is earned: only the organizer, a co_organizer, or a participant whose
- *     join request was APPROVED may post (`canCommentOnEvent`). A pending or
- *     rejected requester can read but not post.
+ *   - WRITE requires authentication. Any signed-in user may post, reply, or like
+ *     comments. The old squad-only restriction was removed so the discussion is
+ *     open to the broader community.
  *
  * Threading is ONE level deep (Reddit-style top-level comment + flat replies
  * under it). Anything deeper turns into an unreadable ladder on mobile, so a
@@ -81,9 +81,8 @@ export const getComments = asyncHandler(async (req, res) => {
         likedIds = new Set(likes.map((l) => l.comment_id));
     }
 
-    // Tell the client up front whether to show a composer or a "join to comment"
-    // prompt — otherwise it has to guess from the participant list.
-    const can_comment = userId ? await canCommentOnEvent(event_id, userId) : false;
+    // Any authenticated user can comment (the old squad-only gate was removed).
+    const can_comment = Boolean(userId);
 
     return res.status(200).json(
         new ApiResponse(200, `${comments.length} comments`, {
@@ -111,12 +110,6 @@ export const createComment = asyncHandler(async (req, res) => {
         select: { id: true, title: true, organizer_id: true },
     });
     if (!event) throw ApiError.fromCode(ERROR_CODES.EVENT_NOT_FOUND);
-
-    // The gate: you must actually be in this match to post in it.
-    if (!(await canCommentOnEvent(event_id, userId))) {
-        logger.warn(`comment blocked: user=${userId} is not an approved player of event=${event_id}`);
-        throw ApiError.fromCode(ERROR_CODES.CANNOT_COMMENT);
-    }
 
     // Replies are one level deep. Replying to a reply attaches to its root instead
     // of nesting further, so the thread can't turn into a staircase.
@@ -251,11 +244,6 @@ export const toggleCommentLike = asyncHandler(async (req, res) => {
 
     const comment = await pgClient.event_comments.findUnique({ where: { id: comment_id } });
     if (!comment || comment.is_deleted) throw ApiError.fromCode(ERROR_CODES.COMMENT_NOT_FOUND);
-
-    // Liking is a form of participation — same gate as posting.
-    if (!(await canCommentOnEvent(event_id, userId))) {
-        throw ApiError.fromCode(ERROR_CODES.CANNOT_COMMENT);
-    }
 
     const existing = await pgClient.comment_likes.findUnique({
         where: { comment_id_user_id: { comment_id, user_id: userId } },
