@@ -49,9 +49,7 @@ export const validateUuidParams = (...names) => (req, _res, next) => {
  * Worth having as its own guard: query ids skip the path-param middleware
  * entirely, so an id that failed to decode used to travel all the way into
  * Prisma and surface as a 500 reading "Inconsistent column data: Error creating
- * UUID, invalid character ... found `k` at 1". By the time this runs the
- * public-id layer has already translated tokens to UUIDs, so anything still not
- * UUID-shaped is genuinely a bad request.
+ * UUID, invalid character ... found `k` at 1".
  *
  * Usage:
  *   router.route("/available-slots").get(validateUuidQuery("ground"), getAvailableSlots);

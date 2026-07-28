@@ -16,7 +16,7 @@ frontend-engine/          ← Next.js 15 App Router client
 
 ## Authoritative instruction files
 
-- `backend-engine/CLAUDE.md` — backend conventions (asyncHandler, ApiError, verifyJWT, caching, DTO serializers, public-id masking)
+- `backend-engine/CLAUDE.md` — backend conventions (asyncHandler, ApiError, verifyJWT, caching, DTO serializers)
 - `frontend-engine/CLAUDE.md` — frontend conventions (server components by default, RTK Query, NextAuth, image upload via imgbb, multi-step turf form)
 - `docs/api-guideline.md` — **contract between backend and frontend**: response envelopes, error codes, every endpoint. **Update in the same change as the route.**
 
