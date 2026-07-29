@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { parse as parseYaml } from "yaml";
 import swaggerUi from "swagger-ui-express";
 import { docsLimiter } from "../middlewares/rateLimit.middleware.js";
+import { docsSecurityHeaders } from "../middlewares/security.middleware.js";
 import { logger } from "../../logs/logger.js";
 
 /**
@@ -111,11 +112,21 @@ export const mountDocs = (app) => {
     const spec = loadSpec();
     if (!spec) return; // loadSpec already logged the reason.
 
-    // Raw spec, for client codegen / Postman import / CI contract checks.
+    // Raw spec, for client codegen / Postman import / CI contract checks. It is
+    // plain JSON, so it keeps the strict API-wide CSP from app.js.
     app.get(SPEC_ROUTE, docsLimiter, (_req, res) => res.json(spec));
 
-    // The interactive UI.
-    app.use(DOCS_ROUTE, docsLimiter, swaggerUi.serve, swaggerUi.setup(spec, swaggerUiOptions));
+    // The interactive UI. `docsSecurityHeaders` re-runs helmet on THIS ROUTE
+    // ONLY, overwriting the strict `default-src 'none'` policy with one that
+    // permits swagger-ui's inline <style>/<script> — which it cannot nonce.
+    // Scoping it here means the relaxation never touches an API response.
+    app.use(
+        DOCS_ROUTE,
+        docsLimiter,
+        docsSecurityHeaders,
+        swaggerUi.serve,
+        swaggerUi.setup(spec, swaggerUiOptions)
+    );
 
     logger.info(`Swagger: docs mounted at ${DOCS_ROUTE} (raw spec at ${SPEC_ROUTE})`);
 };

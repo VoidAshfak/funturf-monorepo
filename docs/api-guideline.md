@@ -283,6 +283,56 @@ Notifications fire **exactly once even under concurrent sweeps**: the `RETURNING
 Local dev is unaffected — `http://localhost:3000` is in the default allow-list and the
 local `.env` keeps `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1`.
 
+## Security response headers
+
+Both halves of the stack set browser security headers. They are configured independently
+because they defend different surfaces — **changing one does not change the other**.
+
+### Backend (`middlewares/security.middleware.js`, helmet)
+
+Mounted first in `app.js`, before CORS, so 404s and `errorHandler` output carry the headers too.
+
+| header | value | why |
+| --- | --- | --- |
+| `Content-Security-Policy` | `default-src 'none'; … frame-ancestors 'none'; sandbox` | The API only returns JSON, so no response ever needs to load anything. If one is rendered as a document it can neither run script nor call out. |
+| `X-Content-Type-Options` | `nosniff` | Blocks MIME sniffing an echoed upload into executable script. |
+| `X-Frame-Options` | `DENY` | Clickjacking; legacy partner to `frame-ancestors`. |
+| `Referrer-Policy` | `no-referrer` | API URLs carry ids; never leak them in a `Referer`. |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | **Production only** — on `http://localhost` it would pin the dev machine to https for two years. |
+| `Cross-Origin-Resource-Policy` | `cross-origin` | The frontend is a different origin (Vercel vs Render) and must be able to read `public/` assets. Nothing sensitive lives there. |
+
+Swagger UI is the one exception: it is an HTML document with inline `<style>`/`<script>` that
+swagger-ui-express cannot nonce, so `docsSecurityHeaders` re-runs helmet **on `/api/v1/docs`
+only** with a relaxed CSP. The relaxation never reaches an API response. Docs stay off in
+production unless `DOCS_ENABLED=true`.
+
+### Frontend
+
+Split by whether the value varies per request:
+
+- **`next.config.mjs` → `headers()`** — the static ones: `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy` (camera/mic/payment/usb off, `geolocation=(self)` kept for turf
+  discovery), `Cross-Origin-Resource-Policy`, and production-only HSTS.
+- **`src/middleware.js`** — the `Content-Security-Policy`, built per request because it
+  carries a fresh nonce. It is set on the **request** headers too, which is how Next.js
+  discovers the nonce for the scripts it injects; `src/app/layout.js` reads it back off
+  `x-nonce` and passes it to `ThemeProvider` (next-themes emits an inline anti-flash script).
+
+Third-party origins are allowlisted from real usage — carto/OSM tiles, `unpkg.com` Leaflet
+marker icons, `nominatim.openstreetmap.org`, and the API origin plus its `ws://`/`wss://`
+form for Socket.IO. **Adding a new external service means adding it to `buildCsp()`**, or the
+browser silently blocks it.
+
+Two deliberate relaxations, both commented at the source:
+
+- `style-src 'unsafe-inline'` — GSAP, framer-motion, Radix and Leaflet all write inline
+  `style="…"` attributes at runtime, which a nonce cannot cover. Inline JS stays locked down.
+- `script-src-elem 'self' 'nonce-…'` (no `'strict-dynamic'`) — Next 15.5 emits one shared
+  framework chunk per page without the nonce it stamps on every other tag. Same-origin `.js`
+  files therefore load by host while inline script still requires the nonce. Drop this line
+  once Next fixes the chunk.
+
 ## Rate limiting
 
 Every limiter lives in `middlewares/rateLimit.middleware.js` and is keyed by **user id when

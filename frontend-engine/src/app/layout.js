@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import NextAuthSessionProvider from "@/providers/NextAuthSessionProvider";
@@ -22,7 +23,11 @@ export const metadata = {
   description: "Your go-to app for managing turf",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  // Per-request CSP nonce minted in `src/middleware.js`. Anything that renders
+  // an inline <script> must carry it, or the browser blocks the script.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     // <html>/<body> are emitted by the server root layout directly. All
     // providers live INSIDE <body>; wrapping <body> in a client provider puts a
@@ -32,7 +37,7 @@ export default function RootLayout({ children }) {
       <body className="font-sans antialiased">
         <NextAuthSessionProvider>
           <ReduxProvider>
-            <ThemeProvider>
+            <ThemeProvider nonce={nonce}>
               {/* Site-wide smooth scrolling. Renders its children straight
                   through, so everything inside stays server-rendered. */}
               <SmoothScroll>
