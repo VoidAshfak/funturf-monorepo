@@ -76,7 +76,29 @@ function withPoolParams(rawUrl) {
     return `${base}?${params.toString()}`;
 }
 
-const pgUrl = withPoolParams(process.env.POSTGRESQL_DATABASE_URL);
+/**
+ * Which URL this process should use.
+ *
+ * `POSTGRESQL_DATABASE_URL` is the RUNTIME url — it points at a PgBouncer pooler
+ * once one exists, and at the database directly until then.
+ *
+ * Admin scripts must bypass a pooler. The seeder runs long multi-statement
+ * `$transaction` batches and a `TRUNCATE ... CASCADE`; against PgBouncer in
+ * transaction mode those either break on named prepared statements or hold a
+ * server connection for the whole batch, which is the exact starvation the
+ * pooler exists to prevent. They set `PRISMA_DIRECT_CONNECTION=1` (see the
+ * `prisma:seed:*` scripts in package.json) to get the unpooled url instead.
+ *
+ * Falls back to the runtime url when no direct url is configured, so nothing
+ * breaks on a machine that has only ever set one variable.
+ */
+const USE_DIRECT_CONNECTION = process.env.PRISMA_DIRECT_CONNECTION === "1";
+
+const rawPgUrl = USE_DIRECT_CONNECTION
+    ? process.env.POSTGRESQL_DIRECT_URL || process.env.POSTGRESQL_DATABASE_URL
+    : process.env.POSTGRESQL_DATABASE_URL;
+
+const pgUrl = withPoolParams(rawPgUrl);
 
 /**
  * Reuse the client across module reloads.
@@ -111,7 +133,8 @@ if (!pgUrl) {
     // Never log the URL itself — it carries credentials.
     logger.info(
         `postgres pool: connection_limit=${POOL_SETTINGS.connection_limit} ` +
-        `pool_timeout=${POOL_SETTINGS.pool_timeout}s connect_timeout=${POOL_SETTINGS.connect_timeout}s`
+        `pool_timeout=${POOL_SETTINGS.pool_timeout}s connect_timeout=${POOL_SETTINGS.connect_timeout}s ` +
+        `mode=${USE_DIRECT_CONNECTION ? "direct (admin script)" : "runtime"}`
     );
 }
 

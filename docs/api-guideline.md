@@ -149,6 +149,8 @@ server-side login POST, curl, mobile) are allowed — the boundary is browser-on
 | `CORS_ORIGINS` | `http://localhost:3000,https://funturf-frontend.vercel.app` | Comma-separated allowed origins. Trailing slashes ignored. If unset, falls back to `localhost:3000` + the Vercel frontend. |
 | ~~`PUBLIC_ID_SECRET`~~ | *(removed — no longer used)* | |
 | `APP_TZ_OFFSET_MINUTES` | `360` | Minutes offset of the app's local wall-clock from UTC. Used by the event sweeper to decide when a game's naive `event_date`+`end_time` has passed. Default `360` (Bangladesh, UTC+6). |
+| `POSTGRESQL_DATABASE_URL` | `postgresql://…:26480/defaultdb` | Runtime connection. Points at a PgBouncer pooler once one exists. |
+| `POSTGRESQL_DIRECT_URL` | *(same host today)* | **Unpooled** connection for the Prisma CLI and the seeder. Never point this at a pooler — see [Moving to a connection pooler](#moving-to-a-connection-pooler-pgbouncer). |
 | `PG_CONNECTION_LIMIT` | `6` | Max PostgreSQL connections **per process** — see [Database connections](#database-connections). |
 | `PG_POOL_TIMEOUT` | `20` | Seconds a query waits for a free pooled connection before failing with `P2024`. |
 | `PG_CONNECT_TIMEOUT` | `10` | Seconds to wait for the initial connect before giving up. |
@@ -216,13 +218,47 @@ Two other pieces of the same problem:
   same offset.
 
 **Raising the cap.** Increase `PG_CONNECTION_LIMIT` only if the database plan grows. If
-instances are ever added, **divide** it by the instance count instead. If a real pooler is
-put in front (the provider's built-in PgBouncer, your own, or Prisma Accelerate), point the
-URL at the pooler and raise this — the pooler then owns the real connections and
-`connection_limit` becomes a client-side cap. PgBouncer must run in *transaction* mode; add
-`pgbouncer=true` to the URL only for PgBouncer **below 1.21.0** (it stops Prisma using named
-prepared statements). Migrations and seeds must bypass the pooler via a `directUrl` on the
-datasource, or the Schema Engine fails with `prepared statement "s0" already exists`.
+instances are ever added, **divide** it by the instance count instead.
+
+### Moving to a connection pooler (PgBouncer)
+
+Not active yet — **Aiven requires a Startup plan or higher for connection pooling**, and the
+current instance is a ~1GB tier (`shared_buffers=190MB`, `max_connections=20`). The
+*prerequisites* are already wired, so the switch is an env change when the plan is upgraded.
+
+Two URLs exist, and they mean different things:
+
+| var | used by | points at |
+| --- | --- | --- |
+| `POSTGRESQL_DATABASE_URL` | the running app (`src/prisma.js`) | the **pooler**, once there is one |
+| `POSTGRESQL_DIRECT_URL` | Prisma CLI (`db push`/`db pull`/`migrate`) and admin scripts | always the **database itself** |
+
+Both point at the same host today, so nothing behaves differently until a pooler exists.
+
+Why the split: the Schema Engine needs a real unpooled session — it uses named prepared
+statements and advisory locks, and against a transaction-mode pooler it dies with
+`ERROR: prepared statement "s0" already exists`. `directUrl` on the datasource
+(`prisma/postgresql/schema.prisma`) handles the CLI automatically. The **seeder** is not a
+CLI command — it's a Node script using the runtime `pgClient` — so `prisma:seed:pg*` set
+`PRISMA_DIRECT_CONNECTION=1`, which makes `src/prisma.js` resolve the direct url instead.
+The boot log says which one is in use (`mode=runtime` / `mode=direct (admin script)`).
+
+To switch once the plan supports it:
+
+1. Create the pool — **transaction** mode, which is what Prisma Client requires:
+   ```bash
+   avn service connection-pool-create funturf-db \
+     --pool-name funturf-pool --dbname defaultdb --username avnadmin \
+     --pool-size 15 --pool-mode transaction
+   ```
+2. Point `POSTGRESQL_DATABASE_URL` at the pooler's port. Leave `POSTGRESQL_DIRECT_URL` alone.
+3. Raise `PG_CONNECTION_LIMIT` — the pooler now owns the real server connections, and this
+   becomes a client-side cap rather than a share of the 17.
+4. Add `?pgbouncer=true` **only if** the PgBouncer version is below 1.21.0; on 1.21+ the flag
+   is unnecessary and not recommended.
+
+Known losses under transaction mode: session-scoped state, advisory locks, and
+`LISTEN`/`NOTIFY`. None are used today — worth re-grepping before the switch.
 
 ### Background jobs
 
