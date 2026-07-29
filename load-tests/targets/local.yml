@@ -1,0 +1,22 @@
+# Local development environment target.
+#
+# Usage: artillery run --config targets/local.yml <test.yml>
+#
+# NOTE: paths inside a config file (notably `processor`) are resolved relative to
+# THIS file, which is why the test scripts say "../helpers/helpers.js".
+config:
+  target: "http://localhost:8080/api/v1"
+
+  defaults:
+    headers:
+      # Rate-limit bypass for load testing. The API only honours this when
+      # LOAD_TEST_BYPASS_TOKEN is set on the BACKEND to the same value (see
+      # backend-engine/backend/src/middlewares/rateLimit.middleware.js).
+      #
+      # Without it the run measures the rate limiter, not the API: register is
+      # capped at 3/hour per IP and login at 10/15min per IP, so a load test
+      # from one host walls off after a handful of virtual users.
+      #
+      # Export the same value in this shell before running:
+      #   export LOAD_TEST_BYPASS_TOKEN=<the backend's value>
+      x-loadtest-token: "{{ $env.LOAD_TEST_BYPASS_TOKEN }}"

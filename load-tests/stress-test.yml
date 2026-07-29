@@ -1,0 +1,135 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# STRESS TEST — Find the breaking point
+# ─────────────────────────────────────────────────────────────────────────────
+# Purpose: Push the API beyond its expected capacity to discover:
+#   - At what concurrency level does latency spike?
+#   - Where does the error rate become unacceptable?
+#   - Which endpoint fails first (the weakest link)?
+#   - Does the service recover after the load subsides?
+#
+# Run:     npm run stress             (local dev — watch your CPU)
+#          npm run stress:prod        (⚠ STAGING ONLY — do NOT run on prod)
+#
+# Traffic pattern:
+#   Continuous ramp from 1 → 50 new VUs/sec over 10 minutes.  No steady state —
+#   load keeps climbing until the system breaks or the test ends.
+#
+# Pass criteria (liberal — this test may FAIL intentionally):
+#   - p95 latency < 10000ms (degradation is expected)
+#   - Error rate < 20%
+#
+# Reading the results:
+#   Run with `--output` (the npm script does) and look for the inflection point
+#   where latency or error rate jumps — that is your practical capacity ceiling.
+#   Set production alerts at roughly 70% of it.
+#
+# The traffic mix is built from per-step `probability` (0–100) rather than
+# branching: Artillery flows have no if/then/else construct, and each VU picking
+# its own steps independently is also a better model of real navigation than a
+# fixed sequence.
+# ─────────────────────────────────────────────────────────────────────────────
+
+config:
+  # `target` is supplied by `--config targets/*.yml`.
+
+  phases:
+    - duration: 600
+      arrivalRate: 1
+      rampTo: 50
+      name: "Ramp-up (1 → 50 VUs/sec over 10 min)"
+
+  # ── Global pass/fail thresholds ───────────────────────────────────────────
+  # Intentionally permissive — this test is meant to find the ceiling, and a
+  # breach here is a finding rather than a defect.
+  ensure:
+    p95: 10000          # 95th percentile under 10 seconds (degradation OK)
+    maxErrorRate: 20    # Allow up to 20% errors under load
+
+  # ── Plugins ──────────────────────────────────────────────────────────────
+  plugins:
+    ensure: {}
+    metrics-by-endpoint: {}
+
+  # ── Processor ─────────────────────────────────────────────────────────────
+  # Resolved relative to the --config file (targets/), hence the "../".
+  processor: "../helpers/helpers.js"
+
+  # ── HTTP defaults ────────────────────────────────────────────────────────
+  http:
+    timeout: 60         # Longer timeout — stressed endpoints are slow, not dead
+    pool: 50
+
+scenarios:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Scenario: Mixed read/write workload
+  #
+  # Each VU registers its own account. A single shared fixture account would
+  # funnel every authenticated request through one user row, so the test would
+  # measure row contention rather than API capacity — and any 429 on that one
+  # login would take the whole run down with it.
+  # ──────────────────────────────────────────────────────────────────────────
+  - name: "Mixed workload under stress"
+    weight: 1
+    flow:
+      - function: "registerAndLogin"
+      - post:
+          url: "/users/register"
+          json: "{{ registerPayload }}"
+          capture:
+            - json: "$.data.accessToken"
+              as: token
+              strict: false   # Registration failing under load is a RESULT, not
+                              # a reason to abort the VU — later steps are
+                              # guarded by `hasToken` instead.
+      - think: "{{ $randomNumber(0, 2) }}"
+
+      # ── Reads — roughly 70% of steps ────────────────────────────────────
+      - get:
+          url: "/venues"
+          probability: 50
+          capture:
+            - json: "$.data[0].id"
+              as: venueId
+              strict: false
+            - json: "$.data[0].grounds[0].id"
+              as: groundId
+              strict: false
+
+      - get:
+          url: "/events?limit=12"
+          probability: 40
+
+      - function: "setBookingDate"
+      - get:
+          url: "/bookings/available-slots?ground={{ groundId }}&date={{ bookingDate }}"
+          probability: 30
+          ifTrue: "hasGroundId"
+          afterResponse: "pickOpenSlot"
+
+      # Geo search — the heaviest read (Haversine over every turf, no index),
+      # so it is the endpoint most likely to fold first.
+      - get:
+          url: "/events/nearby?lat=23.8103&lng=90.4125&radius=10"
+          probability: 20
+
+      - think: "{{ $randomNumber(1, 3) }}"
+
+      # ── Writes — roughly 30% of steps ───────────────────────────────────
+      - function: "generateProfileUpdate"
+      - patch:
+          url: "/users/me"
+          probability: 30
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ profileUpdatePayload }}"
+
+      - function: "generateEvent"
+      - post:
+          url: "/events/create-event"
+          probability: 15
+          ifTrue: "canCreateEvent"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ eventPayload }}"
+      - think: 1

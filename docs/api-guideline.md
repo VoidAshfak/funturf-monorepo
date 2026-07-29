@@ -91,6 +91,30 @@ Defined in `backend-engine/backend/src/utils/errorCodes.js`. Throw them via `Api
 | `CANNOT_REMOVE_CAPTAIN` | 400 | Captain tried to remove themself — transfer captaincy or disband first |
 | `CANNOT_INVITE_SELF` | 400 | Tried to invite yourself to a team |
 
+### Raw Prisma failures
+
+`utils/errorHandler.js` translates database errors centrally, so a missing per-route guard
+costs a correct 4xx instead of leaking schema internals. Prisma's own message is never sent
+to the client — it names the model, the method and the attempted values — but it is always
+logged server-side.
+
+| Prisma failure | HTTP | code |
+| --- | --- | --- |
+| `P2023` invalid uuid / column data | 400 | `VALIDATION_ERROR` (`One or more ids are invalid`) |
+| `P2003` FK violation | 400 | `VALIDATION_ERROR` (`Referenced record does not exist`) |
+| `P2000` value too long | 400 | `VALIDATION_ERROR` |
+| `P2002` unique violation | 409 | `CONFLICT` |
+| `P2025` record not found | 404 | `NOT_FOUND` |
+| `PrismaClientValidationError` (bad field type) | 400 | `VALIDATION_ERROR` |
+| any other `P####` | 500 | `INTERNAL_ERROR` (generic message) |
+
+`PrismaClientValidationError` is matched by class name rather than a `P####` code — it
+carries no `code` property. Before it was handled it fell through to the generic branch and
+answered **500 with the full failing query echoed back**, including every field of the write.
+A wrongly-typed field the caller sent is a 400, and the body it sent is not something to
+hand back. Example: `POST /users/register` with `"date_of_birth": "1995-06-15"` (a date-only
+string where the column is a `DateTime`) now returns 400 `VALIDATION_ERROR`.
+
 ## Auth
 
 Protected routes require `Authorization: Bearer <accessToken>`. The token is issued by
@@ -128,6 +152,7 @@ server-side login POST, curl, mobile) are allowed — the boundary is browser-on
 | `PG_CONNECTION_LIMIT` | `2` | Max PostgreSQL connections **per replica** — see [Database connections](#database-connections). |
 | `PG_POOL_TIMEOUT` | `20` | Seconds a query waits for a free pooled connection before failing with `P2024`. |
 | `PG_CONNECT_TIMEOUT` | `10` | Seconds to wait for the initial connect before giving up. |
+| `LOAD_TEST_BYPASS_TOKEN` | *(unset)* | **Never set on production.** Local/staging only — lets the load-test suite past every rate limiter. See [Rate limiting](#rate-limiting). |
 
 ### Database connections
 
@@ -211,6 +236,49 @@ Notifications fire **exactly once across replicas**: the `RETURNING` rows of the
 
 Local dev is unaffected — `http://localhost:3000` is in the default allow-list and the
 local `.env` keeps `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1`.
+
+## Rate limiting
+
+Every limiter lives in `middlewares/rateLimit.middleware.js` and is keyed by **user id when
+authenticated, falling back to the IP subnet** — so rotating IPs buys a logged-in attacker
+nothing, and one NAT'd office does not share a single bucket. A blocked caller gets the
+normal error envelope with code `RATE_LIMITED` (HTTP 429), not a bare express-rate-limit body.
+
+| limiter | window | limit | applied to |
+| --- | --- | --- | --- |
+| `registerLimiter` | 1 hour | 3 | `POST /users/register` |
+| `loginLimiter` | 15 min | 10 | `POST /users/login` |
+| `profileWriteLimiter` | 1 min | 20 | `PATCH /users/me`, `PATCH /venues/:venue_id` |
+| `bookingWriteLimiter` | 1 min | 10 | booking create / cancel / payment actions |
+| `bookingReadLimiter` | 1 min | 120 | `/bookings/available-slots`, `/bookings/quote`, admin reads |
+| `commentWriteLimiter` | 1 min | 20 | event comments, likes, squad chat |
+| `teamWriteLimiter` | 1 min | 20 | team writes (invites, roster edits) |
+| `docsLimiter` | 1 min | 60 | Swagger UI + raw spec |
+
+### Load-test bypass
+
+These limits make the API impossible to load test honestly: a run drives thousands of
+requests from **one** host, so register (3/hour) and login (10/15min) wall off after a
+handful of virtual users and the run measures the limiter instead of the service.
+
+The escape hatch is opt-in twice over:
+
+1. The backend must have `LOAD_TEST_BYPASS_TOKEN` set to a value of **at least 32
+   characters** (a shorter one is refused and the bypass stays off).
+2. Each request must present that value in an **`x-loadtest-token`** header.
+
+Only then does `skip` return true and the request go uncounted. With the env var unset —
+the default, and the required state in production — `skip` is a constant `false` and every
+limiter behaves exactly as it always has. The comparison is constant-time so the token
+cannot be recovered by timing, and enabling it logs a loud warning at boot:
+
+```
+⚠ RATE LIMIT BYPASS ENABLED — requests carrying a valid x-loadtest-token header
+  skip ALL rate limiters. This must never be set in production.
+```
+
+Generate a token with `cd load-tests && npm run token`. Usage and the rest of the load-test
+suite are documented in `load-tests/README.md`.
 
 ## Endpoints
 

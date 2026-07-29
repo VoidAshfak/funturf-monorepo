@@ -1,0 +1,232 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LOAD TEST — Simulate average traffic
+# ─────────────────────────────────────────────────────────────────────────────
+# Purpose: Verify the API handles expected everyday traffic without
+#          degradation.  This is your "baseline" — run it regularly to catch
+#          regressions (e.g. an unindexed query that only hurts at scale).
+#
+# Run:     npm run load               (local dev)
+#          npm run load:prod          (production — ⚠ coordinate with the team)
+#
+# Traffic pattern:
+#   - Ramp up from 1 to 10 new VUs/sec over 2 minutes (warm-up)
+#   - Hold 10 new VUs/sec for 5 minutes (steady state)
+#   - Ramp down to 0 over 30 seconds (cool-down)
+#
+# The warm-up matters: Prisma's query engine, the connection pool and the
+# node-cache entries are all cold on the first request, so starting at full rate
+# would measure startup, not steady-state behaviour.
+#
+# Traffic is split across three weighted scenarios that mirror real usage —
+# mostly reads, some authenticated browsing, a minority of writes.
+#
+# Pass criteria:
+#   - p95 latency < 3000ms
+#   - Error rate < 1%
+# ─────────────────────────────────────────────────────────────────────────────
+
+config:
+  # `target` is supplied by `--config targets/*.yml`.
+
+  phases:
+    - duration: 120
+      arrivalRate: 1
+      rampTo: 10
+      name: "Warm-up (1 → 10 VUs/sec over 2 min)"
+    - duration: 300
+      arrivalRate: 10
+      name: "Steady state (10 VUs/sec for 5 min)"
+    - duration: 30
+      arrivalRate: 10
+      rampTo: 0
+      name: "Cool-down (10 → 0 VUs/sec)"
+
+  # ── Global pass/fail thresholds ───────────────────────────────────────────
+  ensure:
+    p95: 3000           # 95th percentile under 3 seconds
+    maxErrorRate: 1     # Error rate under 1%
+
+  # ── Plugins ──────────────────────────────────────────────────────────────
+  plugins:
+    expect: {}
+    ensure: {}
+    metrics-by-endpoint: {}   # Per-URL latency breakdown — finds the slow route
+
+  # ── Processor ─────────────────────────────────────────────────────────────
+  # Resolved relative to the --config file (targets/), hence the "../".
+  processor: "../helpers/helpers.js"
+
+  # ── HTTP defaults ────────────────────────────────────────────────────────
+  http:
+    timeout: 30
+    pool: 20            # Keep-alive sockets reused across requests
+
+scenarios:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Scenario A: Browse & Read (60% of traffic)
+  # Anonymous users browsing venues, events, and checking availability.
+  # ──────────────────────────────────────────────────────────────────────────
+  - name: "Browse & Read"
+    weight: 60
+    flow:
+      - get:
+          url: "/venues"
+          capture:
+            - json: "$.data[0].id"
+              as: venueId
+              strict: false
+            # Captured HERE — every later availability request needs it, and a
+            # blank ground id is rejected by the endpoint's uuid guard.
+            - json: "$.data[0].grounds[0].id"
+              as: groundId
+              strict: false
+      - think: 1         # User pauses 1s between actions
+
+      - get:
+          url: "/venues/list"
+      - think: 0.5
+
+      - get:
+          url: "/venues/{{ venueId }}"
+          ifTrue: "hasVenueId"
+      - think: 1
+
+      - get:
+          url: "/events?limit=12"
+          capture:
+            - json: "$.data.events[0].id"
+              as: eventId
+              strict: false
+      - think: 2         # User browses the feed
+
+      - get:
+          url: "/events/{{ eventId }}"
+          ifTrue: "hasEventId"
+      - think: 3         # Reading event details
+
+      # Availability grid — the query needs a DATE (YYYY-MM-DD), not a timestamp.
+      - function: "setBookingDate"
+      - get:
+          url: "/bookings/available-slots?ground={{ groundId }}&date={{ bookingDate }}"
+          ifTrue: "hasGroundId"
+      - think: 2
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Scenario B: Auth & Social (25% of traffic)
+  # Logged-in users interacting with their profile and social features.
+  #
+  # Each VU registers its own throwaway account rather than sharing one: a
+  # shared account would serialise every write on the same rows and measure lock
+  # contention instead of API throughput.
+  # ──────────────────────────────────────────────────────────────────────────
+  - name: "Auth & Social"
+    weight: 25
+    flow:
+      - function: "registerAndLogin"
+      - post:
+          url: "/users/register"
+          json: "{{ registerPayload }}"
+          capture:
+            - json: "$.data.accessToken"
+              as: token
+              strict: false
+            - json: "$.data.id"
+              as: userId
+              strict: false
+      - think: 1
+
+      - get:
+          url: "/users/{{ userId }}"
+          ifTrue: "hasUserId"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 1
+
+      - function: "generateProfileUpdate"
+      - patch:
+          url: "/users/me"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ profileUpdatePayload }}"
+      - think: 0.5
+
+      - get:
+          url: "/notifications"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 0.5
+
+      - get:
+          url: "/events/my-events"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 1
+
+      - get:
+          url: "/bookings/my"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 1
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Scenario C: Write Operations (15% of traffic)
+  # Authenticated users creating events and rating venues.
+  # ──────────────────────────────────────────────────────────────────────────
+  - name: "Write Operations"
+    weight: 15
+    flow:
+      - function: "registerAndLogin"
+      - post:
+          url: "/users/register"
+          json: "{{ registerPayload }}"
+          capture:
+            - json: "$.data.accessToken"
+              as: token
+              strict: false
+      - think: 1
+
+      # Event creation with no booking attached takes its venue AND ground from
+      # the body, so both ids must be captured before the write.
+      - get:
+          url: "/venues"
+          capture:
+            - json: "$.data[0].id"
+              as: venueId
+              strict: false
+            - json: "$.data[0].grounds[0].id"
+              as: groundId
+              strict: false
+      - think: 0.5
+
+      - function: "generateRating"
+      - post:
+          url: "/venues/{{ venueId }}/rating"
+          ifTrue: "canRateVenue"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ ratingPayload }}"
+      - think: 1
+
+      - function: "generateEvent"
+      - post:
+          url: "/events/create-event"
+          ifTrue: "canCreateEvent"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ eventPayload }}"
+      - think: 2
+
+      # A second event with fresh random data — regenerated, not replayed, so the
+      # two inserts don't collide on identical rows.
+      - function: "generateEvent"
+      - post:
+          url: "/events/create-event"
+          ifTrue: "canCreateEvent"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ eventPayload }}"
+      - think: 1

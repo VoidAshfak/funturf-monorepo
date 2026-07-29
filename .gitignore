@@ -1,3 +1,5 @@
 .playwright-mcp
 .claude
 docs/SEED_PGSQL_DB.md
+.agents
+skills-lock.json
