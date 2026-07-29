@@ -1,0 +1,14 @@
+# Production target.
+#
+# ⚠ Do NOT run load tests against production without team coordination. Use this
+#   for the SMOKE test only — `stress` and `soak` against production will exhaust
+#   the connection pool and degrade the service for real users.
+#
+# Usage: artillery run --config targets/prod.yml <test.yml>
+#
+# There is deliberately NO rate-limit bypass header here. Production must never
+# have LOAD_TEST_BYPASS_TOKEN set, so runs against it are subject to the real
+# limiters — expect 429s from the auth flow, and read that as correct behaviour
+# rather than a defect.
+config:
+  target: "https://app4-osju.onrender.com/api/v1"

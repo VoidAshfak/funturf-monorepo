@@ -34,6 +34,26 @@ const PRISMA_ERROR_MAP = Object.freeze({
 const isPrismaErrorCode = (code) => typeof code === "string" && /^P\d{4}$/.test(code);
 
 /**
+ * `PrismaClientValidationError` carries NO `code` property, so it slips past the
+ * map above and used to fall through to the generic branch — answering 500 with
+ * Prisma's raw message, which prints the failing model, the method, and every
+ * field of the attempted write:
+ *
+ *   POST /users/register  { "date_of_birth": "1995-06-15" }
+ *   500 { "message": "\nInvalid `prisma.users.create()` invocation:\n\n{ data: {
+ *         email: ..., password_hash: \"$2b$10$...\", ... } }\n\nInvalid value for
+ *         argument `date_of_birth`: premature end of input." }
+ *
+ * That is the same disclosure the P-code map exists to prevent, plus a wrong
+ * status: a badly-typed field the CALLER sent is a 400, not a server fault. It
+ * is matched by name because the error class lives in the generated client and
+ * importing it here would tie this module to a generated path.
+ */
+const isPrismaValidationError = (err) =>
+    err?.name === "PrismaClientValidationError" ||
+    err?.constructor?.name === "PrismaClientValidationError";
+
+/**
  * Terminal error middleware (mounted last in app.js). Serializes every thrown
  * error into ONE consistent envelope the frontend can rely on:
  *
@@ -52,6 +72,12 @@ export const errorHandler = (err, req, res, next) => {
               statusCode: 500,
               code: "INTERNAL_ERROR",
               message: "Internal server error",
+          }
+        : isPrismaValidationError(err)
+        ? {
+              statusCode: 400,
+              code: "VALIDATION_ERROR",
+              message: "One or more fields have an invalid type or value",
           }
         : null;
 

@@ -1,0 +1,21 @@
+{
+  "name": "funturf-load-tests",
+  "version": "1.0.0",
+  "description": "Load testing suite for FunTurf APIs — uses Artillery (https://www.artillery.io)",
+  "private": true,
+  "scripts": {
+    "smoke": "artillery run --config targets/local.yml --output artillery-report.json smoke-test.yml",
+    "smoke:prod": "artillery run --config targets/prod.yml --output artillery-report.json smoke-test.yml",
+    "load": "artillery run --config targets/local.yml --output artillery-report.json load-test.yml",
+    "load:prod": "artillery run --config targets/prod.yml --output artillery-report.json load-test.yml",
+    "stress": "artillery run --config targets/local.yml --output artillery-report.json stress-test.yml",
+    "stress:prod": "artillery run --config targets/prod.yml --output artillery-report.json stress-test.yml",
+    "soak": "artillery run --config targets/local.yml --output artillery-report.json soak-test.yml",
+    "soak:prod": "artillery run --config targets/prod.yml --output artillery-report.json soak-test.yml",
+    "report": "node scripts/summarize.js",
+    "token": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+  },
+  "devDependencies": {
+    "artillery": "^2.0.22"
+  }
+}

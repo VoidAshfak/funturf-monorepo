@@ -1,0 +1,10 @@
+# Artillery deps — this package is installed separately (`cd load-tests && npm install`)
+node_modules/
+
+# Run output written by `artillery run --output`
+artillery-report.json
+artillery-report.html
+
+# Local overrides (e.g. LOAD_TEST_BYPASS_TOKEN) — never commit a bypass token
+.env
+.env.local

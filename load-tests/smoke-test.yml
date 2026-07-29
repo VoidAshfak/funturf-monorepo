@@ -1,0 +1,268 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SMOKE TEST — Quick endpoint verification
+# ─────────────────────────────────────────────────────────────────────────────
+# Purpose: Verify that all major API endpoints respond correctly under minimal
+#          load.  This is the FIRST test you should run after any deployment or
+#          code change — it confirms the API is alive and the response shapes
+#          are correct.
+#
+# Run:     npm run smoke              (local dev)
+#          npm run smoke:prod         (production — 💡 reads are safe, but the
+#                                      auth flow will hit the real rate limits)
+#
+# What it does:
+#   1 VU runs through a sequence of endpoints: public reads first, then the auth
+#   flow, then authenticated reads and writes.  No concurrency — this is a pure
+#   functional correctness check.
+#
+# Pass criteria:
+#   - 0 errors
+#   - p95 latency < 2000ms
+#   - All responses match the FunTurf API envelope (success/error structure)
+# ─────────────────────────────────────────────────────────────────────────────
+
+config:
+  # `target` is supplied by `--config targets/*.yml`.
+
+  phases:
+    # A single virtual user does one walkthrough.
+    - duration: 1
+      arrivalCount: 1
+      name: "Single-user walkthrough"
+
+  # ── Global pass/fail thresholds ───────────────────────────────────────────
+  # If any of these are breached, Artillery exits with a non-zero code — which
+  # is what makes this usable as a CI/CD gate.
+  ensure:
+    p95: 2000           # 95th percentile latency must be under 2000ms
+    maxErrorRate: 0     # Absolutely no errors allowed in a smoke test
+
+  # ── Plugins ──────────────────────────────────────────────────────────────
+  plugins:
+    expect: {}           # Enables the `expect` block in HTTP requests
+    ensure: {}           # Enables the global pass/fail thresholds above
+
+  # ── Processor ─────────────────────────────────────────────────────────────
+  # Payload generators and `ifTrue` step guards.
+  # Resolved relative to the --config file (targets/), hence the "../".
+  processor: "../helpers/helpers.js"
+
+  http:
+    timeout: 30
+
+scenarios:
+  - name: "Smoke test — full API walkthrough"
+    weight: 1
+    flow:
+      # ── 1. Public endpoints (no auth required) ──────────────────────────
+      - log: "▶ Phase 1 — Public endpoints"
+
+      # List venues. Also the source of the venue/ground ids every later step
+      # depends on, so it captures both.
+      - get:
+          url: "/venues"
+          # Envelope check runs as an afterResponse hook — a `- function:` step
+          # has no response attached to its context.
+          afterResponse: "checkSuccess"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: data
+          capture:
+            # GET /venues returns the turf array as `data` itself (not `data.venues`).
+            - json: "$.data[0].id"
+              as: venueId
+              strict: false
+            - json: "$.data[0].grounds[0].id"
+              as: groundId
+              strict: false
+
+      # Minimal id/name list used by dropdowns.
+      - get:
+          url: "/venues/list"
+          afterResponse: "checkSuccess"
+          expect:
+            - statusCode: 200
+            - contentType: json
+
+      # Single venue detail — only if the venue table actually had a row.
+      - get:
+          url: "/venues/{{ venueId }}"
+          ifTrue: "hasVenueId"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: data.id
+
+      # Public event feed.
+      - get:
+          url: "/events?limit=12"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: data.events
+            - hasProperty: data.pagination
+          capture:
+            - json: "$.data.events[0].id"
+              as: eventId
+              strict: false
+
+      # Single event detail.
+      - get:
+          url: "/events/{{ eventId }}"
+          ifTrue: "hasEventId"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.id
+
+      # Geo search — no captured ids needed, so it always runs.
+      - get:
+          url: "/events/nearby?lat=23.8103&lng=90.4125&radius=10"
+          expect:
+            - statusCode: 200
+            - contentType: json
+
+      # Availability grid + price quote for tomorrow.
+      # `bookingDate` is YYYY-MM-DD: these endpoints reject a full ISO timestamp.
+      - function: "setBookingDate"
+      - get:
+          url: "/bookings/available-slots?ground={{ groundId }}&date={{ bookingDate }}"
+          ifTrue: "hasGroundId"
+          # Reads the returned grid and sets `slotCode` to a slot this turf is
+          # genuinely open for — each turf has its own opening hours, so a
+          # hardcoded slot gets a correct-but-noisy 409 from the quote below.
+          afterResponse: "pickOpenSlot"
+          expect:
+            - statusCode: 200
+            - contentType: json
+
+      - get:
+          url: "/bookings/quote?ground_id={{ groundId }}&slot={{ slotCode }}&booking_date={{ bookingDate }}"
+          ifTrue: "canQuoteSlot"
+          expect:
+            - statusCode: 200
+            - contentType: json
+
+      # ── 2. Auth flow ────────────────────────────────────────────────────
+      - log: "▶ Phase 2 — Auth (register + login)"
+
+      - function: "registerAndLogin"
+      - post:
+          url: "/users/register"
+          json: "{{ registerPayload }}"
+          expect:
+            - statusCode: 201
+            - contentType: json
+            - hasProperty: data.accessToken
+          capture:
+            - json: "$.data.accessToken"
+              as: token
+            # Register returns the user fields flat on `data` — there is no
+            # `data.user` wrapper here (login has one, register does not).
+            - json: "$.data.id"
+              as: userId
+
+      # Log in with the same credentials to exercise the password path.
+      - post:
+          url: "/users/login"
+          json:
+            email: "{{ registerEmail }}"
+            password: "{{ registerPassword }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: data.user.accessToken
+          capture:
+            - json: "$.data.user.accessToken"
+              as: token
+
+      # ── 3. Authenticated endpoints ──────────────────────────────────────
+      - log: "▶ Phase 3 — Authenticated requests"
+
+      - get:
+          url: "/users/{{ userId }}"
+          ifTrue: "hasUserId"
+          headers:
+            authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.email
+
+      - function: "generateProfileUpdate"
+      - patch:
+          url: "/users/me"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ profileUpdatePayload }}"
+          expect:
+            - statusCode: 200
+
+      - get:
+          url: "/events/my-events"
+          headers:
+            authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.events
+
+      - get:
+          url: "/notifications"
+          headers:
+            authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.notifications
+            - hasProperty: data.unreadCount
+
+      - get:
+          url: "/notifications/unread-count"
+          headers:
+            authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.unreadCount
+
+      - get:
+          url: "/bookings/my"
+          headers:
+            authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.bookings
+
+      # ── 4. Write operations ─────────────────────────────────────────────
+      - log: "▶ Phase 4 — Write operations"
+
+      # Create an event. Needs the venue AND ground captured in phase 1: with no
+      # booking attached, the match's venue/ground come from the body.
+      - function: "generateEvent"
+      - post:
+          url: "/events/create-event"
+          ifTrue: "canCreateEvent"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ eventPayload }}"
+          expect:
+            # createEvent responds 200 (not 201) on success.
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: data.id
+          capture:
+            - json: "$.data.id"
+              as: createdEventId
+              strict: false
+
+      # Rate a venue (upsert — re-rating updates the existing review).
+      - function: "generateRating"
+      - post:
+          url: "/venues/{{ venueId }}/rating"
+          ifTrue: "canRateVenue"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ ratingPayload }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.rating
+
+      # ── 5. Done ─────────────────────────────────────────────────────────
+      - log: "✓ Smoke test complete — all endpoints verified"

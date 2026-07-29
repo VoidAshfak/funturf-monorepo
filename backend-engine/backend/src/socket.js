@@ -2,7 +2,6 @@ import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { logger } from "../logs/logger.js";
 import { allowedOrigins } from "./utils/corsOrigins.js";
-import { maskDeep, toInternalId } from "./utils/publicId.js";
 
 // Single Socket.IO server instance for the process. Held in module scope so
 // controllers/services can `emitToUser` without threading `io` through every call.
@@ -58,20 +57,14 @@ export function initSocket(server) {
         socket.join(userRoom(userId));
         logger.info(`socket connected: user=${userId} sid=${socket.id}`);
 
-        // A client viewing a match page subscribes to that event's room to get
-        // live roster/request updates. Only non-sensitive data flows here (see
-        // eventRoom note), so plain membership of the room needs no extra auth.
-        // The client only ever holds the masked event id (that is all the REST
-        // layer hands out), so translate before deriving the room name — rooms are
-        // keyed by the internal UUID, matching what controllers pass to emitToEvent.
         socket.on("event:subscribe", (eventId) => {
             if (typeof eventId === "string" && eventId) {
-                socket.join(eventRoom(toInternalId(eventId)));
+                socket.join(eventRoom(eventId));
             }
         });
         socket.on("event:unsubscribe", (eventId) => {
             if (typeof eventId === "string" && eventId) {
-                socket.leave(eventRoom(toInternalId(eventId)));
+                socket.leave(eventRoom(eventId));
             }
         });
 
@@ -96,10 +89,7 @@ export function getIo() {
  */
 export function emitToUser(userId, event, payload) {
     if (!io || !userId) return;
-    // Real-time payloads never pass through res.json, so they need the same
-    // masking applied explicitly — otherwise a notification would hand the client
-    // the raw UUIDs that the REST layer just went to the trouble of hiding.
-    io.to(userRoom(userId)).emit(event, maskDeep(payload));
+    io.to(userRoom(userId)).emit(event, payload);
 }
 
 /**
@@ -109,7 +99,5 @@ export function emitToUser(userId, event, payload) {
  */
 export function emitToEvent(eventId, event, payload) {
     if (!io || !eventId) return;
-    // Callers pass the internal UUID (rooms are keyed on it); the payload still
-    // gets masked, same reasoning as emitToUser.
-    io.to(eventRoom(eventId)).emit(event, maskDeep(payload));
+    io.to(eventRoom(eventId)).emit(event, payload);
 }

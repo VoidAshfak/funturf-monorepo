@@ -19,11 +19,8 @@ import CommentForm from "./CommentForm";
 /**
  * Event discussion.
  *
- * Reading is open to everyone (the thread is social proof that the match is
- * real). Posting is limited to people actually IN the match — the organizer, a
- * co-organizer, or a player whose join request was APPROVED. The server decides
- * that and hands back `can_comment`, so the UI never has to infer it from the
- * participant list and can't drift out of sync with the backend's rule.
+ * Reading is open to everyone. Any signed-in user may post, reply, or like
+ * comments — the old squad-only gate was removed.
  */
 export default function CommentsSection({ eventId, isEventAdmin = false }) {
     const { data: session } = useSession();
@@ -89,22 +86,16 @@ export default function CommentsSection({ eventId, isEventAdmin = false }) {
                 </span>
             </div>
 
-            {/* composer — or the reason you don't get one */}
+            {/* composer — or prompt to sign in */}
             {canComment ? (
                 <CommentForm submitting={busy} onSubmit={(text) => handlers.add(text)} />
             ) : (
                 <p className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
                     <Lock className="h-3.5 w-3.5 shrink-0" />
-                    {!session ? (
-                        <>
-                            <Link href="/login" className="font-semibold text-primary hover:underline">
-                                Sign in
-                            </Link>{" "}
-                            and join the match to take part in the discussion.
-                        </>
-                    ) : (
-                        "Only players in this match can post. Once your join request is accepted, you can comment here."
-                    )}
+                    <Link href="/login" className="font-semibold text-primary hover:underline">
+                        Sign in
+                    </Link>{" "}
+                    to join the discussion.
                 </p>
             )}
 

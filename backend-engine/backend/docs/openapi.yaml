@@ -33,29 +33,16 @@ info:
 
     ## Object ids
 
-    Every id in this API — in a path, a query string, a request body or a
-    response — is an **opaque 22-character public id**, not the database key:
-
-    ```
-    GET /api/v1/venues/ROxl8HkZND7yrL1B59ZocA
-    ```
-
-    Internally records are keyed by UUID. Those keys are masked at the API
-    boundary (`middlewares/publicId.middleware.js`) so they never reach a browser
-    URL, a `Referer` header sent to a third party, a bookmark, or an analytics
-    payload. The mapping is deterministic, so a given record always has the same
-    public id and links stay stable forever.
+    Record identifiers are exposed as **raw UUIDs** (e.g.
+    `f47ac10b-58cc-4372-a567-0e02b2c3d479`). There is no encryption or masking
+    layer — same approach as GitHub, Notion, and most large-scale platforms.
 
     Rules for clients:
 
-    - **Treat ids as opaque.** Do not parse, slice, sort or derive anything from
-      them. Anything you used to compute from a UUID is now sent explicitly —
-      e.g. a booking's printable reference arrives as `Booking.ref`.
-    - **Send back exactly what you received.** No encoding or decoding is needed
-      or possible on the client.
-    - A raw UUID is still **accepted** on input for backwards compatibility, but
-      is never returned. It grants nothing extra: ownership is re-checked after
-      the id is resolved, on every endpoint.
+    - **Treat ids as opaque strings.** Do not parse, slice, or derive meaning
+      from them.
+    - **Send back exactly what you received.**
+    - A booking's printable reference is available separately as `Booking.ref`.
 
     Socket.IO payloads are masked the same way, so ids are interchangeable
     between the REST and real-time layers.
@@ -8235,26 +8222,12 @@ components:
     # ---- primitives ---------------------------------------------------------
     PublicId:
       type: string
-      pattern: '^[A-Za-z0-9_-]{22}$'
-      minLength: 22
-      maxLength: 22
-      example: ROxl8HkZND7yrL1B59ZocA
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      example: f47ac10b-58cc-4372-a567-0e02b2c3d479
       description: |
-        Opaque public identifier for a record — 22 URL-safe characters.
-
-        This is NOT the database primary key. Internal keys are UUIDs; the API
-        masks them at the boundary (`middlewares/publicId.middleware.js`) so that
-        they never appear in a URL, a `Referer` header, a bookmark or an
-        analytics payload. The mapping is stable: one record always yields the
-        same public id, so links and caches stay valid.
-
-        Treat it as an opaque string — do not parse it, slice it or derive
-        anything from it. Send it back exactly as received wherever the docs
-        below say an id is expected.
-
-        For backwards compatibility a raw UUID is still accepted on input, but
-        is never returned. It carries no extra privilege: every endpoint
-        re-checks ownership after resolving the id.
+        UUID primary key for a record. Exposed directly in URLs and payloads
+        — no masking or encryption layer.
 
     SlotCode:
       type: string

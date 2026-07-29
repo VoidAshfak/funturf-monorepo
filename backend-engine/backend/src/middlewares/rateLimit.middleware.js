@@ -1,4 +1,5 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { timingSafeEqual } from "node:crypto";
 import { ApiError } from "../utils/apiError.js";
 import { ERROR_CODES } from "../utils/errorCodes.js";
 import { logger } from "../../logs/logger.js";
@@ -32,11 +33,68 @@ const rateLimitHandler = (req, _res, next) => {
 // actually costs an attacker something.
 const keyByUserOrIp = (req) => req.user?.id ?? ipKeyGenerator(req.ip);
 
+/**
+ * Load-test bypass — OFF unless deliberately switched on.
+ *
+ * Why this exists: every limiter below is keyed by user-id-or-IP, and a load
+ * test drives thousands of requests from ONE host. Register (3/hour) and login
+ * (10/15min) wall off after a handful of virtual users, so a load run measures
+ * the rate limiter instead of the API. There is no way to load test the real
+ * request path without a way past them.
+ *
+ * Why it is safe:
+ *   1. It is opt-in twice over. The operator must set LOAD_TEST_BYPASS_TOKEN
+ *      *and* every request must carry it in the `x-loadtest-token` header. With
+ *      the env var unset (the default, including production) `skip` is a
+ *      constant `false` and the limiters behave exactly as before.
+ *   2. The token must be >= 32 chars, so a guessable value can't be configured
+ *      by accident. A shorter one is rejected and the bypass stays off.
+ *   3. Comparison is constant-time, so the token can't be recovered by timing
+ *      the endpoint.
+ *   4. Enabling it logs a loud warning at boot, so a token left set on a real
+ *      environment is visible in the logs rather than silent.
+ *
+ * NEVER set LOAD_TEST_BYPASS_TOKEN on production. Load test against staging.
+ */
+const LOAD_TEST_BYPASS_TOKEN = process.env.LOAD_TEST_BYPASS_TOKEN ?? "";
+const loadTestBypassEnabled = LOAD_TEST_BYPASS_TOKEN.length >= 32;
+const loadTestTokenBuffer = Buffer.from(LOAD_TEST_BYPASS_TOKEN, "utf8");
+
+if (LOAD_TEST_BYPASS_TOKEN && !loadTestBypassEnabled) {
+    logger.error(
+        "LOAD_TEST_BYPASS_TOKEN is set but shorter than 32 characters — bypass DISABLED. Use a long random value."
+    );
+} else if (loadTestBypassEnabled) {
+    logger.warn(
+        "⚠ RATE LIMIT BYPASS ENABLED — requests carrying a valid x-loadtest-token header skip ALL rate limiters. This must never be set in production."
+    );
+}
+
+/**
+ * True only for a request that presents the configured bypass token.
+ * `express-rate-limit` calls this as `skip`: returning true means the request is
+ * neither counted nor blocked.
+ */
+const isLoadTestClient = (req) => {
+    if (!loadTestBypassEnabled) return false;
+
+    const presented = req.get("x-loadtest-token");
+    if (!presented) return false;
+
+    // timingSafeEqual throws on a length mismatch, so compare lengths first.
+    // Length is not secret (the operator chose it), the token contents are.
+    const presentedBuffer = Buffer.from(presented, "utf8");
+    if (presentedBuffer.length !== loadTestTokenBuffer.length) return false;
+
+    return timingSafeEqual(presentedBuffer, loadTestTokenBuffer);
+};
+
 const baseOptions = {
     standardHeaders: "draft-7", // RateLimit-* response headers
     legacyHeaders: false,
     keyGenerator: keyByUserOrIp,
     handler: rateLimitHandler,
+    skip: isLoadTestClient,
 };
 
 /**

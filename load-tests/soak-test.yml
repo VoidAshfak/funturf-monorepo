@@ -1,0 +1,189 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SOAK TEST — Endurance / longevity check
+# ─────────────────────────────────────────────────────────────────────────────
+# Purpose: Run moderate load for an extended period to uncover issues that only
+#          surface over time:
+#   - Memory leaks (Node.js heap grows unbounded)
+#   - Database connection pool exhaustion
+#   - Slow query accumulation (unindexed tables get slower as the test writes
+#     more rows into them)
+#   - Cache thrashing (node-cache TTL evictions causing repeated DB hits)
+#   - Background job interference (the hold/event sweepers competing with
+#     request traffic)
+#
+# Run:     npm run soak               (local — ~33 min total)
+#          npm run soak:prod          ⚠ DO NOT — production data + long run
+#
+# Traffic pattern:
+#   - 2 min ramp-up to 15 VUs/sec
+#   - 30 min steady at 15 VUs/sec (simulates your busiest hour)
+#   - 1 min cool-down
+#
+# Deliberately lower concurrency than the load test — the goal is *duration*,
+# not throughput.  Leaks only show up after thousands of requests over many
+# minutes.
+#
+# Pass criteria:
+#   - Error rate < 1% throughout
+#   - p95 latency does NOT trend upward (flat or decreasing is healthy;
+#     increasing = leak or cache problem)
+#   - After the test, the API process RSS should be similar to pre-test
+#     (check `docker stats` or Task Manager)
+# ─────────────────────────────────────────────────────────────────────────────
+
+config:
+  # `target` is supplied by `--config targets/*.yml`.
+
+  phases:
+    - duration: 120
+      arrivalRate: 1
+      rampTo: 15
+      name: "Ramp-up (1 → 15 VUs/sec over 2 min)"
+    - duration: 1800      # 30 minutes
+      arrivalRate: 15
+      name: "Soak (15 VUs/sec for 30 min)"
+    - duration: 60
+      arrivalRate: 15
+      rampTo: 0
+      name: "Cool-down (15 → 0 VUs/sec)"
+
+  # ── Global pass/fail thresholds ───────────────────────────────────────────
+  ensure:
+    p95: 4000           # Under 4 seconds — stricter than the stress test
+    maxErrorRate: 1     # Errors must stay under 1% across the whole 30 min
+
+  # ── Plugins ──────────────────────────────────────────────────────────────
+  plugins:
+    ensure: {}
+    metrics-by-endpoint: {}
+
+  # ── Processor ─────────────────────────────────────────────────────────────
+  # Resolved relative to the --config file (targets/), hence the "../".
+  processor: "../helpers/helpers.js"
+
+  # ── HTTP defaults ────────────────────────────────────────────────────────
+  http:
+    timeout: 30
+    pool: 20
+
+scenarios:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Scenario: Realistic user session — mostly reads with occasional writes.
+  #
+  # The write steps are what make this a soak rather than a long read test:
+  # they grow the tables during the run, so a query that is only fast on a small
+  # table shows up as upward-trending latency.
+  # ──────────────────────────────────────────────────────────────────────────
+  - name: "User session loop"
+    weight: 1
+    flow:
+      # ── 1. Browse ────────────────────────────────────────────────────────
+      - get:
+          url: "/venues"
+          capture:
+            - json: "$.data[0].id"
+              as: venueId
+              strict: false
+            - json: "$.data[0].grounds[0].id"
+              as: groundId
+              strict: false
+      - think: 2
+
+      - get:
+          url: "/events?limit=12"
+          capture:
+            - json: "$.data.events[0].id"
+              as: eventId
+              strict: false
+      - think: 3
+
+      - get:
+          url: "/venues/{{ venueId }}"
+          ifTrue: "hasVenueId"
+      - think: 1
+
+      - get:
+          url: "/events/{{ eventId }}"
+          ifTrue: "hasEventId"
+      - think: 2
+
+      # ── 2. Check availability ────────────────────────────────────────────
+      # Both endpoints take a DATE (YYYY-MM-DD) and reject a full ISO timestamp.
+      - function: "setBookingDate"
+      - get:
+          url: "/bookings/available-slots?ground={{ groundId }}&date={{ bookingDate }}"
+          ifTrue: "hasGroundId"
+          # Picks a slot inside this turf's opening hours for the quote below.
+          afterResponse: "pickOpenSlot"
+      - think: 2
+
+      - get:
+          url: "/bookings/quote?ground_id={{ groundId }}&slot={{ slotCode }}&booking_date={{ bookingDate }}"
+          ifTrue: "canQuoteSlot"
+      - think: 1
+
+      # ── 3. Auth cycle ────────────────────────────────────────────────────
+      # Registering a new account per loop is intentional: it grows the users
+      # table for the whole run and repeatedly busts the auth cache, which is
+      # exactly the pressure a soak test is looking for.
+      - function: "registerAndLogin"
+      - post:
+          url: "/users/register"
+          json: "{{ registerPayload }}"
+          capture:
+            - json: "$.data.accessToken"
+              as: token
+              strict: false
+            - json: "$.data.id"
+              as: userId
+              strict: false
+
+      - post:
+          url: "/users/login"
+          json:
+            email: "{{ registerEmail }}"
+            password: "{{ registerPassword }}"
+          capture:
+            - json: "$.data.user.accessToken"
+              as: token
+              strict: false
+      - think: 1
+
+      # ── 4. Authenticated reads ───────────────────────────────────────────
+      - get:
+          url: "/users/{{ userId }}"
+          ifTrue: "hasUserId"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 1
+
+      - get:
+          url: "/events/my-events"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 1
+
+      - get:
+          url: "/bookings/my"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 1
+
+      - get:
+          url: "/notifications"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+      - think: 0.5
+
+      # ── 5. Light writes ──────────────────────────────────────────────────
+      - function: "generateProfileUpdate"
+      - patch:
+          url: "/users/me"
+          ifTrue: "hasToken"
+          headers:
+            authorization: "Bearer {{ token }}"
+          json: "{{ profileUpdatePayload }}"
+      - think: 2

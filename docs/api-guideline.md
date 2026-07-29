@@ -91,177 +91,47 @@ Defined in `backend-engine/backend/src/utils/errorCodes.js`. Throw them via `Api
 | `CANNOT_REMOVE_CAPTAIN` | 400 | Captain tried to remove themself — transfer captaincy or disband first |
 | `CANNOT_INVITE_SELF` | 400 | Tried to invite yourself to a team |
 
+### Raw Prisma failures
+
+`utils/errorHandler.js` translates database errors centrally, so a missing per-route guard
+costs a correct 4xx instead of leaking schema internals. Prisma's own message is never sent
+to the client — it names the model, the method and the attempted values — but it is always
+logged server-side.
+
+| Prisma failure | HTTP | code |
+| --- | --- | --- |
+| `P2023` invalid uuid / column data | 400 | `VALIDATION_ERROR` (`One or more ids are invalid`) |
+| `P2003` FK violation | 400 | `VALIDATION_ERROR` (`Referenced record does not exist`) |
+| `P2000` value too long | 400 | `VALIDATION_ERROR` |
+| `P2002` unique violation | 409 | `CONFLICT` |
+| `P2025` record not found | 404 | `NOT_FOUND` |
+| `PrismaClientValidationError` (bad field type) | 400 | `VALIDATION_ERROR` |
+| any other `P####` | 500 | `INTERNAL_ERROR` (generic message) |
+
+`PrismaClientValidationError` is matched by class name rather than a `P####` code — it
+carries no `code` property. Before it was handled it fell through to the generic branch and
+answered **500 with the full failing query echoed back**, including every field of the write.
+A wrongly-typed field the caller sent is a 400, and the body it sent is not something to
+hand back. Example: `POST /users/register` with `"date_of_birth": "1995-06-15"` (a date-only
+string where the column is a `DateTime`) now returns 400 `VALIDATION_ERROR`.
+
 ## Auth
 
 Protected routes require `Authorization: Bearer <accessToken>`. The token is issued by
 `POST /users/login` and carried by the frontend NextAuth session
 (`session.user.access_token`) → RTK Query `prepareHeaders`.
 
-## Object ids (URL masking)
+## Object ids
 
-Every id the API accepts or returns — path, query, body, response, Socket.IO payload —
-is an **opaque 22-character public id**, never the database key:
+Record identifiers are exposed as **raw UUIDs** (e.g. `f47ac10b-58cc-4372-a567-0e02b2c3d479`).
+There is no encryption or masking layer — IDs appear in URLs, responses, and request bodies
+as-is, matching the database primary key. This is the same approach used by GitHub, Notion,
+and most large-scale platforms: UUIDs are random enough (122 bits) that enumeration is
+infeasible, and every endpoint enforces ownership server-side regardless.
 
-```
-/venues/ROxl8HkZND7yrL1B59ZocA          not  /venues/f47ac10b-58cc-4372-a567-0e02b2c3d479
-```
-
-### Why
-
-Primary keys are `uuid_generate_v4()`, so they were never *guessable* — 122 random bits
-is not enumerable, and every route enforces ownership server-side regardless. The problem
-masking solves is exposure, not guessing: internal keys were landing in browser history,
-`Referer` headers sent to third parties, bookmarks, analytics payloads and support
-screenshots. Handing out a value that isn't the database key makes all of that harmless.
-
-**This is not an access control.** It hides the key; it does not authorize anything.
-Ownership checks (`isBookingAdmin`, the `admin_user_id` comparison in `updateVenue`, …)
-still run after the id is resolved and are what actually guard a row.
-
-### How
-
-`src/utils/publicId.js` — AES-128 over the UUID's 16 raw bytes. Exactly one block, so the
-output is 16 bytes → 22 base64url chars, *shorter* than the UUID it replaces. ECB mode is
-used deliberately: its usual weakness is that repeated plaintext blocks produce repeated
-ciphertext blocks, which needs more than one block to matter, and determinism is required
-here — one record must always map to one URL or links and caches break.
-
-Applied globally by `src/middlewares/publicId.middleware.js`, mounted in `app.js`:
-
-```
-express.json  →  publicIdTranslation  →  routes  →  errorHandler
-```
-
-| direction | what it does | how it decides |
-| --- | --- | --- |
-| **inbound — path** | token → UUID in every path segment | **value**-driven: any 22-char base64url segment |
-| **inbound — query** | token → UUID in every query param | **value**-driven, minus a free-text deny-list (`q`, `search`, `code`, `promo_code`, `slot`, `cursor`, `sort*`, `order`, `status`, `sport*`) |
-| **inbound — body** | token → UUID under id keys only | **key**-driven: `id`, `*_id(s)`, `*Id(s)`, `*_by` — minus `transaction_id` |
-| **outbound** | UUID → token in every `res.json` body | **value**-driven: anything UUID-shaped, except free-text keys (`message`, `notes`, `description`, …) |
-
-The asymmetry is intentional, and the split between query and body was **paid for in
-production**. Outbound is value-driven so it **fails closed** — a new id-bearing column is
-masked the day it is added, with no code change; a key-driven rule would have leaked the six
-`*_by` audit columns, which are `@db.Uuid` with no `_id` suffix.
-
-Inbound started key-driven everywhere, on the reasoning that a 22-char base64url string is
-not rare (a password, a nonce) and blindly decoding one would corrupt it. That held for
-bodies — every id in every request body is named `*_id` or `*Id` (audited, 16 of 16) — but
-**not for query strings**, where two params carry ids under names no key rule predicts:
-
-```
-GET /bookings/available-slots?ground=<id>      <- not `ground_id`
-GET /turfmates/get-mutual-turfmates?userTwo=<id>
-```
-
-Those tokens went through untouched and reached Prisma raw:
-
-```
-Inconsistent column data: Error creating UUID, invalid character:
-expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `k` at 1
-```
-
-So query is now value-driven too. Query strings carry filters, not secrets, so the objection
-that applied to bodies does not apply here — and it fails closed, meaning the next `?venue=`
-or `?team=` param works the day it is written. The deny-list is what protects a 22-character
-search term. **Bodies stay key-driven**: they carry `password`, `refresh_token`,
-`accessToken`, and those must never be run through the codec. `transaction_id` is excluded
-by name for the same reason — it is a bKash/Nagad reference typed in by a human, not a UUID.
-
-Ids that arrive in the query string also skip `validateUuidParams`, so the routes carrying
-them use **`validateUuidQuery(...)`** (`middlewares/validateUuid.middleware.js`). Anything
-still not UUID-shaped after the translation layer has run is a bad request, and this turns it
-into a clean `400 VALIDATION_ERROR` instead of a 500 carrying a raw Prisma error. Add it to
-any new route that takes an id as a query param.
-
-Path rewriting targets `req.url` rather than `req.params`, because at app level `req.params`
-is still empty — it is only populated once a route pattern matches. That is why all ~40
-routes were covered without any route file changing.
-
-### Objects the walkers must not rebuild
-
-Both walkers rebuild every object they descend into, and that rebuild **strips the
-prototype** — so anything that serializes through `toJSON` loses it and `JSON.stringify`
-dumps its internals instead. Prisma returns money and coordinates as `Decimal`:
-
-```
-final_amount: "3000"   ->   { "s": 1, "e": 3, "d": [3000] }   ->   Number(...) = NaN
-```
-
-That surfaced as **NaN on every booking amount**, and would equally have hit `hourly_rate`,
-`entry_fee` and venue `rating`. The rule is `typeof value.toJSON === "function"` → leaf.
-
-Do **not** "fix" this with a plain-object check instead: `ApiResponse` and the serializer
-DTOs are class instances too, so that rule skips entire payloads and masks nothing. `toJSON`
-is the precise property — an object that defines it renders as something other than its own
-keys and must be preserved; an object without it renders exactly as the rebuild would.
-
-### Prisma errors never reach the client raw
-
-`utils/errorHandler.js` maps Prisma error codes to the standard envelope. Previously an
-unguarded id produced a 500 carrying Prisma's raw text — the failing model, the method and
-part of the query — to any unauthenticated caller:
-
-| Prisma | becomes |
-| --- | --- |
-| `P2023` malformed uuid | `400 VALIDATION_ERROR` — "One or more ids are invalid" |
-| `P2003` FK violation | `400 VALIDATION_ERROR` |
-| `P2000` value too long | `400 VALIDATION_ERROR` |
-| `P2002` unique violation | `409 CONFLICT` |
-| `P2025` record not found | `404 NOT_FOUND` |
-| any other `P####` | `500 INTERNAL_ERROR`, generic message (real error stays in the server log) |
-
-This is the safety net under `validateUuidParams` / `validateUuidQuery`, not a replacement:
-~33 dynamic id routes exist and only the team routes are individually guarded, so a missed
-guard now costs a correct 400 instead of a leak. Add the per-route guard anyway — it saves a
-pointless database round-trip.
-
-> **Constraint when adding routes.** A token is any 22-character `[A-Za-z0-9_-]` string, and
-> there is no integrity check to distinguish one from a literal (see below). A **static** route
-> segment of exactly 22 URL-safe characters would be rewritten into a UUID and stop matching.
-> None exists today — the longest are the 23-char `accept|reject|cancel-turfmate-request`
-> routes, so the margin is one character. Keep static segments off that length.
-
-There is deliberately no MAC on a token. Any 16 bytes decrypt to 16 bytes, and every 16 bytes
-is a syntactically valid UUID, so a forged token resolves to an id that matches no row and the
-caller gets a clean `404` — verified. Nothing is lost by that: the id is not a capability, so a
-forgery has nothing to gain.
-
-Note the codec is **not** version-locked to UUIDv4. The schema default is `uuid_generate_v4()`,
-but most seeded rows are v5; an earlier v4-only check rejected 95 of 108 live rows.
-
-Socket.IO is masked separately (`emitToUser` / `emitToEvent` in `src/socket.js`), since
-real-time payloads never pass through `res.json`. Room keys stay internal UUIDs;
-`event:subscribe` translates the client's token before deriving the room name.
-
-### Rules for clients
-
-- **Ids are opaque.** Do not parse, slice or derive from them. Anything previously computed
-  from a UUID is now sent explicitly — a booking's printable reference arrives as
-  `Booking.ref` (`FT-7K3QX9A1`), computed server-side by `withBookingRef`, because it is a
-  prefix of the *internal* key the client no longer has.
-- **Send back exactly what you received.** No client-side encode/decode exists or is needed.
-- A raw UUID is still **accepted** on input (back-compat with printed tickets and older
-  clients) but is never returned. It grants nothing — the ownership check is unchanged.
-
-### Key management
-
-| var | notes |
-| --- | --- |
-| `PUBLIC_ID_SECRET` | Key for the codec. **Permanent** — changing it changes every public URL on the site at once. Must be byte-identical across `app1/2/3`, or a link issued by one replica is unreadable by another. |
-
-If unset it falls back to `ACCESS_TOKEN_SECRET`, which is already identical across replicas
-(JWT requires it), so an existing deploy keeps working with no action. Set `PUBLIC_ID_SECRET`
-explicitly anyway: otherwise rotating the JWT secret would silently invalidate every link
-ever issued.
-
-### Known boundary
-
-The JWT access-token payload still carries the caller's raw UUID (`{ id, email, user_type }`),
-because `verifyJWT` and the Socket.IO handshake both read it. A signed-in user can therefore
-decode their *own* internal id from their own token. That is deliberate and out of scope for
-URL masking — it is not a browser link, is not shared with third parties, and reveals only
-the holder's own id.
+- **Treat ids as opaque strings.** Do not parse, slice, or derive meaning from them.
+- **Send back exactly what you received.**
+- A booking's printable reference is available separately as `Booking.ref`.
 
 ## CORS & environment
 
@@ -277,11 +147,12 @@ server-side login POST, curl, mobile) are allowed — the boundary is browser-on
 | var | example | notes |
 | --- | --- | --- |
 | `CORS_ORIGINS` | `http://localhost:3000,https://funturf-frontend.vercel.app` | Comma-separated allowed origins. Trailing slashes ignored. If unset, falls back to `localhost:3000` + the Vercel frontend. |
-| `PUBLIC_ID_SECRET` | *(32 random bytes, base64url)* | Key for the public-id codec — see [Object ids](#object-ids-url-masking). Identical on all three replicas; permanent. Falls back to `ACCESS_TOKEN_SECRET` if unset. |
+| ~~`PUBLIC_ID_SECRET`~~ | *(removed — no longer used)* | |
 | `APP_TZ_OFFSET_MINUTES` | `360` | Minutes offset of the app's local wall-clock from UTC. Used by the event sweeper to decide when a game's naive `event_date`+`end_time` has passed. Default `360` (Bangladesh, UTC+6). |
 | `PG_CONNECTION_LIMIT` | `2` | Max PostgreSQL connections **per replica** — see [Database connections](#database-connections). |
 | `PG_POOL_TIMEOUT` | `20` | Seconds a query waits for a free pooled connection before failing with `P2024`. |
 | `PG_CONNECT_TIMEOUT` | `10` | Seconds to wait for the initial connect before giving up. |
+| `LOAD_TEST_BYPASS_TOKEN` | *(unset)* | **Never set on production.** Local/staging only — lets the load-test suite past every rate limiter. See [Rate limiting](#rate-limiting). |
 
 ### Database connections
 
@@ -365,6 +236,49 @@ Notifications fire **exactly once across replicas**: the `RETURNING` rows of the
 
 Local dev is unaffected — `http://localhost:3000` is in the default allow-list and the
 local `.env` keeps `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1`.
+
+## Rate limiting
+
+Every limiter lives in `middlewares/rateLimit.middleware.js` and is keyed by **user id when
+authenticated, falling back to the IP subnet** — so rotating IPs buys a logged-in attacker
+nothing, and one NAT'd office does not share a single bucket. A blocked caller gets the
+normal error envelope with code `RATE_LIMITED` (HTTP 429), not a bare express-rate-limit body.
+
+| limiter | window | limit | applied to |
+| --- | --- | --- | --- |
+| `registerLimiter` | 1 hour | 3 | `POST /users/register` |
+| `loginLimiter` | 15 min | 10 | `POST /users/login` |
+| `profileWriteLimiter` | 1 min | 20 | `PATCH /users/me`, `PATCH /venues/:venue_id` |
+| `bookingWriteLimiter` | 1 min | 10 | booking create / cancel / payment actions |
+| `bookingReadLimiter` | 1 min | 120 | `/bookings/available-slots`, `/bookings/quote`, admin reads |
+| `commentWriteLimiter` | 1 min | 20 | event comments, likes, squad chat |
+| `teamWriteLimiter` | 1 min | 20 | team writes (invites, roster edits) |
+| `docsLimiter` | 1 min | 60 | Swagger UI + raw spec |
+
+### Load-test bypass
+
+These limits make the API impossible to load test honestly: a run drives thousands of
+requests from **one** host, so register (3/hour) and login (10/15min) wall off after a
+handful of virtual users and the run measures the limiter instead of the service.
+
+The escape hatch is opt-in twice over:
+
+1. The backend must have `LOAD_TEST_BYPASS_TOKEN` set to a value of **at least 32
+   characters** (a shorter one is refused and the bypass stays off).
+2. Each request must present that value in an **`x-loadtest-token`** header.
+
+Only then does `skip` return true and the request go uncounted. With the env var unset —
+the default, and the required state in production — `skip` is a constant `false` and every
+limiter behaves exactly as it always has. The comparison is constant-time so the token
+cannot be recovered by timing, and enabling it logs a loud warning at boot:
+
+```
+⚠ RATE LIMIT BYPASS ENABLED — requests carrying a valid x-loadtest-token header
+  skip ALL rate limiters. This must never be set in production.
+```
+
+Generate a token with `cd load-tests && npm run token`. Usage and the rest of the load-test
+suite are documented in `load-tests/README.md`.
 
 ## Endpoints
 

@@ -114,7 +114,7 @@ export default function CommentItem({
                             <button
                                 onClick={() => handlers.like(comment.id)}
                                 disabled={!canComment}
-                                title={canComment ? undefined : "Join the match to react"}
+                                title={canComment ? undefined : "Sign in to react"}
                                 className={cn(
                                     "inline-flex items-center gap-1 transition-colors",
                                     comment.liked_by_me
@@ -129,7 +129,7 @@ export default function CommentItem({
                                 {comment.likes_count > 0 && comment.likes_count}
                             </button>
 
-                            {/* Only players can reply — same gate as posting. */}
+                            {/* Reply requires authentication. */}
                             {canComment && (
                                 <button
                                     onClick={() => setReplying((v) => !v)}
