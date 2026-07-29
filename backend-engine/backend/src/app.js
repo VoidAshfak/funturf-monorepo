@@ -23,11 +23,11 @@ const corsOptions = {
     credentials: true,
 }
 
-// We run behind nginx (see ../nginx/nginx.conf and render.yaml), so without this
-// every request looks like it came from the proxy — rate limiters keyed on
-// `req.ip` would put the whole internet in one bucket. `1` = trust exactly one
-// hop (our nginx); do NOT set `true`, which would let a client spoof
-// X-Forwarded-For and dodge the limiter entirely.
+// We run behind Render's edge proxy, so without this every request looks like it
+// came from the proxy — rate limiters keyed on `req.ip` would put the whole
+// internet in one bucket. `1` = trust exactly one hop (that proxy); do NOT set
+// `true`, which would let a client spoof X-Forwarded-For and dodge the limiter
+// entirely. Bump this only if you deliberately add another trusted hop in front.
 app.set("trust proxy", 1);
 
 app.use(cors(corsOptions));

@@ -97,7 +97,7 @@ servers:
   - url: http://localhost:8080/api/v1
     description: Local development (`npm run dev` from `backend-engine/backend/`)
   - url: https://app4-osju.onrender.com/api/v1
-    description: Production (nginx -> app1/2/3 on Render)
+    description: Production (single API service on Render)
 
 security:
   - bearerAuth: []
@@ -7884,7 +7884,7 @@ paths:
         - url: https://app4-osju.onrender.com
           description: Production
       description: |
-        Liveness probe used by Docker/Render and the nginx upstream check.
+        Liveness probe used by Render's health check.
 
         **Note the path:** this lives at the server root (`/health`), *not* under
         `/api/v1` — hence the server override above. Returns plain text, not JSON.

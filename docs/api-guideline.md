@@ -9,12 +9,12 @@ same change that touches a route, so `frontend-engine` can be kept in sync.
 > covers the same surface as an OpenAPI 3.0.3 document — every endpoint, required vs.
 > optional fields, error codes and examples. Use it for client generation and mock servers,
 > and update it alongside this file when a route changes. It lives under `backend/` because
-> that is the Docker build context (`render.yaml` → `rootDir: ./backend`); a spec outside it
-> would not exist in the deployed image.
+> that is the Render service's root directory; a spec outside it would not exist in the
+> deployed build.
 >
 > **Swagger UI:** the backend serves that spec interactively at `/api/v1/docs`, with the raw
 > JSON at `/api/v1/docs.json`. It is **off when `NODE_ENV=production`** unless `DOCS_ENABLED=true`
-> is set — so it is a dev/docker-compose tool, not a public endpoint. See
+> is set — so it is a local dev tool, not a public endpoint. See
 > `backend/src/utils/swagger.js`.
 
 ## Response envelopes
@@ -142,14 +142,14 @@ and rejected. Requests with no `Origin` header (server-to-server, NextAuth's
 server-side login POST, curl, mobile) are allowed — the boundary is browser-only.
 `credentials: true` is set (auth is a Bearer header today, but cookies stay supported).
 
-**Backend env** (Render — set on each `app1/2/3` service):
+**Backend env** (Render — set on the API service):
 
 | var | example | notes |
 | --- | --- | --- |
 | `CORS_ORIGINS` | `http://localhost:3000,https://funturf-frontend.vercel.app` | Comma-separated allowed origins. Trailing slashes ignored. If unset, falls back to `localhost:3000` + the Vercel frontend. |
 | ~~`PUBLIC_ID_SECRET`~~ | *(removed — no longer used)* | |
 | `APP_TZ_OFFSET_MINUTES` | `360` | Minutes offset of the app's local wall-clock from UTC. Used by the event sweeper to decide when a game's naive `event_date`+`end_time` has passed. Default `360` (Bangladesh, UTC+6). |
-| `PG_CONNECTION_LIMIT` | `2` | Max PostgreSQL connections **per replica** — see [Database connections](#database-connections). |
+| `PG_CONNECTION_LIMIT` | `6` | Max PostgreSQL connections **per process** — see [Database connections](#database-connections). |
 | `PG_POOL_TIMEOUT` | `20` | Seconds a query waits for a free pooled connection before failing with `P2024`. |
 | `PG_CONNECT_TIMEOUT` | `10` | Seconds to wait for the initial connect before giving up. |
 | `LOAD_TEST_BYPASS_TOKEN` | *(unset)* | **Never set on production.** Local/staging only — lets the load-test suite past every rate limiter. See [Rate limiting](#rate-limiting). |
@@ -162,68 +162,78 @@ The managed PostgreSQL instance is small and the API is not:
 max_connections                 20
 superuser_reserved_connections   3
 ---------------------------------
-usable by this app              17     <- shared by 3 replicas
+usable by this app              17
 ```
 
+The deploy is a **single** Render web service — one process, one Prisma pool. That is the
+whole budget the numbers below are built on; adding instances means re-dividing it.
+
 Prisma opens **one pool per `PrismaClient`, per process**, and its default size is
-`num_physical_cpus * 2 + 1`. A container reports the *host's* cpu count, so each of
-`app1/2/3` was sizing its pool for a machine it does not own and taking 9–17 connections.
-One replica could exhaust the server by itself, and the next connection attempt — from
-any replica, from pgAdmin, from `prisma migrate` — failed with:
+`num_physical_cpus * 2 + 1`. A container reports the *host's* cpu count, so the API was
+sizing its pool for a machine it does not own and taking 9–17 connections. It could
+exhaust the server by itself, and the next connection attempt — from the API, from
+pgAdmin, from `prisma migrate` — failed with:
 
 ```
 FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute
 ```
 
-**The fix** is an explicit per-replica cap, applied centrally in `src/prisma.js`: the pool
+**The fix** is an explicit per-process cap, applied centrally in `src/prisma.js`: the pool
 parameters are appended to `POSTGRESQL_DATABASE_URL` at client construction, so no
-connection string has to be hand-edited on three Render services. Anything already present
-in the URL wins, so a single value can still be overridden from the connection string.
+connection string has to be hand-edited on the Render service. Anything already present in
+the URL wins, so a single value can still be overridden from the connection string.
 
-The budget behind the default of **2**:
+The budget behind the default of **6**:
 
 | | connections |
 | --- | --- |
-| 3 replicas × 2 | 6 (steady state) |
+| 1 instance × 6 | 6 (steady state) |
 | × 2 while a rolling deploy overlaps old and new containers | 12 (worst case) |
-| + pgAdmin / psql / `prisma migrate` | ~15 — under 17 ✅ |
+| + pgAdmin / psql / `prisma migrate` | ~16 — under 17 ✅ |
 
-Prisma's own rule is *(pool size) / (number of app instances)*. Two consequences worth
-knowing:
+Prisma's own rule is *(pool size) / (number of app instances)*. Consequences worth knowing:
 
-- **Requests queue rather than fail.** With 2 connections per replica, a burst waits for a
-  free one for up to `PG_POOL_TIMEOUT` seconds, then errors with `P2024`. That is the
-  intended trade — queueing beats taking the database down for everyone.
+- **Requests queue rather than fail.** With 6 connections, a burst waits for a free one for
+  up to `PG_POOL_TIMEOUT` seconds, then errors with `P2024`. That is the intended trade —
+  queueing beats taking the database down for everyone.
 - **Interactive transactions hold a connection for their whole duration** (`$transaction(async tx => …)`,
   used by bookings, teams, events, comments). Keep them short; never do network I/O inside one.
+- **Prisma has no idle reaper.** Connections are held until `$disconnect()` or process exit,
+  so an *idle* dev server still owns its full `connection_limit`. `idle_session_timeout` is
+  set server-side to reap them; Prisma reconnects transparently.
+- **A second process spends from the same 17.** A load test, a seed script, or Prisma Studio
+  run from a laptop against the production database is another full pool. Stop the local API
+  (and close pgAdmin) before a load run, or you will reproduce the FATAL above.
 
 Two other pieces of the same problem:
 
 - **Graceful shutdown** (`src/index.js`) — SIGTERM/SIGINT closes Socket.IO, drains in-flight
-  HTTP, then calls `disconnectPrisma()`. Without it a replaced replica keeps its sockets open
-  until the server times them out, so a deploy needs double the budget exactly when all three
-  replicas are restarting. A 10s timer force-exits if a hung socket stalls the drain.
-- **Sweeper jitter** (`jobs/*.js`) — the replicas boot seconds apart, so an un-jittered
-  interval had all three querying on the same offset. Each now waits a random 0–60s before
-  its interval starts.
+  HTTP, then calls `disconnectPrisma()`. Without it the outgoing container keeps its sockets
+  open until the server times them out, so a deploy holds double the budget for as long as
+  old and new overlap. A 10s timer force-exits if a hung socket stalls the drain.
+- **Sweeper jitter** (`jobs/*.js`) — each sweeper waits a random 0–60s before its interval
+  starts, so restarts (or a dev server on the same database) don't put every sweep on the
+  same offset.
 
-**Raising the cap.** Increase `PG_CONNECTION_LIMIT` only if the replica count drops or the
-database plan grows. If a real pooler is put in front (the provider's built-in PgBouncer,
-your own, or Prisma Accelerate), point the URL at the pooler and raise this — the pooler
-then owns the real connections and `connection_limit` becomes a client-side cap. With
-PgBouncer in *transaction* mode, add `pgbouncer=true` to the URL so Prisma stops using
-named prepared statements.
+**Raising the cap.** Increase `PG_CONNECTION_LIMIT` only if the database plan grows. If
+instances are ever added, **divide** it by the instance count instead. If a real pooler is
+put in front (the provider's built-in PgBouncer, your own, or Prisma Accelerate), point the
+URL at the pooler and raise this — the pooler then owns the real connections and
+`connection_limit` becomes a client-side cap. PgBouncer must run in *transaction* mode; add
+`pgbouncer=true` to the URL only for PgBouncer **below 1.21.0** (it stops Prisma using named
+prepared statements). Migrations and seeds must bypass the pooler via a `directUrl` on the
+datasource, or the Schema Engine fails with `prepared statement "s0" already exists`.
 
 ### Background jobs
 
-Started in `src/index.js`, run in-process on every replica (idempotent, so multi-replica is safe — just redundant):
+Started in `src/index.js`, run in-process on the single API instance. The work is written to be idempotent anyway, so a second copy (a dev server on the same database, or a future scale-out) is safe without coordination:
 
 | job | file | interval | what it does |
 | --- | --- | --- | --- |
 | hold sweeper | `jobs/holdSweeper.js` | 10 min | Cancels expired unpaid booking holds (see Bookings). |
 | event sweeper | `jobs/eventSweeper.js` | 5 min | **Takes down expired games** — flips any live event (`open`/`ready`/`booked`) whose slot end has passed to `completed`, then notifies members (`event_completed`) and emits `event:roster` so open match pages refresh. End instant = `event_date + end_time` (+1 day for slots crossing midnight), compared in local time via `APP_TZ_OFFSET_MINUTES`. `status` already surfaces as `completed`. |
 
-Notifications fire **exactly once across replicas**: the `RETURNING` rows of the completing UPDATE are the claim — only the replica that actually flips a row gets it back, so the other two notify nobody. (This is why plain `setInterval` is kept over a cron dependency — cron schedules, but wouldn't dedupe the 3 replicas.)
+Notifications fire **exactly once even under concurrent sweeps**: the `RETURNING` rows of the completing UPDATE are the claim — only the caller that actually flips a row gets it back, so an overlapping run notifies nobody. One instance makes this moot today, but it is what keeps a restart mid-sweep (or a scale-out) from double-notifying, and it's why plain `setInterval` is kept over a cron dependency.
 
 **Frontend env** (Vercel — Production):
 
@@ -1333,7 +1343,7 @@ Frontend hooks: `useGetNotificationsQuery`, `useMarkNotificationReadMutation`,
   initial REST fetch seeds the cache and `onCacheEntryAdded` streams `notification:new` into it
   (prepend + bump `unreadCount`). Socket singleton in `src/lib/socket.js`; disconnected on logout.
 
-> **Production / multi-replica caveat:** the deploy runs **3 backend replicas behind nginx**.
-> Socket.IO connection state is in-process, so cross-replica delivery needs nginx **sticky
-> sessions** (`ip_hash`) **+** a Redis adapter (`@socket.io/redis-adapter`). Single-process dev
-> works as-is; this is **not** wired yet.
+> **Scale-out caveat:** Socket.IO connection state is in-process. The deploy is a **single
+> instance**, so every socket lands on the same process and this works as-is. Adding instances
+> would break cross-instance delivery until you add **sticky sessions** at the proxy **+** a
+> Redis adapter (`@socket.io/redis-adapter`) — **not** wired yet.

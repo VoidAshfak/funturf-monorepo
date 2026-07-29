@@ -202,7 +202,7 @@ export async function resolveBookingAttachment(bookingId, userId, currentEventId
 // Statuses that still represent a "live" game. Once a game's slot has ended,
 // these are auto-transitioned to `completed`. Terminal states (`completed`,
 // `cancelled`) are never touched — the WHERE clause below excludes them, which
-// is also what makes the UPDATE idempotent and safe to run on every replica.
+// is also what makes the UPDATE idempotent and safe to re-run at any time.
 const SWEEPABLE_STATUSES = ["open", "ready", "booked"];
 
 // Event times (`event_date`, `start_time`, `end_time`) are stored as *naive*
@@ -235,7 +235,7 @@ function nowNaiveLocal() {
  * the naive local frame (see nowNaiveLocal).
  *
  * Idempotent: re-running only affects rows still in a sweepable status, so
- * concurrent replica runs and repeated ticks are harmless.
+ * repeated ticks — and any concurrent caller — are harmless.
  *
  * @returns {Promise<number>} how many events were completed this pass
  */
@@ -245,11 +245,13 @@ export async function completeExpiredEvents() {
     // Parameterised raw UPDATE. Status literals are a fixed constant list (not
     // user input) so they're inlined; only the timestamp is a bound parameter.
     //
-    // RETURNING is what makes notification exactly-once across replicas: the row
-    // transition is the "claim". Two replicas may run this concurrently, but
+    // RETURNING is what makes notification exactly-once: the row transition is
+    // the "claim". The deploy is a single instance today, but two callers may
+    // still overlap (a restart mid-sweep, a dev server on the same database).
     // Postgres row-locking means only the one that actually flips a row gets it
     // back here — the loser's WHERE no longer matches, so it returns 0 rows and
-    // notifies nobody. No dedupe table / distributed lock needed.
+    // notifies nobody. No dedupe table / distributed lock needed, and this stays
+    // correct if the service is ever scaled out.
     const completed = await pgClient.$queryRaw`
         UPDATE events
         SET status = 'completed', updated_at = now()

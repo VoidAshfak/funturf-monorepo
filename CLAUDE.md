@@ -5,7 +5,7 @@ In Bangladesh, we play mathces in turf grounds a lot. People from school, colleg
 
 FunTurf — a turf (sports ground) booking and game-organizing platform for Bangladesh. This is an **umbrella repository** that combines two independently-developed projects pulled in via `git subtree` (see the "Add '<dir>/' from commit ..." commits on `main`):
 
-- **`backend-engine/`** — the Express + Prisma REST API, its Docker/Nginx cluster, and Render deploy config.
+- **`backend-engine/`** — the Express + Prisma REST API. Deployed as a **single** Render web service (no Docker/nginx cluster — those files were removed; Render's own edge proxy is the one trusted hop).
 - **`frontend-engine/`** — the Next.js 15 (App Router, React 19) web client.
 
 There is **no build, test, or tooling at the umbrella root** — every command runs inside one of the two subtrees. Treat the two as separate codebases that happen to share a git history.
@@ -50,11 +50,6 @@ funturf-monorepo/
 │   │       │   ├── user/
 │   │       │   └── venue/
 │   │       └── utils/
-│   ├── docker-compose.yml
-│   ├── nginx/
-│   │   ├── Dockerfile
-│   │   └── nginx.conf
-│   └── render.yaml
 └── frontend-engin
     ├── .gitignore
     ├── CLAUDE.md
@@ -146,16 +141,16 @@ funturf-monorepo/
 
 Each subtree has its own detailed `CLAUDE.md`. **Read the one for the area you're working in before making changes — it is authoritative for that codebase:**
 
-- `backend-engine/CLAUDE.md` — API commands (run from `backend-engine/backend/`), Prisma dual-datasource model (use `pgClient`, `mongoClient` is deprecated), request flow, controller/error/auth conventions, Docker cluster, Render deploy.
+- `backend-engine/CLAUDE.md` — API commands (run from `backend-engine/backend/`), Prisma dual-datasource model (use `pgClient`, `mongoClient` is deprecated), request flow, controller/error/auth conventions, Render deploy.
 - `frontend-engine/CLAUDE.md` — Next.js commands, stack (Tailwind v4, shadcn/ui, RTK Query + NextAuth), hybrid server-read / client-RTK-Query data strategy, route groups, image-upload flow.
 
 ## Nesting gotcha
 
-The backend has an extra level: app code is `backend-engine/backend/src/`, and the backend `package.json` / npm scripts live in `backend-engine/backend/`, **not** in `backend-engine/`. This is for running the project locally. The Docker/Nginx/Render files (`docker-compose.yml`, `nginx/`, `render.yaml`) sit one level up in `backend-engine/`. The frontend is flat: code and `package.json` are both directly under `frontend-engine/`.
+The backend has an extra level: app code is `backend-engine/backend/src/`, and the backend `package.json` / npm scripts live in `backend-engine/backend/`, **not** in `backend-engine/`. Deploy config is no longer in the repo — the Render service is configured from its dashboard with the root directory set to `backend-engine/backend/`. The frontend is flat: code and `package.json` are both directly under `frontend-engine/`.
 
 ## How the two halves connect
 
-The frontend calls the backend at the base URL in **`NEXT_PUBLIC_API_BASE_URL`** (`frontend-engine/.env`), defaulting to `http://localhost:8080/api/v1` — the local backend dev server (`npm run dev` from `backend-engine/backend/`). It's read via `process.env.NEXT_PUBLIC_API_BASE_URL` at every call site (`src/utils/getData.js`, the NextAuth route `src/app/api/auth/[...nextauth]/route.js`, and the RTK Query base query `src/store/api/apiSlice.js`) — so switching environments is a one-line env change. Point it at the deployed API (`https://app4-osju.onrender.com/api/v1`, served by the Render service in `backend-engine/render.yaml`) for production. Keep request/response shapes in sync manually between the two subtrees (notably the venue/ground payload — `frontend-engine` `src/utils/constants.js` vs. the backend Prisma schema). 
+The frontend calls the backend at the base URL in **`NEXT_PUBLIC_API_BASE_URL`** (`frontend-engine/.env`), defaulting to `http://localhost:8080/api/v1` — the local backend dev server (`npm run dev` from `backend-engine/backend/`). It's read via `process.env.NEXT_PUBLIC_API_BASE_URL` at every call site (`src/utils/getData.js`, the NextAuth route `src/app/api/auth/[...nextauth]/route.js`, and the RTK Query base query `src/store/api/apiSlice.js`) — so switching environments is a one-line env change. Point it at the deployed API (`https://app4-osju.onrender.com/api/v1`, the single Render web service) for production. Keep request/response shapes in sync manually between the two subtrees (notably the venue/ground payload — `frontend-engine` `src/utils/constants.js` vs. the backend Prisma schema). 
 
 
 ## Additional Instructions (Very Important)
