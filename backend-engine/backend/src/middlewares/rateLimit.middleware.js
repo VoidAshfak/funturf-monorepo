@@ -119,6 +119,19 @@ export const bookingReadLimiter = rateLimit({
 });
 
 /**
+ * Landing-page city pulse (map + activity ticker). Fully anonymous and the most
+ * exposed read in the app — it is on the public home page, so every visitor and
+ * every bot hits it. Both responses are cached server-side, so a legitimate
+ * visitor panning the map costs almost nothing; this cap is what stops the
+ * uncached misses (unusual coordinates) from being used to scan the database.
+ */
+export const pulseLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 60 * 1000,
+    limit: 60,
+});
+
+/**
  * Comment/like writes. Only approved players can post at all, so this is less
  * about outsiders and more about flooding: it stops a member spamming the thread
  * (or hammering the like toggle) faster than a human ever would.

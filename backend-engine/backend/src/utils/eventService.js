@@ -4,6 +4,7 @@ import { emitToEvent } from "../socket.js";
 import { ApiError } from "./apiError.js";
 import { ERROR_CODES } from "./errorCodes.js";
 import { logger } from "../../logs/logger.js";
+import { nowNaiveLocal } from "./appTime.js";
 
 /**
  * Event-admin helpers.
@@ -202,28 +203,12 @@ export async function resolveBookingAttachment(bookingId, userId, currentEventId
 // Statuses that still represent a "live" game. Once a game's slot has ended,
 // these are auto-transitioned to `completed`. Terminal states (`completed`,
 // `cancelled`) are never touched — the WHERE clause below excludes them, which
-// is also what makes the UPDATE idempotent and safe to run on every replica.
+// is also what makes the UPDATE idempotent and safe to re-run at any time.
 const SWEEPABLE_STATUSES = ["open", "ready", "booked"];
 
-// Event times (`event_date`, `start_time`, `end_time`) are stored as *naive*
-// date/time values that mean Bangladesh wall-clock (UTC+6, no DST). To decide if
-// a game has ended we must compare them against "now" expressed in the SAME
-// naive local frame — comparing against the DB's `now()` (timestamptz) would be
-// off by the server's timezone. Override via APP_TZ_OFFSET_MINUTES if the app
-// ever serves a different region.
-const APP_TZ_OFFSET_MIN = Number(process.env.APP_TZ_OFFSET_MINUTES ?? 360); // +06:00
-
-// Current instant as a naive "YYYY-MM-DD HH:mm:ss" string in the app timezone.
-// We shift the UTC instant by the offset, then read it with UTC getters so the
-// wall-clock digits are the target-zone digits.
-function nowNaiveLocal() {
-    const shifted = new Date(Date.now() + APP_TZ_OFFSET_MIN * 60_000);
-    const p = (n) => String(n).padStart(2, "0");
-    return (
-        `${shifted.getUTCFullYear()}-${p(shifted.getUTCMonth() + 1)}-${p(shifted.getUTCDate())} ` +
-        `${p(shifted.getUTCHours())}:${p(shifted.getUTCMinutes())}:${p(shifted.getUTCSeconds())}`
-    );
-}
+// Event times are naive Bangladesh wall-clock, so "has this ended?" has to be
+// answered in that same frame — see utils/appTime.js, which owns the offset and
+// is shared with the city-pulse slot maths.
 
 /**
  * Take down expired games: flip every live event whose slot has already ended
@@ -235,7 +220,7 @@ function nowNaiveLocal() {
  * the naive local frame (see nowNaiveLocal).
  *
  * Idempotent: re-running only affects rows still in a sweepable status, so
- * concurrent replica runs and repeated ticks are harmless.
+ * repeated ticks — and any concurrent caller — are harmless.
  *
  * @returns {Promise<number>} how many events were completed this pass
  */
@@ -245,11 +230,13 @@ export async function completeExpiredEvents() {
     // Parameterised raw UPDATE. Status literals are a fixed constant list (not
     // user input) so they're inlined; only the timestamp is a bound parameter.
     //
-    // RETURNING is what makes notification exactly-once across replicas: the row
-    // transition is the "claim". Two replicas may run this concurrently, but
+    // RETURNING is what makes notification exactly-once: the row transition is
+    // the "claim". The deploy is a single instance today, but two callers may
+    // still overlap (a restart mid-sweep, a dev server on the same database).
     // Postgres row-locking means only the one that actually flips a row gets it
     // back here — the loser's WHERE no longer matches, so it returns 0 rows and
-    // notifies nobody. No dedupe table / distributed lock needed.
+    // notifies nobody. No dedupe table / distributed lock needed, and this stays
+    // correct if the service is ever scaled out.
     const completed = await pgClient.$queryRaw`
         UPDATE events
         SET status = 'completed', updated_at = now()

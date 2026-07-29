@@ -289,9 +289,21 @@ the same payload is being replayed.
 Invalid `prisma.$transaction()` invocation: ... connection pool timeout
 ```
 
-The pool is exhausted. Raise `PG_CONNECTION_LIMIT` in `backend/.env` for the test session —
-the default of 2 per replica is deliberately tight for production and far too tight for load
-testing. See `docs/api-guideline.md` → Database connections.
+The pool is exhausted. The default of 6 is sized for the single production instance against a
+17-connection managed Postgres — deliberately tight, and tight for load testing.
+
+Before raising it, note that the ceiling is the **database**, not the app: a local backend, a
+deployed instance, pgAdmin and `prisma migrate` all spend from the same 17. Overshooting gives
+you the harder failure instead:
+
+```
+FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute
+```
+
+So: close pgAdmin, make sure nothing else is pointed at the same database, then raise
+`PG_CONNECTION_LIMIT` in `backend/.env` for the test session. Also note Prisma has no idle
+reaper — a backend left running holds its full pool at zero traffic until you stop it. See
+`docs/api-guideline.md` → Database connections.
 
 ## Best Practices
 

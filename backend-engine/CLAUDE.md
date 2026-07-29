@@ -29,6 +29,8 @@ There is **no test runner, linter, or build step** configured. Formatting is Pre
 
 Clients are singletons in `src/prisma.js`. `src/generated/` is **not** committed — it's absent on a fresh clone, so run `npm run prisma:generate` before `npm run dev` or the `prisma.js` client imports crash. Never hand-edit the generated output; regenerate with the prisma scripts.
 
+**Two PostgreSQL URLs.** `POSTGRESQL_DATABASE_URL` is what the running app uses and is the one that would point at a PgBouncer pooler; `POSTGRESQL_DIRECT_URL` is the unpooled connection used by the Prisma CLI (via `directUrl` on the datasource) and by admin scripts. They point at the same host today — the split only matters once a pooler exists, but the CLI and seeder must never go through one (`prepared statement "s0" already exists`). Scripts that need the direct connection set `PRISMA_DIRECT_CONNECTION=1`; `prisma:seed:pg*` already do. The boot log line reports which mode resolved. Details: `docs/api-guideline.md` → Moving to a connection pooler.
+
 ### Request flow
 
 `src/index.js` (listen + `/health`) → `src/app.js` (express setup, CORS, route mounting, `errorHandler` last) → `routes/` → `middlewares/` → `controllers/`.

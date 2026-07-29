@@ -23,11 +23,11 @@ const corsOptions = {
     credentials: true,
 }
 
-// We run behind nginx (see ../nginx/nginx.conf and render.yaml), so without this
-// every request looks like it came from the proxy — rate limiters keyed on
-// `req.ip` would put the whole internet in one bucket. `1` = trust exactly one
-// hop (our nginx); do NOT set `true`, which would let a client spoof
-// X-Forwarded-For and dodge the limiter entirely.
+// We run behind Render's edge proxy, so without this every request looks like it
+// came from the proxy — rate limiters keyed on `req.ip` would put the whole
+// internet in one bucket. `1` = trust exactly one hop (that proxy); do NOT set
+// `true`, which would let a client spoof X-Forwarded-For and dodge the limiter
+// entirely. Bump this only if you deliberately add another trusted hop in front.
 app.set("trust proxy", 1);
 
 app.use(cors(corsOptions));
@@ -57,6 +57,7 @@ import notificationRoute from "./routes/notification/notification.route.js";
 import chatRoute from "./routes/chat/chat.route.js";
 import promotionRoute from "./routes/venue/promotion.route.js";
 import couponRoute from "./routes/venue/coupon.route.js";
+import pulseRoute from "./routes/pulse.route.js";
 import { mountDocs } from "./utils/swagger.js";
 import { errorHandler } from "./utils/errorHandler.js";
 
@@ -72,6 +73,8 @@ app.use("/api/v1/notifications", notificationRoute);
 app.use("/api/v1/chat", chatRoute);
 app.use("/api/v1/promotions", promotionRoute);
 app.use("/api/v1/coupons", couponRoute);
+// Public landing-page aggregates (live map + activity ticker).
+app.use("/api/v1/pulse", pulseRoute);
 
 // Interactive API docs at /api/v1/docs (dev only by default — see utils/swagger.js).
 // Must sit before errorHandler, which is terminal.

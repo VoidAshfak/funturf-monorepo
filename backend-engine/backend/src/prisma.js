@@ -8,37 +8,46 @@ import { logger } from "../logs/logger.js";
  * CONNECTION POOLING
  * Prisma keeps its own pool of PostgreSQL connections per PrismaClient. Left
  * unconfigured that pool is `num_physical_cpus * 2 + 1`, sized for a machine
- * that owns its database. This API does not: it runs as THREE replicas
- * (app1/2/3 behind nginx — see render.yaml / docker-compose.yml) against one
- * small managed Postgres, and a container reports the HOST's cpu count, so each
- * replica was happily opening 9–17 connections. The managed instance allows:
+ * that owns its database. This API does not: it is one Render web service
+ * talking to one small managed Postgres (Aiven), and a container reports the
+ * HOST's cpu count — so unconfigured the process happily opened 9–17
+ * connections. The managed instance allows:
  *
  *     max_connections               20
  *     superuser_reserved_connections 3
  *     ---------------------------------
  *     usable by this app            17
  *
- * One replica could therefore exhaust the server on its own, and the next
- * connection attempt — from any replica, psql, or a migration — died with
+ * The API could therefore exhaust the server on its own, and the next
+ * connection attempt — from the API, psql, pgAdmin or a migration — died with
  * "FATAL: remaining connection slots are reserved for roles with the SUPERUSER
- * attribute". Hence an explicit, deliberately small per-replica limit.
+ * attribute". Hence an explicit, deliberately small per-process limit.
  *
- * THE BUDGET (why the default is 2)
- *   3 replicas x 2                      =  6 steady state
+ * THE BUDGET (why the default is 6)
+ *   1 instance x 6                      =  6 steady state
  *   x2 during a rolling deploy, when the
  *   old container is still up            = 12 worst case
- *   + pgAdmin / psql / prisma migrate    ~ 15
+ *   + pgAdmin / psql / prisma migrate    ~ 16
  *                                          -- still under 17.
  *
- * Raise PG_CONNECTION_LIMIT if the replica count drops or the plan grows; the
- * rule from Prisma's docs is (pool size) / (number of app instances). If you
- * ever put a real pooler in front (Aiven's built-in PgBouncer, PgBouncer of your
- * own, Prisma Accelerate), point the URL at the pooler and raise this — the
- * pooler then owns the real connections and this becomes a client-side cap.
+ * IMPORTANT: this budget assumes ONE running instance. A load test or seed
+ * script run from a laptop is a SECOND process against the same database and
+ * spends from the same 17 — stop the local API (or lower this) before one.
+ *
+ * Prisma has no idle reaper: connections opened here are held until
+ * `$disconnect()` or process exit, so an idle dev server still owns its full
+ * `connection_limit`. `idle_session_timeout` is set server-side to reap them.
+ *
+ * Raise PG_CONNECTION_LIMIT only if the plan grows or instances are added; the
+ * rule from Prisma's docs is (pool size) / (number of app instances) — if you
+ * ever scale past one instance, DIVIDE this value by the instance count. If you
+ * put a real pooler in front (Aiven's built-in PgBouncer, PgBouncer of your own,
+ * Prisma Accelerate), point the URL at the pooler and raise this — the pooler
+ * then owns the real connections and this becomes a client-side cap.
  */
 const POOL_SETTINGS = {
     // Max concurrent PostgreSQL connections THIS process may hold.
-    connection_limit: process.env.PG_CONNECTION_LIMIT || "9",
+    connection_limit: process.env.PG_CONNECTION_LIMIT || "6",
     // Seconds a query waits for a free connection from the pool before failing
     // with P2024. Queueing briefly is much better than hammering the server.
     pool_timeout: process.env.PG_POOL_TIMEOUT || "20",
@@ -67,7 +76,29 @@ function withPoolParams(rawUrl) {
     return `${base}?${params.toString()}`;
 }
 
-const pgUrl = withPoolParams(process.env.POSTGRESQL_DATABASE_URL);
+/**
+ * Which URL this process should use.
+ *
+ * `POSTGRESQL_DATABASE_URL` is the RUNTIME url — it points at a PgBouncer pooler
+ * once one exists, and at the database directly until then.
+ *
+ * Admin scripts must bypass a pooler. The seeder runs long multi-statement
+ * `$transaction` batches and a `TRUNCATE ... CASCADE`; against PgBouncer in
+ * transaction mode those either break on named prepared statements or hold a
+ * server connection for the whole batch, which is the exact starvation the
+ * pooler exists to prevent. They set `PRISMA_DIRECT_CONNECTION=1` (see the
+ * `prisma:seed:*` scripts in package.json) to get the unpooled url instead.
+ *
+ * Falls back to the runtime url when no direct url is configured, so nothing
+ * breaks on a machine that has only ever set one variable.
+ */
+const USE_DIRECT_CONNECTION = process.env.PRISMA_DIRECT_CONNECTION === "1";
+
+const rawPgUrl = USE_DIRECT_CONNECTION
+    ? process.env.POSTGRESQL_DIRECT_URL || process.env.POSTGRESQL_DATABASE_URL
+    : process.env.POSTGRESQL_DATABASE_URL;
+
+const pgUrl = withPoolParams(rawPgUrl);
 
 /**
  * Reuse the client across module reloads.
@@ -102,17 +133,18 @@ if (!pgUrl) {
     // Never log the URL itself — it carries credentials.
     logger.info(
         `postgres pool: connection_limit=${POOL_SETTINGS.connection_limit} ` +
-        `pool_timeout=${POOL_SETTINGS.pool_timeout}s connect_timeout=${POOL_SETTINGS.connect_timeout}s`
+        `pool_timeout=${POOL_SETTINGS.pool_timeout}s connect_timeout=${POOL_SETTINGS.connect_timeout}s ` +
+        `mode=${USE_DIRECT_CONNECTION ? "direct (admin script)" : "runtime"}`
     );
 }
 
 /**
  * Release every database connection this process holds.
  *
- * Called from the shutdown handler in index.js. Without it, a replaced replica
- * keeps its sockets open until the server's own timeout reaps them, so a rolling
- * deploy briefly needs DOUBLE the budget above — exactly when three containers
- * are restarting at once.
+ * Called from the shutdown handler in index.js. Without it, the outgoing
+ * container keeps its sockets open until the server's own timeout reaps them, so
+ * a rolling deploy holds DOUBLE the budget above for as long as the old and new
+ * instances overlap.
  */
 export async function disconnectPrisma() {
     const results = await Promise.allSettled([

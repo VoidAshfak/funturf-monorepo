@@ -63,8 +63,13 @@ export default function HeroSearch({ className = "" }) {
 
     return (
         <div ref={containerRef} className={`relative z-50 w-full max-w-md ${className}`}>
-            {/* search pill */}
-            <div className="flex items-center gap-2 rounded-full border border-border bg-card/60 p-1.5 pl-5 backdrop-blur-md focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(29,185,84,0.12)]">
+            {/*
+                Search pill. Sized so the Search button inside it is a legal 48px
+                target: 4px of pill padding around a 48px control. At the old
+                1.5/h-9 pair the button came out 36px — the smallest tap target
+                on the busiest control of the page.
+            */}
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card/60 p-1 pl-5 backdrop-blur-md transition-colors duration-200 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(29,185,84,0.12)]">
                 <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
                 <input
                     type="text"
@@ -77,7 +82,7 @@ export default function HeroSearch({ className = "" }) {
                     onKeyDown={onKeyDown}
                     placeholder="Search turf grounds near you"
                     aria-label="Search turfs"
-                    className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                    className="h-12 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
                 />
                 {query && (
                     <button
@@ -87,7 +92,7 @@ export default function HeroSearch({ className = "" }) {
                             setOpen(false);
                         }}
                         aria-label="Clear search"
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                         <X className="h-4 w-4" />
                     </button>
@@ -95,7 +100,7 @@ export default function HeroSearch({ className = "" }) {
                 <Button
                     type="button"
                     onClick={goToResults}
-                    className="shrink-0 rounded-full px-5 green-glow"
+                    className="green-glow h-12 shrink-0 rounded-full px-6"
                 >
                     Search
                 </Button>

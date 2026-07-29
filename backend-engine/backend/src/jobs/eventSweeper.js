@@ -11,18 +11,19 @@ import { logger } from "../../logs/logger.js";
  *
  * Deliberately dumb — an interval, not a cron dependency (mirrors holdSweeper).
  * The underlying UPDATE only touches rows still in a sweepable status, so it's
- * idempotent: a missed, doubled, or multi-replica run is harmless.
+ * idempotent: a missed, doubled, or concurrent run is harmless.
  *
- * NOTE: the API runs as 3 replicas behind nginx, so all three sweep. Safe (each
- * row is claimed by the UPDATE's WHERE), just mildly redundant. Move to a single
- * leader or a real scheduler if that ever costs.
+ * The API runs as a SINGLE instance, so exactly one sweeper is live. The idem-
+ * potence above is what keeps a second copy — a local dev server, or a future
+ * scale-out — safe without any leader election.
  */
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
 
 /**
- * Random delay applied to both the boot sweep and the interval start, so the
- * three replicas don't fire their queries in lockstep against a database with a
- * very small connection budget (see the pool notes in src/prisma.js).
+ * Random delay applied to both the boot sweep and the interval start, so repeated
+ * restarts (or a second process) don't fire their queries in lockstep against a
+ * database with a very small connection budget (see the pool notes in
+ * src/prisma.js).
  */
 const JITTER_MS = 60 * 1000;
 
@@ -43,7 +44,7 @@ export function startEventSweeper() {
 
     // Run once shortly after boot so a freshly started process doesn't wait a
     // full interval to catch games that expired while it was down. The jitter
-    // keeps three replicas from doing that boot sweep simultaneously.
+    // keeps a restart loop from replaying that boot sweep at a fixed offset.
     const boot = setTimeout(sweep, 15 * 1000 + jitter);
     boot.unref?.();
 

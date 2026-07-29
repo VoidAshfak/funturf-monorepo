@@ -20,11 +20,27 @@ export const MOTION = {
 };
 
 /**
+ * The reduced-motion opt-out. Every recipe below already honours it; call it
+ * directly only when a component drives its own motion (autoplaying carousels,
+ * CSS-driven loops).
+ *
+ * Defined in `lib/reducedMotion.js` and re-exported here so importing it never
+ * drags GSAP into a bundle that doesn't otherwise need it — import from there
+ * directly in code that isn't animating.
+ */
+// Imported (not just re-exported) because the recipes below call it themselves.
+import { prefersReducedMotion } from "./reducedMotion.js";
+
+export { prefersReducedMotion };
+
+/**
  * Hero reveal: fade + lift children of `scope` in sequence.
  * Use inside useGSAP for a landing/hero section.
  * @param {string|Element[]} targets - selector or elements to reveal
  */
 export function heroReveal(targets, opts = {}) {
+    // Reduced motion: leave the elements exactly where the server rendered them.
+    if (prefersReducedMotion()) return gsap.set(targets, { clearProps: "all" });
     return gsap.from(targets, {
         y: MOTION.yLift * 1.5,
         opacity: 0,
@@ -41,6 +57,7 @@ export function heroReveal(targets, opts = {}) {
  * @param {Element} trigger - container element (usually the useGSAP scope ref)
  */
 export function staggerOnScroll(items, trigger, opts = {}) {
+    if (prefersReducedMotion()) return gsap.set(items, { clearProps: "all" });
     return gsap.from(items, {
         y: MOTION.yLift,
         opacity: 0,
@@ -61,8 +78,37 @@ export function staggerOnScroll(items, trigger, opts = {}) {
  * @param {string|Element[]} targets
  */
 export function fadeUpOnScroll(targets, opts = {}) {
+    if (prefersReducedMotion()) return gsap.set(targets, { clearProps: "all" });
     return gsap.from(targets, {
         y: MOTION.yLift,
+        opacity: 0,
+        duration: MOTION.duration.base,
+        ease: MOTION.ease.out,
+        scrollTrigger: {
+            trigger: targets,
+            start: "top 85%",
+            toggleActions: "play none none none",
+        },
+        ...opts,
+    });
+}
+
+/**
+ * Glass surfaces should arrive as a *material*, not as a plain opacity fade —
+ * scale and fade together so the panel reads as coming toward the viewer.
+ *
+ * Apple's guidance is to animate blur radius alongside scale, but DESIGN.md
+ * forbids animating `backdrop-filter` (GPU-expensive, and this page already
+ * stacks several blurred layers). Scale + opacity gets most of the effect on
+ * compositor-only properties.
+ *
+ * @param {string|Element[]} targets
+ */
+export function materializeReveal(targets, opts = {}) {
+    if (prefersReducedMotion()) return gsap.set(targets, { clearProps: "all" });
+    return gsap.from(targets, {
+        y: MOTION.yLift * 0.75,
+        scale: 0.97,
         opacity: 0,
         duration: MOTION.duration.base,
         ease: MOTION.ease.out,

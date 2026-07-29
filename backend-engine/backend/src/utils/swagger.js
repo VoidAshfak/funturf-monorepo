@@ -13,17 +13,16 @@ import { logger } from "../../logs/logger.js";
  * is the source of truth, not a generated artifact. Nothing here rewrites it;
  * we only read it and serve it.
  *
- * WHY the spec lives under `backend/` and not at the umbrella repo root:
- * `render.yaml` builds each API replica with `rootDir: ./backend`, and the
- * Dockerfile does `COPY . .` from that directory. Anything outside `backend/`
- * simply does not exist at build time. Keep the spec here or the image ships
- * without it.
+ * WHY the spec lives under `backend/` and not at the umbrella repo root: the
+ * Render service builds with the root directory set to `backend/`, so anything
+ * outside it simply does not exist at build time. Keep the spec here or the
+ * deployed service ships without it.
  *
  * WHY docs are off in production by default: a full endpoint/param/error-code
  * inventory is a free reconnaissance map for an attacker. FunTurf is not a
  * public/partner API, so the docs exist for developers, and developers run
- * locally or against the docker-compose cluster. Set `DOCS_ENABLED=true` to
- * override deliberately (see `isDocsEnabled`).
+ * locally. Set `DOCS_ENABLED=true` to override deliberately (see
+ * `isDocsEnabled`).
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,8 +30,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // src/utils/ -> backend/docs/openapi.yaml
 const SPEC_PATH = path.join(__dirname, "..", "..", "docs", "openapi.yaml");
 
-// Mounted under /api/v1 so the docs travel with the API through nginx, which
-// proxies `location /` to the backend upstream — no proxy rule to maintain.
+// Mounted under /api/v1 so the docs travel with the API behind whatever proxy
+// fronts it (Render's edge today) — no separate proxy rule to maintain.
 const DOCS_ROUTE = "/api/v1/docs";
 const SPEC_ROUTE = "/api/v1/docs.json";
 
@@ -100,7 +99,7 @@ const swaggerUiOptions = {
  * Call BEFORE `errorHandler` in `app.js` (that middleware is terminal).
  *
  * Failure to load the spec is logged and skipped, NOT thrown: documentation is
- * not worth taking the API down for. A replica that can serve bookings but not
+ * not worth taking the API down for. A service that can serve bookings but not
  * docs is strictly better than one that serves neither.
  */
 export const mountDocs = (app) => {

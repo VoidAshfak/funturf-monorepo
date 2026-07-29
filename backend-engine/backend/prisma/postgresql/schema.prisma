@@ -3,9 +3,18 @@ generator client {
   output   = "../../src/generated/prisma/pg"
 }
 
+// `url`       — what the RUNNING APP connects to. Point this at a PgBouncer
+//               pooler when one exists; today it is the database directly.
+// `directUrl` — what the Prisma CLI uses for `db push` / `db pull` / `migrate`.
+//               The Schema Engine needs a real, unpooled session: it issues
+//               named prepared statements and advisory locks, which a pooler in
+//               transaction mode breaks with
+//               `ERROR: prepared statement "s0" already exists`.
+// Both point at the same host today, so nothing changes until a pooler exists.
 datasource db {
-  provider = "postgresql"
-  url      = env("POSTGRESQL_DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("POSTGRESQL_DATABASE_URL")
+  directUrl = env("POSTGRESQL_DIRECT_URL")
 }
 
 model users {

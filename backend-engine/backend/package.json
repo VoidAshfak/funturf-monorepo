@@ -13,8 +13,8 @@
     "prisma:pull": "prisma db pull --schema=prisma/postgresql/schema.prisma",
     "prisma:push:mongo": "prisma db push --schema=prisma/mongodb/schema.prisma",
     "prisma:push:pgsql": "prisma db push --schema=prisma/postgresql/schema.prisma",
-    "prisma:seed:pg": "node -r dotenv/config prisma/postgresql/seed.js",
-    "prisma:seed:pg:reset": "node -r dotenv/config prisma/postgresql/seed.js --reset"
+    "prisma:seed:pg": "cross-env PRISMA_DIRECT_CONNECTION=1 node -r dotenv/config prisma/postgresql/seed.js",
+    "prisma:seed:pg:reset": "cross-env PRISMA_DIRECT_CONNECTION=1 node -r dotenv/config prisma/postgresql/seed.js --reset"
   },
   "keywords": [
     "turf",

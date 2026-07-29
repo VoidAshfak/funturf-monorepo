@@ -52,7 +52,7 @@ main();
 
 // --- Global error handlers ---
 // Without these, Node >=15 crashes the process on any unhandled rejection
-// with no useful log message, and a replica disappears silently.
+// with no useful log message, and the service disappears silently.
 
 process.on("unhandledRejection", (reason) => {
     logger.error(`unhandledRejection: ${reason instanceof Error ? reason.message : reason}`);

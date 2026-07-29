@@ -3,6 +3,7 @@ import "./globals.css";
 import NextAuthSessionProvider from "@/providers/NextAuthSessionProvider";
 import ReduxProvider from "@/providers/ReduxProvider";
 import ThemeProvider from "@/components/ThemeProvider";
+import SmoothScroll from "@/providers/SmoothScroll";
 import Toaster from "@/components/Toaster";
 
 const inter = Inter({
@@ -32,9 +33,13 @@ export default function RootLayout({ children }) {
         <NextAuthSessionProvider>
           <ReduxProvider>
             <ThemeProvider>
-              {children}
-              {/* Toasts: action feedback + high-priority live notifications. */}
-              <Toaster />
+              {/* Site-wide smooth scrolling. Renders its children straight
+                  through, so everything inside stays server-rendered. */}
+              <SmoothScroll>
+                {children}
+                {/* Toasts: action feedback + high-priority live notifications. */}
+                <Toaster />
+              </SmoothScroll>
             </ThemeProvider>
           </ReduxProvider>
         </NextAuthSessionProvider>

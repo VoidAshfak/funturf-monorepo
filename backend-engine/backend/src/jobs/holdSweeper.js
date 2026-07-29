@@ -13,19 +13,20 @@ import { logger } from "../../logs/logger.js";
  * Deliberately dumb — an interval, not a cron dependency. It's idempotent, so a
  * missed or doubled run is harmless.
  *
- * NOTE: the API runs as 3 replicas behind nginx, so all three will sweep. That's
- * safe (the work is idempotent and each row is claimed by an UPDATE), just
- * mildly redundant. Move to a single leader or a real scheduler if that ever costs.
+ * The API runs as a SINGLE instance, so exactly one sweeper is live. The work is
+ * still written to be idempotent (each row is claimed by an UPDATE), which is
+ * what makes it safe to run a second copy — a local dev server, or a future
+ * scale-out — without coordination.
  */
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000; // every 10 minutes
 
 /**
  * Random delay before the interval starts ticking.
  *
- * The three replicas boot within seconds of each other, so an un-jittered
- * interval has all of them sweeping at the same moment — three simultaneous
- * bursts of queries against a database with a very small connection budget (see
- * the pool notes in src/prisma.js). Spreading the start spreads the load.
+ * Keeps the sweep from landing at a fixed offset from boot, so a restart loop or
+ * a second process (dev server, scale-out) doesn't put every sweep in lockstep —
+ * simultaneous query bursts are expensive against a database with a very small
+ * connection budget (see the pool notes in src/prisma.js).
  */
 const JITTER_MS = 60 * 1000;
 

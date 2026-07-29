@@ -19,10 +19,11 @@ const eventRoom = (eventId) => `event:${eventId}`;
 /**
  * Attach Socket.IO to the HTTP server and wire JWT auth.
  *
- * NOTE (production / multi-replica): this keeps connection state in-process. The
- * deploy runs 3 replicas behind nginx, so for real-time to work across replicas
- * you must add nginx sticky sessions (ip_hash) + a Redis adapter
- * (`@socket.io/redis-adapter`). Single-process dev works as-is.
+ * NOTE: this keeps connection state in-process. The deploy is a SINGLE instance,
+ * so every socket lands on the same process and this works as-is. If you ever
+ * scale to more than one instance, in-process state stops being enough — you
+ * would need sticky sessions at the proxy plus a Redis adapter
+ * (`@socket.io/redis-adapter`) for cross-instance delivery.
  */
 export function initSocket(server) {
     io = new Server(server, {

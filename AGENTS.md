@@ -179,8 +179,8 @@ funturf-monorepo/
 - **Success:** Return `new ApiResponse(status, message, data)`.
 - **Public ID masking:** Every ID in URLs/payloads is a 22-char opaque token, not a UUID. Never send raw UUIDs to clients. Handled globally by `publicId.middleware.js`.
 - **Swagger spec** is hand-written at `backend/docs/openapi.yaml` — edit it alongside route changes.
-- **Background jobs** (`jobs/holdSweeper.js`, `eventSweeper.js`): run in-process on all replicas (idempotent). Started in `src/index.js`.
-- **Connection pool:** Budgeted for 3 replicas × 2 connections each (17 total DB connections). Configured via env vars in `src/prisma.js`.
+- **Background jobs** (`jobs/holdSweeper.js`, `eventSweeper.js`): run in-process on the single API instance; written idempotent so a second copy is harmless. Started in `src/index.js`.
+- **Connection pool:** Single instance, budgeted at 6 connections (17 usable on the managed Postgres; ×2 during a rolling deploy, plus room for pgAdmin/migrate). Configured via env vars in `src/prisma.js`. A load test or seed script run locally is a *second* pool against the same 17.
 - **CORS:** Whitelist-based, shared between REST and Socket.IO via `corsOrigins.js`.
 
 ### Frontend
