@@ -330,6 +330,28 @@ export const apiSlice = createApi({
             transformResponse: (res) => res?.data?.coupons ?? [],
         }),
 
+        // ---- City pulse (public landing-page aggregates) ----
+        // Turfs near a point with today's free slots + open matches, in one call
+        // (GET /pulse/map?lat=&lng=&radius=&date=). Deliberately NOT tagged: the
+        // server caches it for a minute and the landing page has no write that
+        // could invalidate it — `keepUnusedDataFor` is what stops a re-pan from
+        // refetching data we already have.
+        getCityPulse: builder.query({
+            query: ({ lat, lng, radius, date } = {}) => ({
+                url: "pulse/map",
+                params: { lat, lng, radius, date },
+            }),
+            transformResponse: (res) =>
+                res?.data ?? { turfs: [], totals: {}, center: null, radius_km: null },
+            keepUnusedDataFor: 60,
+        }),
+        // Counters + recent public activity for the ticker (GET /pulse/stats).
+        getCityStats: builder.query({
+            query: () => "pulse/stats",
+            transformResponse: (res) => res?.data ?? { counters: {}, activity: [] },
+            keepUnusedDataFor: 120,
+        }),
+
         // ---- Notifications (all auth-required) ----
         // The list is the single source of truth: an initial REST fetch seeds it,
         // then a Socket.IO stream keeps it live via `onCacheEntryAdded`.
@@ -1383,6 +1405,9 @@ export const {
     useCancelBookingMutation,
     useRespondCancellationMutation,
     useCheckInBookingMutation,
+    // city pulse (landing page)
+    useGetCityPulseQuery,
+    useGetCityStatsQuery,
     // comments
     useGetCommentsQuery,
     useCreateCommentMutation,

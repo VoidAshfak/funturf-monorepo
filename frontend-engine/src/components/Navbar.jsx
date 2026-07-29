@@ -54,7 +54,7 @@ export default function Navbar({ session }) {
         <header className="fixed inset-x-0 top-0 z-50 flex justify-center">
             <nav
                 ref={barRef}
-                className="glass-nav mt-3 flex w-[min(94%,1080px)] items-center justify-between gap-6 rounded-full border border-border px-6 py-2 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.28)] will-change-transform"
+                className="glass-nav app_rail mt-3 flex items-center justify-between gap-6 rounded-full border border-border py-2 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.28)] will-change-transform"
             >
                 <Link href="/" className="shrink-0">
                     <Logo height={30} priority />

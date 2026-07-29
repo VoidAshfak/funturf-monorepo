@@ -4,6 +4,7 @@ import { emitToEvent } from "../socket.js";
 import { ApiError } from "./apiError.js";
 import { ERROR_CODES } from "./errorCodes.js";
 import { logger } from "../../logs/logger.js";
+import { nowNaiveLocal } from "./appTime.js";
 
 /**
  * Event-admin helpers.
@@ -205,25 +206,9 @@ export async function resolveBookingAttachment(bookingId, userId, currentEventId
 // is also what makes the UPDATE idempotent and safe to re-run at any time.
 const SWEEPABLE_STATUSES = ["open", "ready", "booked"];
 
-// Event times (`event_date`, `start_time`, `end_time`) are stored as *naive*
-// date/time values that mean Bangladesh wall-clock (UTC+6, no DST). To decide if
-// a game has ended we must compare them against "now" expressed in the SAME
-// naive local frame — comparing against the DB's `now()` (timestamptz) would be
-// off by the server's timezone. Override via APP_TZ_OFFSET_MINUTES if the app
-// ever serves a different region.
-const APP_TZ_OFFSET_MIN = Number(process.env.APP_TZ_OFFSET_MINUTES ?? 360); // +06:00
-
-// Current instant as a naive "YYYY-MM-DD HH:mm:ss" string in the app timezone.
-// We shift the UTC instant by the offset, then read it with UTC getters so the
-// wall-clock digits are the target-zone digits.
-function nowNaiveLocal() {
-    const shifted = new Date(Date.now() + APP_TZ_OFFSET_MIN * 60_000);
-    const p = (n) => String(n).padStart(2, "0");
-    return (
-        `${shifted.getUTCFullYear()}-${p(shifted.getUTCMonth() + 1)}-${p(shifted.getUTCDate())} ` +
-        `${p(shifted.getUTCHours())}:${p(shifted.getUTCMinutes())}:${p(shifted.getUTCSeconds())}`
-    );
-}
+// Event times are naive Bangladesh wall-clock, so "has this ended?" has to be
+// answered in that same frame — see utils/appTime.js, which owns the offset and
+// is shared with the city-pulse slot maths.
 
 /**
  * Take down expired games: flip every live event whose slot has already ended

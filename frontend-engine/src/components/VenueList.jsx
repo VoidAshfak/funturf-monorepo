@@ -2,7 +2,7 @@ import { getAllVenues } from "@/utils/getData";
 import { VenueCard } from "./VenueCard";
 import Link from "next/link";
 import EmptyState from "./EmptyState";
-import VenueGrid from "./VenueGrid";
+import CardGrid from "./CardGrid";
 
 export default async function VenueList({ max, type }) {
     const { data: venues } = await getAllVenues();
@@ -28,12 +28,12 @@ export default async function VenueList({ max, type }) {
     const finalVenues = max ? filteredVenues.slice(0, max) : filteredVenues;
 
     return (
-        <VenueGrid>
+        <CardGrid>
             {finalVenues.map((venue) => (
-                <Link href={`/venues/${venue.id}`} key={venue.id} className="venue-card">
+                <Link href={`/venues/${venue.id}`} key={venue.id} className="grid-card">
                     <VenueCard venue={venue} />
                 </Link>
             ))}
-        </VenueGrid>
+        </CardGrid>
     );
 }

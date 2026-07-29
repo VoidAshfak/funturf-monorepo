@@ -3,16 +3,22 @@ import { MapPin, Star } from "lucide-react";
 
 // Turf spotlight card for the hero carousel. Image-led, dark scrim so white text
 // is safe in both themes; green accents match the hero's brand language.
+//
+// The card scales down on `:active` — feedback fires on pointer-down rather than
+// waiting for the click to resolve, so the tap is acknowledged before the route
+// transition begins.
 export default function HeroCards({ item }) {
     return (
         <Link
             href="/venues"
-            className="group relative block aspect-[4/5] w-full overflow-hidden rounded-3xl border border-border shadow-[0_22px_60px_-22px_rgba(0,0,0,0.5)]"
+            className="group relative block aspect-[4/5] w-full overflow-hidden rounded-3xl border border-border shadow-[0_22px_60px_-22px_rgba(0,0,0,0.5)] transition-transform duration-200 active:scale-[0.99] active:duration-75 motion-reduce:transition-none motion-reduce:active:scale-100"
         >
+            {/* Image zoom runs at 400ms, not the old 700ms — a hover that slow
+                is still catching up long after the pointer has settled. */}
             <img
                 src={item.image}
                 alt={item.name}
-                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-[400ms] ease-out group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
             />
 
             {/* dark scrim — keeps overlay text readable on any image / theme */}

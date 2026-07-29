@@ -19,10 +19,11 @@ export function VenueCardSkeleton() {
     );
 }
 
-// Grid of venue skeletons — mirrors VenueGrid layout.
+// Grid of venue skeletons — must mirror CardGrid's layout classes exactly, or
+// the page shifts when the real cards stream in and replace this.
 export default function VenueListSkeleton({ count = 6 }) {
     return (
-        <div className="grid grid-cols-1 gap-5 py-10 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: count }).map((_, i) => (
                 <VenueCardSkeleton key={i} />
             ))}

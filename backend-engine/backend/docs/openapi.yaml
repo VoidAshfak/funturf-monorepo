@@ -129,6 +129,8 @@ tags:
     description: The caller's notification bell.
   - name: Chat
     description: Direct messages and the unified conversation list.
+  - name: City Pulse
+    description: Public landing-page aggregates — the live map and activity ticker.
   - name: System
     description: Health probe.
 
@@ -7866,6 +7868,218 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  # ===========================================================================
+  # City Pulse
+  # ===========================================================================
+  /pulse/map:
+    get:
+      tags: [City Pulse]
+      summary: Turfs near a point with today's free slots and open matches
+      operationId: getCityPulse
+      security: []
+      description: |
+        Everything the landing page's live map needs, in ONE call: every verified
+        turf within `radius` km of a coordinate, each carrying how many
+        90-minute slots are still free on `date` and which public matches on its
+        grounds are still live.
+
+        Exists because the alternative — calling `/bookings/available-slots` per
+        ground — is an N+1 that fires dozens of requests from a single page load.
+
+        Slot availability follows the same two rules as the booking grid: a
+        missing `slots` row means the whole day is open, and the turf's
+        `operating_hours` mask out-of-hours codes. On today's date, slots that
+        have already started are excluded too.
+
+        Cached server-side for ~60s, keyed on coordinates rounded to ~1 km so
+        small map pans reuse a warm entry.
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          example: 23.8103
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          example: 90.4125
+        - name: radius
+          in: query
+          required: false
+          description: Search radius in km. Clamped to 1..50.
+          schema:
+            type: number
+            minimum: 1
+            maximum: 50
+            default: 10
+          example: 10
+        - name: date
+          in: query
+          required: false
+          description: |
+            `YYYY-MM-DD`. Defaults to today in app-local time (Bangladesh,
+            UTC+6) — not the caller's timezone and not the server's.
+          schema:
+            type: string
+            format: date
+          example: '2026-07-29'
+      responses:
+        '200':
+          description: Turfs in range, with availability.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [center, radius_km, date, turfs, totals]
+                        properties:
+                          center:
+                            type: object
+                            properties:
+                              lat: { type: number, format: double }
+                              lng: { type: number, format: double }
+                          radius_km: { type: number, example: 10 }
+                          date: { type: string, format: date }
+                          totals:
+                            type: object
+                            properties:
+                              turfs: { type: integer, example: 12 }
+                              open_slots: { type: integer, example: 87 }
+                              open_matches: { type: integer, example: 9 }
+                          turfs:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id: { type: string, format: uuid }
+                                name: { type: string, example: Banani Turf Arena }
+                                slug: { type: string }
+                                city: { type: string, example: Dhaka }
+                                lat: { type: number, format: double }
+                                lng: { type: number, format: double }
+                                rating: { type: number, nullable: true, example: 4.8 }
+                                logo_url: { type: string, nullable: true }
+                                image: { type: string, nullable: true }
+                                distance_km: { type: number, nullable: true, example: 2.4 }
+                                grounds_count: { type: integer, example: 2 }
+                                open_slots: { type: integer, example: 7 }
+                                next_free_slot:
+                                  type: string
+                                  nullable: true
+                                  description: Soonest bookable slot, `HH:mm`.
+                                  example: '18:00'
+                                free_slot_codes:
+                                  type: array
+                                  items: { type: string, example: t1800 }
+                                open_matches: { type: integer, example: 2 }
+                                matches:
+                                  type: array
+                                  description: Up to 3 upcoming matches on this turf.
+                                  items:
+                                    type: object
+                                    properties:
+                                      id: { type: string, format: uuid }
+                                      title: { type: string }
+                                      sport_type: { type: string, example: football }
+                                      event_date: { type: string, format: date }
+                                      start_time: { type: string, example: '18:00:00' }
+                                      end_time: { type: string, example: '19:30:00' }
+                                      entry_fee: { type: number, example: 180 }
+                                      current_players: { type: integer, example: 10 }
+                                      max_players: { type: integer, example: 14 }
+                                      spots_left: { type: integer, example: 4 }
+        '400':
+          description: Missing or out-of-range `lat`/`lng`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /pulse/stats:
+    get:
+      tags: [City Pulse]
+      summary: City-wide counters and recent public activity
+      operationId: getCityStats
+      security: []
+      description: |
+        Feeds the landing page's activity ticker.
+
+        **Privacy:** every row describes something already publicly visible (a
+        public match being posted, a player joining one) and carries first names
+        only — never emails, user ids or addresses.
+
+        Cached server-side for ~120s.
+      responses:
+        '200':
+          description: Counters plus the 10 most recent public events.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [counters, activity]
+                        properties:
+                          counters:
+                            type: object
+                            properties:
+                              matches_this_week:
+                                type: integer
+                                description: Live public matches in the next 7 days.
+                                example: 128
+                              players_joined_30d:
+                                type: integer
+                                description: Accounts with `user_type = player` created in the last 30 days.
+                                example: 1204
+                              bookings_today:
+                                type: integer
+                                description: Bookings for today in an active state.
+                                example: 86
+                              turfs_live:
+                                type: integer
+                                description: Verified turfs.
+                                example: 42
+                          activity:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                kind:
+                                  type: string
+                                  enum: [match_created, player_joined]
+                                id: { type: string, example: 'event:9f1c…' }
+                                href: { type: string, example: /events/9f1c… }
+                                actor:
+                                  type: string
+                                  nullable: true
+                                  description: First name only; null for `match_created`.
+                                  example: Rafi
+                                sport: { type: string, nullable: true, example: football }
+                                text: { type: string, example: Friday night 7-a-side }
+                                place: { type: string, nullable: true, example: Banani Turf Arena }
+                                spots_left: { type: integer, nullable: true, example: 4 }
+                                at: { type: string, format: date-time }
         '429':
           $ref: '#/components/responses/RateLimited'
 

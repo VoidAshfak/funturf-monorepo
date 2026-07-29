@@ -68,6 +68,19 @@ export async function getAllEvents(params = {}) {
     }
 };
 
+// Landing-page ticker: city-wide counters + a short public activity feed.
+// Server-fetched so the numbers are in the HTML on first paint (the counters
+// then animate up from 0 on the client). `no-store` because the whole point is
+// that it reads live; the backend already caches it for two minutes.
+export async function getCityStats() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/pulse/stats`, { cache: "no-store" });
+        return res.json();
+    } catch (error) {
+        return { data: { counters: {}, activity: [] } };
+    }
+};
+
 export async function getIndividualEventByEventId(eventId) {
     try {
         const res = await fetch(`${API_BASE_URL}/events/${eventId}`);

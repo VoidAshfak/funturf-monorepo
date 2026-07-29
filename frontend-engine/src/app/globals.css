@@ -272,6 +272,44 @@
   }
 
   /*
+    Accessibility opt-outs for the glass system.
+
+    Translucency is decoration, not information — users who ask for less of it
+    (macOS "Reduce transparency", Windows "Transparency effects" off) or for
+    higher contrast must still get a legible, clearly-bounded surface. Drop the
+    blur and go solid rather than merely dimming it: a half-transparent panel
+    with no blur is the worst of both worlds.
+  */
+  @media (prefers-reduced-transparency: reduce) {
+    .glass-card,
+    .glass-strong,
+    .glass-neutral,
+    .glass-chip,
+    .glass-nav,
+    .navbar {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .dark .glass-card,
+    .dark .glass-strong { background: #1a1a1a; }
+    .dark .glass-neutral { background: #141414; }
+    .dark .glass-chip { background: #242424; }
+    .dark .glass-nav,
+    .dark .navbar { background: #0a0a0a; }
+    .glass-nav,
+    .navbar { background: #ffffff; }
+  }
+
+  @media (prefers-contrast: more) {
+    .glass-card,
+    .glass-strong,
+    .glass-neutral,
+    .glass-chip {
+      border-color: var(--foreground);
+    }
+  }
+
+  /*
     Reads --glow-rgb so the glow follows the accent instead of being welded to
     the FunTurf green. The fallback IS the green, so every existing usage is
     byte-identical; only the turf-branded dashboard subtree overrides it.
@@ -282,6 +320,20 @@
 }
 
 @layer utilities {
+  /*
+    The one content rail for the public site. The floating Navbar pill, the hero
+    and every landing section share it, so their left/right edges line up down
+    the whole page at every viewport.
+
+    It is percentage-based below ~1149px and capped above it, which is why a
+    fixed `max-w` + padding pair can never match it at more than one width —
+    that mismatch is exactly what this class exists to prevent. Change it here,
+    and the navbar, hero and sections move together.
+  */
+  .app_rail {
+    @apply mx-auto w-[min(94%,1080px)] px-6;
+  }
+
   .section_container {
     @apply px-4 md:px-8 py-12 md:py-20 max-w-7xl mx-auto;
   }
@@ -401,6 +453,22 @@
 html {
   scrollbar-gutter: stable;
 }
+
+/*
+  Anchor-link smoothing for the path where Lenis ISN'T driving the page — no JS,
+  or the provider bailed. Scoped to `html:not(.lenis)` on purpose: Lenis adds the
+  `lenis` class when it takes over, and a native `scroll-behavior: smooth` left
+  in place fights its animation (two easing curves competing for the same scroll
+  position, which reads as a stutter on every anchor jump).
+
+  Under reduced motion neither runs: the provider never initialises Lenis, and
+  this rule is gated, so anchors jump instantly the way the browser intends.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.lenis) {
+    scroll-behavior: smooth;
+  }
+}
 html body[data-scroll-locked] {
   margin-right: 0 !important;
   padding-right: 0 !important;
@@ -497,6 +565,108 @@ html body[data-scroll-locked] {
   }
 }
 
+/* -----------------------------------------------------------------------------
+   Theme toggle — page-fold transition.
+
+   ThemeToggle wraps the theme change in `document.startViewTransition()`, so the
+   browser snapshots the page before and after and exposes both as pseudo-elements
+   on the root. We stack them (old above new) and fold the OLD page away around
+   one vertical edge, like turning a page — the incoming theme is simply already
+   sitting underneath, revealed as the old one swings off.
+
+   Only the old snapshot animates. Cross-fading both is what makes most theme
+   transitions look like a dissolve; keeping the new page still is what sells it
+   as one sheet lifting off another.
+
+   Direction is symmetric: ThemeToggle stamps `data-theme-fold` on <html>, and
+   dark→light folds off the opposite edge from light→dark, so toggling back
+   retraces the same path rather than repeating the same motion.
+
+   Browsers without the View Transitions API never match these selectors and get
+   an instant swap — no fallback needed.
+----------------------------------------------------------------------------- */
+::view-transition-group(root) {
+  /* Without perspective the rotation is an orthographic squash, not a fold. */
+  perspective: 1600px;
+  perspective-origin: center;
+}
+
+::view-transition-old(root) {
+  z-index: 2;
+  /* Kill the UA's default cross-fade — this element is a solid page, not a
+     layer to blend. */
+  mix-blend-mode: normal;
+  backface-visibility: hidden;
+}
+
+::view-transition-new(root) {
+  z-index: 1;
+  mix-blend-mode: normal;
+  animation: none;
+}
+
+/* Fold left→right (default, used when switching TO dark). */
+html[data-theme-fold="to-dark"]::view-transition-old(root) {
+  transform-origin: left center;
+  animation: theme-fold-left 700ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+html[data-theme-fold="to-light"]::view-transition-old(root) {
+  transform-origin: right center;
+  animation: theme-fold-right 700ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+/*
+  The brightness ramp is the shading: a real page turning away from the light
+  darkens as its face angles off, and that shading is most of what reads as
+  "three-dimensional". It also hides the mirrored backface as the sheet passes
+  90deg, so the snapshot never shows its reverse side.
+*/
+@keyframes theme-fold-left {
+  from {
+    transform: rotateY(0deg);
+    filter: brightness(1);
+  }
+  to {
+    transform: rotateY(-105deg);
+    filter: brightness(0.25);
+  }
+}
+
+@keyframes theme-fold-right {
+  from {
+    transform: rotateY(0deg);
+    filter: brightness(1);
+  }
+  to {
+    transform: rotateY(105deg);
+    filter: brightness(0.25);
+  }
+}
+
+/*
+  Reduced motion: a full-viewport 3D rotation is exactly the kind of large
+  vestibular motion the setting exists to remove. Fall back to a short
+  cross-fade — still a transition, just not a moving one. ThemeToggle also skips
+  startViewTransition entirely under this setting; this is the belt-and-braces
+  half, covering a change triggered from anywhere else.
+*/
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme-fold]::view-transition-old(root) {
+    transform-origin: center;
+    animation: theme-fold-fade 160ms ease both;
+  }
+  ::view-transition-group(root) {
+    perspective: none;
+  }
+}
+
+@keyframes theme-fold-fade {
+  to {
+    opacity: 0;
+  }
+}
+
 /* ---- Leaflet map theming (green-glass) ---- */
 
 /* Custom brand marker: green teardrop pin with white ring + ground pulse */
@@ -554,6 +724,90 @@ html body[data-scroll-locked] {
 @media (prefers-reduced-motion: reduce) {
   .funturf-marker .ft-pulse {
     animation: none;
+  }
+}
+
+/*
+  City-pulse count markers. The number IS the marker: a turf with 9 free slots
+  has to read differently from one with 1 without opening anything. Green = free
+  slots, lime = open matches, matching the accent roles elsewhere.
+
+  `.funturf-count-marker` is Leaflet's divIcon wrapper (it sets its own
+  positioning); everything visual hangs off the inner span.
+*/
+.funturf-count-marker {
+  background: none;
+  border: none;
+}
+.funturf-count-marker .ft-count-marker {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0a0a0a;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  /* Only transform/opacity animate — these sit on a moving map layer. */
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+.funturf-count-marker .ft-count-value {
+  position: relative;
+  z-index: 1;
+}
+.ft-pin-slots {
+  background: #1db954;
+}
+.ft-pin-matches {
+  background: #a8ff3e;
+}
+/* Nothing free / nothing on: still findable, but it must not compete. */
+.ft-pin-empty {
+  background: #6b6b6b;
+  color: #ffffff;
+  opacity: 0.55;
+}
+.funturf-count-marker .ft-count-marker:hover,
+.funturf-count-marker .ft-pin-active {
+  transform: scale(1.18);
+}
+.funturf-count-marker .ft-pin-active {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(29, 185, 84, 0.35), 0 8px 22px rgba(0, 0, 0, 0.45);
+}
+/* Expanding ring, drawn only on the selected marker so it doesn't turn the whole
+   map into a strobe. */
+.funturf-count-marker .ft-count-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: inherit;
+  opacity: 0;
+}
+.funturf-count-marker .ft-pin-active .ft-count-pulse {
+  animation: ft-count-pulse 1.8s ease-out infinite;
+}
+@keyframes ft-count-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .funturf-count-marker .ft-pin-active .ft-count-pulse {
+    animation: none;
+  }
+  .funturf-count-marker .ft-count-marker {
+    transition: none;
   }
 }
 
