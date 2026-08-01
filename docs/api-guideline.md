@@ -478,16 +478,42 @@ Design decisions worth keeping:
 - Dead rows are pruned opportunistically on the next `/forgot` for that user, so there is no
   sweeper job to run.
 
-**Email transport** is provider-agnostic SMTP via nodemailer (`utils/mailer.js`, templates in
-`utils/emailTemplates.js`). Config: `SMTP_HOST`, `SMTP_PORT` (587 STARTTLS / 465 implicit TLS),
-`SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `MAIL_REPLY_TO`, plus `FRONTEND_URL` for the link.
-`sendMail` **never throws** — a mail failure must not become the user's error, and must not roll
-back a password change that already succeeded; failures are logged and returned in the result.
+**Email transport** (`utils/mailer.js`, templates in `utils/emailTemplates.js`) has two paths and
+picks one at boot, logging which:
 
-With `SMTP_HOST` **unset** the mailer runs in log-only mode and prints each message — reset link
-included — to the API log, so the whole flow is testable locally with no credentials. That
-fallback is disabled when `NODE_ENV=production`: printing reset links into a production log would
-turn log access into account takeover.
+| transport | enabled by | when to use |
+| --- | --- | --- |
+| **HTTPS API** | `MAIL_API_KEY` (Brevo key, `xkeysib-…`) | **Production. Required on Render.** |
+| **SMTP** | `SMTP_HOST` + `SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` | local dev, or a host that allows it |
+| log-only | neither | local dev with no credentials at all |
+
+`MAIL_API_KEY` wins when both are configured. Shared by both: `MAIL_FROM`, `MAIL_REPLY_TO`, and
+`FRONTEND_URL` (the origin the emailed link points at — **the frontend's, not the API's**).
+
+> **Render blocks outbound SMTP ports on free web services** ([docs](https://render.com/docs/free)).
+> The connection is not refused, it hangs, so the only symptom is
+> `mailer: FAILED … err=Connection timeout` about two minutes after the request. Nothing about the
+> relay is wrong. Set `MAIL_API_KEY` and it goes out over 443 instead. Most PaaS providers do the
+> same, so treat SMTP as a local-only convenience.
+
+Two provider-side gotchas that produce silent non-delivery rather than an error:
+
+- **The `MAIL_FROM` address must be verified with the provider** (Brevo → Senders, Domains & IPs).
+  An unverified sender is rejected with *"the sender you used … is not valid"* — over SMTP that
+  arrives *after* a `250`, so the app logs a successful send for a message that was never
+  delivered. The provider's own log is the source of truth on delivery, not ours.
+- **A freemail `MAIL_FROM` (`…@gmail.com`) never DMARC-aligns** when sent through a relay, so
+  Gmail/Yahoo/Outlook file it as spam. Acceptable in dev; before launch, authenticate the real
+  domain (DKIM + SPF records) and send as `no-reply@funturf.app`.
+
+`sendMail` **never throws** on either transport — a mail failure must not become the user's error,
+and must not roll back a password change that already succeeded; failures are logged and returned
+in the result.
+
+With neither transport configured the mailer prints each message — reset link included — to the
+API log, so the whole flow is testable locally with no credentials. That fallback is disabled when
+`NODE_ENV=production` (override: `MAIL_DEV_LOG=true`, never on a deployment): printing reset links
+into a production log would turn log access into account takeover.
 
 #### Edit your own profile (`PATCH /users/me`)
 
