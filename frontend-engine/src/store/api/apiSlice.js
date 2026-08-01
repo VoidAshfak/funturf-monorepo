@@ -479,6 +479,44 @@ export const apiSlice = createApi({
                 body,
             }),
         }),
+
+        // ---- Password reset (all three are public — a locked-out user has no token) ----
+
+        // Step 1: ask for a reset link. The response is deliberately the SAME
+        // whether or not the email is registered (the API refuses to be a
+        // membership oracle), so the UI must never render "no such account".
+        forgotPassword: builder.mutation({
+            query: (body) => ({
+                url: "users/password/forgot",
+                method: "POST",
+                body, // { email }
+            }),
+            transformResponse: (res) => res?.data ?? {},
+        }),
+
+        // Step 2: is this link still good? POST, not GET — the token must stay out
+        // of URLs, which get written to request logs. Read-only: does not spend it.
+        // Modelled as a mutation so it runs once on demand rather than being
+        // re-fetched on focus/reconnect like a query.
+        validateResetToken: builder.mutation({
+            query: (body) => ({
+                url: "users/password/reset/validate",
+                method: "POST",
+                body, // { token }
+            }),
+            transformResponse: (res) => res?.data ?? {},
+        }),
+
+        // Step 3: spend the token and set the new password. On success every
+        // session is revoked server-side, so the user must log in again.
+        resetPassword: builder.mutation({
+            query: (body) => ({
+                url: "users/password/reset",
+                method: "POST",
+                body, // { token, password }
+            }),
+            transformResponse: (res) => res?.data ?? {},
+        }),
         // Player search for team recruitment. Auth-only. Every filter is optional
         // and they AND together; results are ranked with profile completeness as
         // the dominant term (see `completionBoost` on the backend), so squads see
@@ -1340,6 +1378,10 @@ export const {
     useGetAvailableCouponsQuery,
     useGetUserByIdQuery,
     useRegisterUserMutation,
+    // password reset
+    useForgotPasswordMutation,
+    useValidateResetTokenMutation,
+    useResetPasswordMutation,
     useUpdateMyProfileMutation,
     useScoutPlayersQuery,
     useGetTurfmatesQuery,

@@ -19,7 +19,19 @@ const options = [
     },
 ];
 
-export default function SignupChooserPage() {
+/**
+ * `?email=` is set when someone lands here from the forgot-password form after
+ * typing an address that has no account (see forgot-password-form.jsx). Carry it
+ * through the chooser so whichever signup form they pick opens prefilled — they
+ * shouldn't have to type it a third time.
+ */
+export default async function SignupChooserPage({ searchParams }) {
+    // Next 15: searchParams is a Promise in server components.
+    const { email } = (await searchParams) ?? {};
+    const query = typeof email === "string" && email.includes("@")
+        ? `?email=${encodeURIComponent(email)}`
+        : "";
+
     return (
         <AuthShell>
             <div className="flex flex-col gap-6">
@@ -28,7 +40,9 @@ export default function SignupChooserPage() {
                         Join FunTurf
                     </h1>
                     <p className="mt-2 text-sm text-muted-foreground">
-                        Choose how you want to get started.
+                        {query
+                            ? "No account yet for that email — pick how you want to get started."
+                            : "Choose how you want to get started."}
                     </p>
                 </div>
 
@@ -36,7 +50,7 @@ export default function SignupChooserPage() {
                     {options.map(({ href, icon: Icon, title, desc }) => (
                         <Link
                             key={href}
-                            href={href}
+                            href={`${href}${query}`}
                             className="group flex items-center gap-4 rounded-2xl border border-border p-5 transition-all duration-300 hover:border-primary hover:bg-primary/5"
                         >
                             <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">

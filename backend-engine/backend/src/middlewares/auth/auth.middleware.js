@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken"
 import { mongoClient, pgClient } from "../../prisma.js";
 import bcrypt from "bcrypt";
 import userCache from "../../utils/cache.js";
+import { assertPasswordPolicy, BCRYPT_ROUNDS } from "../../utils/passwordPolicy.js";
 
 
 export const verifyJWT = asyncHandler(async (req, _, next) => {
@@ -64,8 +65,31 @@ export const attachUserIfPresent = asyncHandler(async (req, _, next) => {
 });
 
 
+/**
+ * Hash the incoming plaintext password before the controller ever sees it.
+ *
+ * The policy check lives HERE rather than in `registerUser` because this
+ * middleware overwrites `req.body.password_hash` with the bcrypt digest — by the
+ * time the controller runs, the plaintext is gone and its strength can no longer
+ * be judged. Same rules as the password-reset path (utils/passwordPolicy.js), so
+ * an account can't be created with a password it would be forbidden to reset to.
+ */
 export const encryptPassword = asyncHandler(async (req, _, next) => {
-    req.body.password_hash = await bcrypt.hash(req.body.password_hash, 10);
+    const plaintext = req.body?.password_hash;
+
+    if (typeof plaintext !== "string" || plaintext.length === 0) {
+        throw ApiError.fromCode(ERROR_CODES.VALIDATION_ERROR, {
+            message: "password is required",
+        });
+    }
+
+    assertPasswordPolicy(plaintext, {
+        email: req.body?.email,
+        firstName: req.body?.first_name,
+        lastName: req.body?.last_name,
+    });
+
+    req.body.password_hash = await bcrypt.hash(plaintext, BCRYPT_ROUNDS);
     next()
 })
 

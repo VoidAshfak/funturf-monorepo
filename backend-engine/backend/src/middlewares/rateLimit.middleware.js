@@ -198,3 +198,39 @@ export const registerLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     limit: 3,
 });
+
+/**
+ * Forgot-password requests. Tight for two independent reasons:
+ *
+ *   1. EVERY accepted request sends an email from our domain to an address the
+ *      caller chose. Unbounded, that is a free mail cannon someone can point at a
+ *      third party — and the resulting spam complaints land on our sending
+ *      reputation, not theirs.
+ *   2. The endpoint returns the same generic response whether or not the account
+ *      exists, so it leaks nothing directly — but a fast loop over an address list
+ *      could still be used to *time* the difference (an existing account does DB
+ *      writes; a missing one returns immediately). 5/hour makes that useless.
+ *
+ * Keyed by IP (there is no authenticated user on this path). The controller adds a
+ * second, per-ACCOUNT cooldown so one victim address can't be mailed repeatedly
+ * from rotating IPs.
+ */
+export const passwordResetRequestLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+});
+
+/**
+ * Reset-link validation and the actual password change. More generous than the
+ * request limiter — a legitimate user may reload the reset page, mistype a
+ * password and retry a few times — but still bounded, because these endpoints
+ * take a token as input and must not become an oracle to grind against. (The
+ * token is 32 bytes of CSPRNG output, so brute force is hopeless regardless; this
+ * caps the cost of someone trying anyway.)
+ */
+export const passwordResetConfirmLimiter = rateLimit({
+    ...baseOptions,
+    windowMs: 60 * 60 * 1000,
+    limit: 20,
+});
