@@ -9,7 +9,18 @@ import {
     updateMyProfile,
     scoutPlayers,
 } from "../../controllers/auth/user.controller.js"
-import { profileWriteLimiter, loginLimiter, registerLimiter } from "../../middlewares/rateLimit.middleware.js";
+import {
+    forgotPassword,
+    validateResetToken,
+    resetPassword,
+} from "../../controllers/auth/password.controller.js";
+import {
+    profileWriteLimiter,
+    loginLimiter,
+    registerLimiter,
+    passwordResetRequestLimiter,
+    passwordResetConfirmLimiter,
+} from "../../middlewares/rateLimit.middleware.js";
 import { signMedia } from "../../controllers/auth/media.controller.js"
 import { upload } from "../../middlewares/file-upload/multer.middleware.js";
 import {
@@ -34,6 +45,19 @@ router.route("/register").post(
 );
 router.route("/login").post(loginLimiter, loginUser);
 router.route("/refresh").post(tokenRefresh);
+
+/**
+ * Forgot / reset password — all three are PUBLIC by necessity: a user who can't
+ * log in has no token to present. What stands in for auth is possession of the
+ * emailed single-use token (see password.controller.js).
+ *
+ * The token is taken from the POST BODY, never a query string, so it is not
+ * written into morgan's request log. Declared before "/:user_id" so "password"
+ * is not swallowed as a user id.
+ */
+router.route("/password/forgot").post(passwordResetRequestLimiter, forgotPassword);
+router.route("/password/reset/validate").post(passwordResetConfirmLimiter, validateResetToken);
+router.route("/password/reset").post(passwordResetConfirmLimiter, resetPassword);
 
 // Cloudinary upload signature — AUTH REQUIRED. This mints a credential that lets
 // the holder upload into our Cloudinary account, so leaving it public let anyone

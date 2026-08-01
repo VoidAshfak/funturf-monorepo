@@ -25,6 +25,8 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useRegisterUserMutation } from "@/store/api/apiSlice"
 import { getApiErrorMessage } from "@/utils/apiError"
+import { validatePasswordField } from "@/utils/passwordPolicy"
+import PasswordRules from "@/components/auth/PasswordRules"
 
 const sportsOptions = [
     { id: 1, value: 'football', label: 'Football' },
@@ -34,6 +36,9 @@ const sportsOptions = [
 
 export function SignupForm({
     className,
+    // Prefilled from `?email=` when the user got here from forgot-password after
+    // entering an address with no account (see the page component).
+    defaultEmail = "",
     ...props
 }) {
     const router = useRouter();
@@ -47,6 +52,7 @@ export function SignupForm({
         formState: { errors, isSubmitting },
     } = useForm({
         defaultValues: {
+            email: defaultEmail,
             gender: "male",
             date_of_birth: null,
             sports: []
@@ -383,6 +389,8 @@ export function SignupForm({
                         <RequiredSign />
                     </Label>
                     <InputField errors={errors}>
+                        {/* Rules come from the shared policy mirror (utils/passwordPolicy.js)
+                            so this form can never ask for less than the API enforces. */}
                         <Input
                             id="password"
                             name="password"
@@ -390,13 +398,11 @@ export function SignupForm({
                             className={`${errors?.password ? 'border-2 border-red-500' : ''}`}
                             {...register("password", {
                                 required: "Password is required",
-                                minLength: {
-                                    value: 6,
-                                    message: "Password must be at least 6 characters."
-                                }
+                                validate: validatePasswordField,
                             })}
                         />
                     </InputField>
+                    <PasswordRules password={watch("password")} />
                 </div>
 
                 <div className="space-y-2">

@@ -153,6 +153,13 @@ paths:
         middleware bcrypts it in place before the controller runs). `user_type`
         is whitelisted to `player` or `turf_admin`; anything else — including
         `super_admin` — silently falls back to `player`.
+
+        The password must satisfy the shared strength policy — ≥8 characters, one
+        lowercase, one uppercase, one digit, ≤72 bytes, not a common password, and
+        not containing the user's own name or email handle. A rejection is
+        `WEAK_PASSWORD` (400) with one `errors[]` entry per unmet rule. Identical
+        rules apply at `POST /users/password/reset`, so an account can never be
+        created with a password it would be forbidden to reset to.
       requestBody:
         required: true
         content:
@@ -178,7 +185,8 @@ paths:
                   description: |
                     The **plaintext password**. Named `password_hash` because the
                     middleware hashes this field in place before persisting.
-                  example: correct-horse-battery-staple
+                    Must meet the strength policy described above.
+                  example: KhelaHobe2026
                 phone:
                   type: string
                   nullable: true
@@ -439,6 +447,289 @@ paths:
                 success: false
                 code: UNAUTHORIZED
                 message: Token refresh failed
+                errors: []
+                data: null
+
+  /users/password/forgot:
+    post:
+      tags: [Auth & Users]
+      summary: Request a password reset link
+      operationId: forgotPassword
+      security: []
+      description: |
+        Emails a single-use reset link to the address given, if it belongs to an
+        active account: `${FRONTEND_URL}/reset-password?token=<43-char token>`.
+
+        **An address with no account gets `404 USER_NOT_FOUND`.** Clients are
+        expected to send that user to signup instead of showing a "check your
+        inbox" panel for mail that will never arrive (the web client redirects to
+        `/signup?email=<typed address>`). This is a deliberate product trade: it
+        makes the endpoint a membership oracle, held in check by the 5/hour/IP
+        limiter and by logging every miss with the caller's IP.
+
+        A **suspended** account still gets the generic 200 — it exists, and its
+        state is not something we disclose to an anonymous caller. So does a
+        request inside the 60-second per-account cooldown.
+
+        Only the SHA-256 digest of the token is stored, so a database dump cannot
+        be replayed against an account. The link expires after
+        `PASSWORD_RESET_TOKEN_TTL_MINUTES` (default 30, clamped 5..120) and can be
+        spent once.
+
+        Throttling is two-layered: 5 requests/hour per IP (rate limiter) plus a
+        60-second per-account cooldown, so neither one caller nor a rotating-IP
+        caller can flood a third party's inbox.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Matched case-insensitively against the stored address.
+                  example: rakib@example.com
+      responses:
+        '200':
+          description: |
+            Mail sent — or the account is suspended, or the 60-second cooldown was
+            still running. These three are intentionally indistinguishable.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: A password reset link is on its way. The link expires in 30 minutes.
+                          expires_in_minutes:
+                            type: integer
+                            example: 30
+        '400':
+          description: The submitted value is not a usable email address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: VALIDATION_ERROR
+                message: A valid email address is required
+                errors: []
+                data: null
+        '404':
+          description: |
+            No account is registered with that address. Clients should route the
+            user to signup, carrying the email over.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: USER_NOT_FOUND
+                message: No FunTurf account is registered with that email
+                errors: []
+                data: null
+        '429':
+          description: More than 5 reset requests from this IP within an hour.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: RATE_LIMITED
+                message: Too many requests — slow down and try again shortly
+                errors: []
+                data: null
+
+  /users/password/reset/validate:
+    post:
+      tags: [Auth & Users]
+      summary: Check whether a reset link is still usable
+      operationId: validateResetToken
+      security: []
+      description: |
+        Read-only pre-flight for the reset page: lets the UI show "this link has
+        expired" instead of rendering a form that is guaranteed to fail. Does
+        **not** consume the token.
+
+        The token travels in the POST body, not a query string, because request
+        URLs are written to the API's access log — a single-use credential must
+        not end up there.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: The `token` query parameter from the emailed link.
+                  example: 8fJ2mQ4pRv7tYw9zAb1cDe3fGh5iJk7lMn9oPq1rSt3
+      responses:
+        '200':
+          description: The link is live.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          valid:
+                            type: boolean
+                            example: true
+                          email:
+                            type: string
+                            description: Masked, so a link holder cannot harvest the address.
+                            example: r••••b@example.com
+                          first_name:
+                            type: string
+                            example: Rakib
+                          expires_at:
+                            type: string
+                            format: date-time
+        '400':
+          description: |
+            `RESET_TOKEN_INVALID` — unknown, malformed, or belongs to an account
+            that is no longer active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: RESET_TOKEN_INVALID
+                message: This password reset link is not valid
+                errors: []
+                data: null
+        '410':
+          description: |
+            `RESET_TOKEN_EXPIRED` or `RESET_TOKEN_USED` — the link existed but is
+            spent. Both mean "request a new one".
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: RESET_TOKEN_EXPIRED
+                message: This password reset link has expired — request a new one
+                errors: []
+                data: null
+
+  /users/password/reset:
+    post:
+      tags: [Auth & Users]
+      summary: Set a new password with a reset token
+      operationId: resetPassword
+      security: []
+      description: |
+        Spends the token and replaces the password. Side effects, all in one
+        transaction:
+
+        - `refresh_token` is cleared, **revoking every session on every device** —
+          a client holding tokens must discard them and log in again.
+        - `email_verified` is set to `true`: completing this flow proves control of
+          the mailbox.
+        - every other outstanding reset token for the user is deleted, so an older
+          link sitting in the inbox stops working.
+        - a "your password was changed" notice is emailed as a security alert.
+
+        The password must satisfy the shared policy (≥8 chars, one lowercase, one
+        uppercase, one digit, ≤72 bytes, not a common password, and not containing
+        the user's own name or email handle) and must differ from the current one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                  example: 8fJ2mQ4pRv7tYw9zAb1cDe3fGh5iJk7lMn9oPq1rSt3
+                password:
+                  type: string
+                  format: password
+                  description: The new plaintext password. Hashed with bcrypt (cost 12) server-side.
+                  example: KhelaHobe2026
+      responses:
+        '200':
+          description: Password replaced and all sessions revoked.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: Your password has been changed. Log in with your new password.
+                          sessions_revoked:
+                            type: boolean
+                            example: true
+        '400':
+          description: |
+            `WEAK_PASSWORD` (unmet rules are listed in `errors[]`, one entry per
+            rule), `PASSWORD_UNCHANGED` (same as the current password), or
+            `RESET_TOKEN_INVALID`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: WEAK_PASSWORD
+                message: This password does not meet the security requirements
+                errors:
+                  - rule: uppercase
+                    message: One uppercase letter (A–Z)
+                  - rule: number
+                    message: One number (0–9)
+                data: null
+        '410':
+          description: '`RESET_TOKEN_EXPIRED` or `RESET_TOKEN_USED`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: RESET_TOKEN_USED
+                message: This password reset link has already been used — request a new one
+                errors: []
+                data: null
+        '429':
+          description: More than 20 validate/reset calls from this IP within an hour.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                code: RATE_LIMITED
+                message: Too many requests — slow down and try again shortly
                 errors: []
                 data: null
 

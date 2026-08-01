@@ -59,6 +59,7 @@ model users {
   messages_messages_recipient_idTousers              messages[]           @relation("messages_recipient_idTousers")
   messages_messages_sender_idTousers                 messages[]           @relation("messages_sender_idTousers")
   notifications                                      notifications[]
+  password_reset_tokens                              password_reset_tokens[]
   payments                                           payments[]
   player_profiles                                    player_profiles[]
   promotion_usage                                    promotion_usage[]
@@ -75,6 +76,38 @@ model users {
   @@index([email], map: "idx_users_email")
   @@index([phone], map: "idx_users_phone")
   @@index([user_type], map: "idx_users_user_type")
+}
+
+/// Single-use password reset tickets, minted by POST /users/password/forgot.
+///
+/// SECURITY — the raw token NEVER touches this table. What is stored is its
+/// SHA-256 hex digest, so a dump of this table cannot be replayed to take over an
+/// account: an attacker would have to invert the hash. The raw value exists only
+/// in the email we send and in the link the user clicks. (SHA-256 rather than
+/// bcrypt is correct here: the token is 32 bytes of CSPRNG output, so there is no
+/// low-entropy guess space for a slow hash to protect.)
+///
+/// A row is consumed by stamping `used_at` — rows are kept, not deleted, so a
+/// replayed link can be answered with "already used" instead of a bare "invalid",
+/// and so a support/abuse question ("who requested this?") stays answerable.
+/// `request_ip` / `user_agent` are recorded for exactly that audit trail.
+model password_reset_tokens {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id    String    @db.Uuid
+  /// SHA-256 hex digest (64 chars) of the emailed token. Unique so the same
+  /// digest can never be live twice.
+  token_hash String    @unique @db.VarChar(64)
+  expires_at DateTime  @db.Timestamp(6)
+  /// Set the moment the token is spent. Non-null => this ticket is dead.
+  used_at    DateTime? @db.Timestamp(6)
+  /// Audit only. VarChar(45) fits an IPv6 address in text form.
+  request_ip String?   @db.VarChar(45)
+  user_agent String?   @db.VarChar(255)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_password_reset_tokens_user_id")
+  @@index([expires_at], map: "idx_password_reset_tokens_expires_at")
 }
 
 model activity_logs {

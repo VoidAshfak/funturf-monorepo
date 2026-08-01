@@ -13,6 +13,8 @@ import InputField from "../InputField"
 import RequiredSign from "../RequiredSign"
 import { useRegisterUserMutation } from "@/store/api/apiSlice"
 import { getApiErrorMessage } from "@/utils/apiError"
+import { validatePasswordField } from "@/utils/passwordPolicy"
+import PasswordRules from "@/components/auth/PasswordRules"
 
 /**
  * Turf-owner signup. Deliberately minimal — owners create only their account
@@ -20,7 +22,13 @@ import { getApiErrorMessage } from "@/utils/apiError"
  * the dedicated turf-creation wizard (/onboarding/turf). Registers with
  * user_type "turf_admin" (whitelisted server-side).
  */
-export function TurfAdminSignupForm({ className, ...props }) {
+export function TurfAdminSignupForm({
+    className,
+    // Prefilled from `?email=` when the user got here from forgot-password after
+    // entering an address with no account (see the page component).
+    defaultEmail = "",
+    ...props
+}) {
     const router = useRouter();
     const [registerUser] = useRegisterUserMutation();
 
@@ -30,7 +38,7 @@ export function TurfAdminSignupForm({ className, ...props }) {
         watch,
         setError,
         formState: { errors, isSubmitting },
-    } = useForm();
+    } = useForm({ defaultValues: { email: defaultEmail } });
 
     const onSubmit = async (data) => {
         const { confirmPassword, password, ...rest } = data;
@@ -138,16 +146,18 @@ export function TurfAdminSignupForm({ className, ...props }) {
                 <div className="space-y-2">
                     <Label htmlFor="password">Password <RequiredSign /></Label>
                     <InputField errors={errors}>
+                        {/* Shared policy mirror — same rules the API enforces. */}
                         <Input
                             id="password"
                             type="password"
                             className={`${errors?.password ? 'border-2 border-red-500' : ''}`}
                             {...register("password", {
                                 required: "Password is required",
-                                minLength: { value: 6, message: "Password must be at least 6 characters." },
+                                validate: validatePasswordField,
                             })}
                         />
                     </InputField>
+                    <PasswordRules password={watch("password")} />
                 </div>
 
                 <div className="space-y-2">

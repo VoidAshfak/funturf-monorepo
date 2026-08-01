@@ -38,6 +38,16 @@ export const ERROR_CODES = Object.freeze({
     USER_ALREADY_EXISTS:  { code: "USER_ALREADY_EXISTS",  statusCode: 409, message: "A user with this email or phone already exists" },
     TOKEN_GENERATION_FAILED: { code: "TOKEN_GENERATION_FAILED", statusCode: 500, message: "Could not generate authentication tokens" },
 
+    // ---- password reset ----
+    // Three distinct codes for a bad reset link so the UI can say something
+    // useful: an EXPIRED or USED link means "request a fresh one" (recoverable),
+    // while INVALID means the link was mangled or forged.
+    RESET_TOKEN_INVALID: { code: "RESET_TOKEN_INVALID", statusCode: 400, message: "This password reset link is not valid" },
+    RESET_TOKEN_EXPIRED: { code: "RESET_TOKEN_EXPIRED", statusCode: 410, message: "This password reset link has expired — request a new one" },
+    RESET_TOKEN_USED:    { code: "RESET_TOKEN_USED",    statusCode: 410, message: "This password reset link has already been used — request a new one" },
+    WEAK_PASSWORD:       { code: "WEAK_PASSWORD",       statusCode: 400, message: "This password does not meet the security requirements" },
+    PASSWORD_UNCHANGED:  { code: "PASSWORD_UNCHANGED",  statusCode: 400, message: "Your new password must be different from your current one" },
+
     // ---- events ----
     EVENT_NOT_FOUND:       { code: "EVENT_NOT_FOUND",       statusCode: 404, message: "Event not found" },
     NOT_EVENT_ORGANIZER:   { code: "NOT_EVENT_ORGANIZER",   statusCode: 403, message: "Only the event organizer can perform this action" },

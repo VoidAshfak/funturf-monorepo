@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { isAllowedOrigin } from "./utils/corsOrigins.js";
+import { apiSecurityHeaders } from "./middlewares/security.middleware.js";
 import { logger } from "../logs/logger.js";
 
 
@@ -29,6 +30,11 @@ const corsOptions = {
 // `true`, which would let a client spoof X-Forwarded-For and dodge the limiter
 // entirely. Bump this only if you deliberately add another trusted hop in front.
 app.set("trust proxy", 1);
+
+// Security response headers (helmet) — mounted FIRST so that every response,
+// including CORS rejections, 404s and errorHandler output, carries them.
+// Config and the reasoning per header: middlewares/security.middleware.js.
+app.use(apiSecurityHeaders);
 
 app.use(cors(corsOptions));
 

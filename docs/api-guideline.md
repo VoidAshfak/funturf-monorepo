@@ -283,6 +283,56 @@ Notifications fire **exactly once even under concurrent sweeps**: the `RETURNING
 Local dev is unaffected — `http://localhost:3000` is in the default allow-list and the
 local `.env` keeps `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1`.
 
+## Security response headers
+
+Both halves of the stack set browser security headers. They are configured independently
+because they defend different surfaces — **changing one does not change the other**.
+
+### Backend (`middlewares/security.middleware.js`, helmet)
+
+Mounted first in `app.js`, before CORS, so 404s and `errorHandler` output carry the headers too.
+
+| header | value | why |
+| --- | --- | --- |
+| `Content-Security-Policy` | `default-src 'none'; … frame-ancestors 'none'; sandbox` | The API only returns JSON, so no response ever needs to load anything. If one is rendered as a document it can neither run script nor call out. |
+| `X-Content-Type-Options` | `nosniff` | Blocks MIME sniffing an echoed upload into executable script. |
+| `X-Frame-Options` | `DENY` | Clickjacking; legacy partner to `frame-ancestors`. |
+| `Referrer-Policy` | `no-referrer` | API URLs carry ids; never leak them in a `Referer`. |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | **Production only** — on `http://localhost` it would pin the dev machine to https for two years. |
+| `Cross-Origin-Resource-Policy` | `cross-origin` | The frontend is a different origin (Vercel vs Render) and must be able to read `public/` assets. Nothing sensitive lives there. |
+
+Swagger UI is the one exception: it is an HTML document with inline `<style>`/`<script>` that
+swagger-ui-express cannot nonce, so `docsSecurityHeaders` re-runs helmet **on `/api/v1/docs`
+only** with a relaxed CSP. The relaxation never reaches an API response. Docs stay off in
+production unless `DOCS_ENABLED=true`.
+
+### Frontend
+
+Split by whether the value varies per request:
+
+- **`next.config.mjs` → `headers()`** — the static ones: `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy` (camera/mic/payment/usb off, `geolocation=(self)` kept for turf
+  discovery), `Cross-Origin-Resource-Policy`, and production-only HSTS.
+- **`src/middleware.js`** — the `Content-Security-Policy`, built per request because it
+  carries a fresh nonce. It is set on the **request** headers too, which is how Next.js
+  discovers the nonce for the scripts it injects; `src/app/layout.js` reads it back off
+  `x-nonce` and passes it to `ThemeProvider` (next-themes emits an inline anti-flash script).
+
+Third-party origins are allowlisted from real usage — carto/OSM tiles, `unpkg.com` Leaflet
+marker icons, `nominatim.openstreetmap.org`, and the API origin plus its `ws://`/`wss://`
+form for Socket.IO. **Adding a new external service means adding it to `buildCsp()`**, or the
+browser silently blocks it.
+
+Two deliberate relaxations, both commented at the source:
+
+- `style-src 'unsafe-inline'` — GSAP, framer-motion, Radix and Leaflet all write inline
+  `style="…"` attributes at runtime, which a nonce cannot cover. Inline JS stays locked down.
+- `script-src-elem 'self' 'nonce-…'` (no `'strict-dynamic'`) — Next 15.5 emits one shared
+  framework chunk per page without the nonce it stamps on every other tag. Same-origin `.js`
+  files therefore load by host while inline script still requires the nonce. Drop this line
+  once Next fixes the chunk.
+
 ## Rate limiting
 
 Every limiter lives in `middlewares/rateLimit.middleware.js` and is keyed by **user id when
@@ -300,6 +350,8 @@ normal error envelope with code `RATE_LIMITED` (HTTP 429), not a bare express-ra
 | `commentWriteLimiter` | 1 min | 20 | event comments, likes, squad chat |
 | `teamWriteLimiter` | 1 min | 20 | team writes (invites, roster edits) |
 | `docsLimiter` | 1 min | 60 | Swagger UI + raw spec |
+| `passwordResetRequestLimiter` | 1 hour | 5 | `POST /users/password/forgot` |
+| `passwordResetConfirmLimiter` | 1 hour | 20 | `POST /users/password/reset`, `POST /users/password/reset/validate` |
 
 ### Load-test bypass
 
@@ -342,11 +394,100 @@ suite are documented in `load-tests/README.md`.
 | PATCH | `/me` | ✅ | any subset of the editable fields (below) | `200` — refreshed profile + recomputed `profile_completion` |
 | GET | `/scout` | ✅ | query `q?`, `sport?`, `position?`, `skill?`, `division?`, `district?`, `limit?` | `200` — `{ players: [...], count }`, ranked most-complete-first |
 | POST | `/media/signature` | ✅ | — | `200` — `{ signature, timestamp, cloudname, apikey }` (Cloudinary direct-upload signature) |
+| POST | `/password/forgot` | public | `{ email }` | `200` — `{ message, expires_in_minutes }`; `404 USER_NOT_FOUND` when no account has that email (client sends them to signup) |
+| POST | `/password/reset/validate` | public | `{ token }` | `200` — `{ valid, email (masked), first_name, expires_at }` |
+| POST | `/password/reset` | public | `{ token, password }` | `200` — `{ message, sessions_revoked: true }` |
 
 **Errors:** `VALIDATION_ERROR` (missing fields), `USER_ALREADY_EXISTS` (register, email/phone clash),
 `INVALID_CREDENTIALS` (login — same code for unknown email and wrong password, by design),
 `USER_NOT_FOUND` (GET by id), `CONFLICT` (`PATCH /me`, phone belongs to another account),
-`INVALID_TOKEN` / `MISSING_TOKEN` (protected routes).
+`INVALID_TOKEN` / `MISSING_TOKEN` (protected routes), `WEAK_PASSWORD` (register + reset),
+`RESET_TOKEN_INVALID` / `RESET_TOKEN_EXPIRED` / `RESET_TOKEN_USED` / `PASSWORD_UNCHANGED` (reset).
+
+#### Password strength policy
+
+One implementation, `utils/passwordPolicy.js`, enforced on **every** path that accepts a new
+password — `POST /users/register` (inside the `encryptPassword` middleware, which is where the
+plaintext still exists) and `POST /users/password/reset`. So an account can never be created
+with a password it would be forbidden to reset to.
+
+| rule id | requirement |
+| --- | --- |
+| `length` | ≥ 8 characters |
+| `lowercase` | one `a–z` |
+| `uppercase` | one `A–Z` |
+| `number` | one `0–9` |
+| `max_length` | ≤ 72 **bytes** — bcrypt silently truncates past that, so a longer passphrase is rejected rather than quietly shortened (Bangla/emoji are multi-byte) |
+| `common` | not in the inline list of credential-stuffing favourites |
+| `personal` | must not contain the user's first name, last name, or email local part (fragments ≥ 4 chars) |
+
+A rejection is `WEAK_PASSWORD` (400) with **one `errors[]` entry per unmet rule**
+(`{ rule, message }`), so the client can highlight all of them at once. bcrypt cost is
+`BCRYPT_ROUNDS = 12`, shared by both paths.
+
+The frontend mirrors the first four rules in `frontend-engine/src/utils/passwordPolicy.js` to
+drive a live checklist (`components/auth/PasswordRules.jsx`). **That copy is cosmetic** — change
+a rule in both files in the same commit or the UI will tick a box the server rejects.
+
+#### Forgot / reset password
+
+Three public endpoints — public by necessity, since a locked-out user has no token. What stands
+in for auth is possession of the emailed single-use token.
+
+```
+POST /users/password/forgot          { email }            -> 200, or 404 if no such account
+   └─ email: ${FRONTEND_URL}/reset-password?token=<43 chars>
+POST /users/password/reset/validate  { token }            -> pre-flight, does not spend it
+POST /users/password/reset           { token, password }  -> spends it, sets the password
+```
+
+Design decisions worth keeping:
+
+- **Account existence IS disclosed — deliberately.** An unregistered address gets `404
+  USER_NOT_FOUND` so the client can send that person to signup rather than to a "check your inbox"
+  panel for mail that will never arrive; the web client redirects to `/signup?email=<typed>`, and
+  the signup chooser forwards the query to whichever form is picked so the field arrives filled.
+  The cost is real: **this endpoint is a membership oracle.** What contains it is the 5/hour/IP
+  limiter plus a `warn`-level log line, with the caller's IP, on every miss. Closing the oracle
+  again is a two-file change — the `if (!user)` branch in `password.controller.js` (return the
+  generic 200 instead of throwing) and the `USER_NOT_FOUND` handler in
+  `frontend-engine/src/components/forms/forgot-password-form.jsx`. **Move both together.**
+- **A suspended account is not disclosed.** It gets the generic 200, same as a successful send and
+  same as a request inside the cooldown. It exists, so signup would be the wrong destination, and
+  "your account is suspended" is not something to volunteer to an anonymous caller. The mail send
+  is *not* awaited, so those three paths stay indistinguishable by timing too.
+- **Only the token's SHA-256 digest is stored** (`password_reset_tokens.token_hash`). A dump of
+  that table cannot be replayed against an account. A fast hash is correct here: the token is 32
+  bytes of CSPRNG output, so there is no low-entropy guess space for bcrypt to protect.
+- **The token travels in a POST body, never a query string.** morgan logs every request line, so
+  `?token=…` would write a live credential into the API log (and into proxy logs, and into
+  `Referer` on any outbound link). The reset *page* strips the token from the address bar with
+  `history.replaceState` for the same reason.
+- **Two throttling layers.** 5/hour per IP caps one caller; a 60-second per-account cooldown in
+  the controller caps one victim, so a rotating-IP caller still cannot flood a third party's
+  inbox with mail sent from our domain.
+- **A completed reset revokes everything.** In one transaction: `password_hash` replaced,
+  `refresh_token` nulled (every device signed out — a reset is the standard answer to "someone
+  may be in my account"), `email_verified` set true (the flow proves mailbox control), this token
+  stamped `used_at`, and every *other* outstanding token for the user deleted so an older link in
+  the inbox stops working. A "your password was changed" email follows as a security alert — that
+  mail is how a real owner learns an attacker reset their password.
+- **Expiry is 30 minutes** by default (`PASSWORD_RESET_TOKEN_TTL_MINUTES`, clamped 5..120), and
+  `410` distinguishes *expired* / *already used* (recoverable — request a new one) from `400`
+  *invalid* (mangled or forged).
+- Dead rows are pruned opportunistically on the next `/forgot` for that user, so there is no
+  sweeper job to run.
+
+**Email transport** is provider-agnostic SMTP via nodemailer (`utils/mailer.js`, templates in
+`utils/emailTemplates.js`). Config: `SMTP_HOST`, `SMTP_PORT` (587 STARTTLS / 465 implicit TLS),
+`SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `MAIL_REPLY_TO`, plus `FRONTEND_URL` for the link.
+`sendMail` **never throws** — a mail failure must not become the user's error, and must not roll
+back a password change that already succeeded; failures are logged and returned in the result.
+
+With `SMTP_HOST` **unset** the mailer runs in log-only mode and prints each message — reset link
+included — to the API log, so the whole flow is testable locally with no credentials. That
+fallback is disabled when `NODE_ENV=production`: printing reset links into a production log would
+turn log access into account takeover.
 
 #### Edit your own profile (`PATCH /users/me`)
 
